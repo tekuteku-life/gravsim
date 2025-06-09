@@ -390,12 +390,6 @@ class Universe {
 		this.objects.push(massiveObj);
 	}
 
-	update(dt) {
-		for (const obj of this.objects) {
-			obj.move(dt);
-		}
-	}
-
 	draw() {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		for (const obj of this.objects) {
