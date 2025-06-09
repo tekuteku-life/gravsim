@@ -6,8 +6,8 @@ const G = 6.67430e-11;
 const METERS_PER_AU = 149597870700; // 1 AU in meters
 const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
-const DISTANCE_SCALE = 50; // AU/px
-const THROW_SCALE = 8e17;
+const DISTANCE_SCALE = 100; // AU/px
+const THROW_SCALE = 3e17;
 const TIME_SCALE = 1e3;
 const COLLIDED_RADIUS_PX = AU2PIX(1/7);
 
@@ -22,7 +22,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Saturn",
 		"MASS" : 5.6834e26 / 1e3, // ton
 		"COLOR": "#FFD700",
-		"SIZE" : 2.8,
+		"SIZE" : 2.5,
 		"VELOCITY": AU2PIX(M2AU(9.69 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(9.58)
 	},
@@ -30,7 +30,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Jupiter",
 		"MASS" : 1.898e27 / 1e3, // ton
 		"COLOR": "#FF8C00",
-		"SIZE" : 2.5,
+		"SIZE" : 2.8,
 		"VELOCITY": AU2PIX(M2AU(13.07 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(5.2)
 	},
@@ -38,7 +38,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Mars",
 		"MASS" : 6.4171e23 / 1e3, // ton
 		"COLOR": "#FF6347",
-		"SIZE" : 1.2,
+		"SIZE" : 1.5,
 		"VELOCITY": AU2PIX(M2AU(24.077 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(1.524)
 	},
@@ -46,7 +46,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Earth",
 		"MASS" : 5.972e24 / 1e3, // ton
 		"COLOR": "#1E90FF",
-		"SIZE" : 1.8,
+		"SIZE" : 2,
 		"VELOCITY": AU2PIX(M2AU(29.78 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(1)
 	},
@@ -54,7 +54,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Venus",
 		"MASS" : 4.867e24 / 1e3, // ton
 		"COLOR": "#FFD700",
-		"SIZE" : 1.5,
+		"SIZE" : 1.8,
 		"VELOCITY": AU2PIX(M2AU(35.02 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(0.723)
 	},
@@ -62,7 +62,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Mercury",
 		"MASS" : 3.3011e23 / 1e3, // ton
 		"COLOR": "#B8860B",
-		"SIZE" : 1,
+		"SIZE" : 1.2,
 		"VELOCITY": AU2PIX(M2AU(47.36 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(0.387)
 	},
