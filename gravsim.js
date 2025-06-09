@@ -5,10 +5,10 @@ const HISTORY_LENGTH = 512; // 最大履歴数
 const G = 6.67430e-11;
 const METERS_PER_AU = 149597870700; // 1 AU in meters
 
-const TIME_SCALE = 60*60*24*365 /3e3;
+const TIME_SCALE = 60*60*24*365 /5e3;
 const DISTANCE_SCALE = 50; // AU/px
-const THROW_SCALE = 5e17;
-const COLLIDED_RADIUS_PX = 4;
+const THROW_SCALE = 8e17;
+const COLLIDED_RADIUS_PX = AU2PIX(1/7);
 
 const DEFAULT_OBJECT_PARAMS = {
 	"Sun": {
@@ -21,7 +21,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Jupiter",
 		"MASS" : 1.898e27 / 1e3, // ton
 		"COLOR": "#FF8C00",
-		"SIZE" : 3,
+		"SIZE" : 2.5,
 		"VELOCITY": AU2PIX(M2AU(13.07 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(5.2)
 	},
@@ -29,7 +29,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Earth",
 		"MASS" : 5.972e24 / 1e3, // ton
 		"COLOR": "#1E90FF",
-		"SIZE" : 2,
+		"SIZE" : 1.8,
 		"VELOCITY": AU2PIX(M2AU(29.78 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(1)
 	},
@@ -37,7 +37,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Asteroid",
 		"MASS" : 1e10 / 1e3, // ton
 		"COLOR": "#808080",
-		"SIZE" : 1,
+		"SIZE" : 0.8,
 	},
 	"Rocket": {
 		"NAME" : "Rocket",
@@ -64,6 +64,12 @@ function PIX2AU(px) {
 }
 function AU2PIX(au) {
 	return au * DISTANCE_SCALE;
+}
+function M2PIX(m) {
+	return AU2PIX(M2AU(m));
+}
+function PIX2M(px) {
+	return AU2M(PIX2AU(px));
 }
 
 class Object {
@@ -148,7 +154,7 @@ class Object {
 		const dx = obj.getXinMeters() - this.getXinMeters();
 		const dy = obj.getYinMeters() - this.getYinMeters();
 		const distSq = dx * dx + dy * dy;
-		const dist = Math.sqrt(distSq) + 1; // div by zero avoidance
+		const dist = Math.max(Math.sqrt(distSq), PIX2M(this.size + obj.size)); // div by zero avoidance
 		const force = G * this.getMassInKg() * obj.getMassInKg() / distSq;
 		const accel = force / this.getMassInKg();
 		
@@ -178,7 +184,7 @@ class Object {
 		const dx = this.x - obj.x;
 		const dy = this.y - obj.y;
 		const dist = Math.sqrt(dx * dx + dy * dy);
-		return dist <= COLLIDED_RADIUS_PX;
+		return dist <= (this.size + obj.size);
 	}
 
 	rel_cordinate_transform(basis) {
