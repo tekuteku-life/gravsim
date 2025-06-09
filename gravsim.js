@@ -116,18 +116,18 @@ function PIX2M(px) {
 
 /*******************************************************************
  * Object class that represents a celestial object in the universe.
- * @member {string} name - The name of the object.
- * @member {number} x - The x-coordinate of the object in pixels.
- * @member {number} y - The y-coordinate of the object in pixels.
- * @member {number} dx - The x-component of the object's velocity in pix/sec.
- * @member {number} dy - The y-component of the object's velocity in pix/sec.
- * @member {number} ax - The x-component of the object's acceleration in pix/sec^2.
- * @member {number} ay - The y-component of the object's acceleration in pix/sec^2.
- * @member {number} mass - The mass of the object in tons.
- * @member {string} color - The color of the object in hex format.
- * @member {number} size - The size of the object in pixels.
- * @member {number} state - The state of the object (active, removed, etc.).
- * @member {Array} history - The history of the object's positions, stored as an array of objects with x and y properties.
+ * @property {string} name - The name of the object.
+ * @property {number} x - The x-coordinate of the object in pixels.
+ * @property {number} y - The y-coordinate of the object in pixels.
+ * @property {number} dx - The x-component of the object's velocity in pix/sec.
+ * @property {number} dy - The y-component of the object's velocity in pix/sec.
+ * @property {number} ax - The x-component of the object's acceleration in pix/sec^2.
+ * @property {number} ay - The y-component of the object's acceleration in pix/sec^2.
+ * @property {number} mass - The mass of the object in tons.
+ * @property {string} color - The color of the object in hex format.
+ * @property {number} size - The size of the object in pixels.
+ * @property {number} state - The state of the object (active, removed, etc.).
+ * @property {Array} history - The history of the object's positions, stored as an array of objects with x and y properties.
 *******************************************************************/
 class Object {
 	constructor(name, x, y, dx, dy, mass, color, size) {
@@ -300,8 +300,8 @@ class Object {
 
 /*******************************************************************
  * InfoPanel class that manages the information panel.
- * @member {HTMLElement} panel - The HTML element for the info panel.
- * @member {number} elapsedTime - The elapsed time in years.
+ * @property {HTMLElement} panel - The HTML element for the info panel.
+ * @property {number} elapsedTime - The elapsed time in years.
 *******************************************************************/
 class InfoPanel {
 	constructor() {
@@ -336,7 +336,7 @@ class InfoPanel {
 
 /*******************************************************************
  * ObjectPlacer class that manages the placement of objects in the universe.
- * @member {Universe} universe - The universe instance where objects are placed.
+ * @property {Universe} universe - The universe instance where objects are placed.
 *******************************************************************/
 class ObjectPlacer {
 	constructor(universe) {
@@ -438,12 +438,12 @@ class ObjectPlacer {
 
 /*******************************************************************
  * Universe class that manages the simulation of celestial objects.
- * @member {HTMLCanvasElement} canvas - The canvas element for rendering.
- * @member {CanvasRenderingContext2D} ctx - The 2D rendering context for the canvas.
- * @member {Array} objects - The array of celestial objects in the universe.
- * @member {InfoPanel} InfoPanel - The information panel for displaying simulation data.
- * @member {ObjectPlacer} ObjectPlacer - The object placer for adding new objects to the universe.
- * @member {number} timeScale - The scale factor for time progression in the simulation.
+ * @property {HTMLCanvasElement} canvas - The canvas element for rendering.
+ * @property {CanvasRenderingContext2D} ctx - The 2D rendering context for the canvas.
+ * @property {Array} objects - The array of celestial objects in the universe.
+ * @property {InfoPanel} InfoPanel - The information panel for displaying simulation data.
+ * @property {ObjectPlacer} ObjectPlacer - The object placer for adding new objects to the universe.
+ * @property {number} timeScale - The scale factor for time progression in the simulation.
 *******************************************************************/
 class Universe {
 	constructor(_canvas) {
