@@ -7,7 +7,7 @@ const METERS_PER_AU = 149597870700; // 1 AU in meters
 const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
 const DISTANCE_SCALE = 150; // AU/px
-const THROW_SCALE = 3e17;
+const THROW_SCALE = 1e17;
 const TIME_SCALE = 1e3;
 const COLLIDED_COEFFICIENT = 0.8;
 const GRAVITY_DISTANCE_LIMIT = 8;
@@ -341,6 +341,11 @@ class InfoPanel {
 class ObjectPlacer {
 	constructor(universe) {
 		this.universe = universe;
+	
+		universe.canvas.addEventListener('mousedown', this.setReadyForLaunch.bind(this));
+		universe.canvas.addEventListener('touchstart', this.setReadyForLaunch.bind(this));
+		universe.canvas.addEventListener('mouseup', this.goLaunch.bind(this));
+		universe.canvas.addEventListener('touchend', this.goLaunch.bind(this));
 	}
 
 	placeObject(objName, x, y, dx = 0, dy = 0) {
@@ -375,8 +380,60 @@ class ObjectPlacer {
 		}
 		return this.placeAtOrbit(objName, sunObj.x, sunObj.y);
 	}
-
 	
+	getLaunchPosition(e) {
+		if (e.touches) {
+			return {
+				x: e.touches[0].clientX,
+				y: e.touches[0].clientY
+			};
+		} else {
+			return {
+				x: e.clientX,
+				y: e.clientY
+			};
+		}
+	}
+
+	getLaunchObjectName() {
+		const massSelect = document.getElementById('mass-select');
+		if (massSelect && DEFAULT_OBJECT_PARAMS[massSelect.value]) {
+			return massSelect.value;
+		}
+		return 'Earth'; // Default object name
+	}
+
+	setReadyForLaunch(e) {
+		const pos = this.getLaunchPosition(e);
+		this.startX = pos.x;
+		this.startY = pos.y;
+		this.startTime = Date.now();
+		this.isDragging = true;
+	}
+
+	goLaunch(e) {
+		if (!this.isDragging) return; // Ensure we are in dragging state
+		this.isDragging = false; // Reset dragging state
+		
+		const name = this.getLaunchObjectName();
+		const pos = this.getLaunchPosition(e);
+		const endX = pos.x;
+		const endY = pos.y;
+		const endTime = Date.now();
+		const dt = Math.max((endTime - this.startTime) / TIME_SCALE, 0.01);
+		const dx = PIX2AU(AU2M((endX - this.startX) / dt / THROW_SCALE));
+		const dy = PIX2AU(AU2M((endY - this.startY) / dt / THROW_SCALE));
+		
+		this.placeObject(
+			name,
+			endX, endY,
+			dx, dy
+		);
+		
+		this.startX = null; // Reset start position
+		this.startY = null;
+	}
+
 }
 
 /*******************************************************************
@@ -409,67 +466,6 @@ class Universe {
 	}
 
 	_initInput() {
-		let isDragging = false;
-		let startX = 0, startY = 0, startTime = 0;
-
-		const getPos = (e) => {
-			if (e.touches) {
-				return {
-					x: e.touches[0].clientX,
-					y: e.touches[0].clientY
-				};
-			} else {
-				return {
-					x: e.clientX,
-					y: e.clientY
-				};
-			}
-		};
-
-		const onStart = (e) => {
-			isDragging = true;
-			const pos = getPos(e);
-			startX = pos.x;
-			startY = pos.y;
-			startTime = Date.now();
-		};
-
-		const onEnd = (e) => {
-			if (!isDragging) return;
-			isDragging = false;
-			
-			let pos;
-			if (e.changedTouches && e.changedTouches.length > 0) {
-				pos = {
-					x: e.changedTouches[0].clientX,
-					y: e.changedTouches[0].clientY
-				};
-			} else {
-				pos = getPos(e);
-			}
-			const massSelect = document.getElementById('mass-select');
-			let name = 'Earth';
-			if (massSelect && DEFAULT_OBJECT_PARAMS[massSelect.value]) {
-				name = massSelect.value;
-			}
-			const endX = pos.x;
-			const endY = pos.y;
-			const endTime = Date.now();
-			const dt = Math.max((endTime - startTime) / TIME_SCALE, 0.01);
-			const dx = PIX2AU(AU2M((endX - startX) / dt / THROW_SCALE));
-			const dy = PIX2AU(AU2M((endY - startY) / dt / THROW_SCALE));
-			this.ObjectPlacer.placeObject(
-				name,
-				startX, startY,
-				dx, dy
-			);
-		};
-
-		this.canvas.addEventListener('mousedown', onStart);
-		this.canvas.addEventListener('touchstart', onStart);
-		this.canvas.addEventListener('mouseup', onEnd);
-		this.canvas.addEventListener('touchend', onEnd);
-
 		this.canvas.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
 			this.reset();
