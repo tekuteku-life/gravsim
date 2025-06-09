@@ -113,6 +113,21 @@ function PIX2M(px) {
 	return AU2M(PIX2AU(px));
 }
 
+/*******************************************************************
+ * Object class that represents a celestial object in the universe.
+ * @member {string} name - The name of the object.
+ * @member {number} x - The x-coordinate of the object in pixels.
+ * @member {number} y - The y-coordinate of the object in pixels.
+ * @member {number} dx - The x-component of the object's velocity in pix/sec.
+ * @member {number} dy - The y-component of the object's velocity in pix/sec.
+ * @member {number} ax - The x-component of the object's acceleration in pix/sec^2.
+ * @member {number} ay - The y-component of the object's acceleration in pix/sec^2.
+ * @member {number} mass - The mass of the object in tons.
+ * @member {string} color - The color of the object in hex format.
+ * @member {number} size - The size of the object in pixels.
+ * @member {number} state - The state of the object (active, removed, etc.).
+ * @member {Array} history - The history of the object's positions, stored as an array of objects with x and y properties.
+*******************************************************************/
 class Object {
 	constructor(name, x, y, dx, dy, mass, color, size) {
 		this.name = name;
@@ -282,6 +297,11 @@ class Object {
 	}
 }
 
+/*******************************************************************
+ * InfoPanel class that manages the information panel.
+ * @member {HTMLElement} panel - The HTML element for the info panel.
+ * @member {number} elapsedTime - The elapsed time in years.
+*******************************************************************/
 class InfoPanel {
 	constructor() {
 		this.panel = document.getElementById('info-panel');
@@ -313,6 +333,10 @@ class InfoPanel {
 	}
 }
 
+/*******************************************************************
+ * ObjectPlacer class that manages the placement of objects in the universe.
+ * @member {Universe} universe - The universe instance where objects are placed.
+*******************************************************************/
 class ObjectPlacer {
 	constructor(universe) {
 		this.universe = universe;
@@ -354,6 +378,15 @@ class ObjectPlacer {
 	
 }
 
+/*******************************************************************
+ * Universe class that manages the simulation of celestial objects.
+ * @member {HTMLCanvasElement} canvas - The canvas element for rendering.
+ * @member {CanvasRenderingContext2D} ctx - The 2D rendering context for the canvas.
+ * @member {Array} objects - The array of celestial objects in the universe.
+ * @member {InfoPanel} InfoPanel - The information panel for displaying simulation data.
+ * @member {ObjectPlacer} ObjectPlacer - The object placer for adding new objects to the universe.
+ * @member {number} timeScale - The scale factor for time progression in the simulation.
+*******************************************************************/
 class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
@@ -403,7 +436,7 @@ class Universe {
 		const onEnd = (e) => {
 			if (!isDragging) return;
 			isDragging = false;
-			// mass-selectの内容に応じて、DEFAULT_OBJECT_PARAMSからパラメータを設定する
+			
 			let pos;
 			if (e.changedTouches && e.changedTouches.length > 0) {
 				pos = {
@@ -592,7 +625,6 @@ window.onload = function() {
 
 	const massSelect = document.getElementById('mass-select');
 
-	// <option>で並べる
 	if (massSelect) {
 		massSelect.innerHTML = '';
 		for (const key in DEFAULT_OBJECT_PARAMS) {
