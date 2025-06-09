@@ -13,9 +13,9 @@ const COLLIDED_RADIUS_PX = 4;
 const DEFAULT_OBJECT_PARAMS = {
 	"Sun": {
 		"NAME" : "Sun",
-	"MASS" : 1.9891e30 / 1e3, // ton (Sun's mass)
-	"COLOR": "#FF4500",
-	"SIZE" : 6,
+		"MASS" : 1.9891e30 / 1e3, // ton (Sun's mass)
+		"COLOR": "#FF4500",
+		"SIZE" : 6,
 	},
 	"Jupiter": {
 		"NAME" : "Jupiter",
@@ -186,8 +186,13 @@ class Object {
 			return;
 		}
 
-		this.x -= basis.dx;
-		this.y -= basis.dy;
+		this.x += basis.dx;
+		this.y += basis.dy;
+
+		for (let i = 0; i < this.history.length; i++) {
+			this.history[i].x += basis.dx;
+			this.history[i].y += basis.dy;
+		}
 	}
 
 	draw(ctx) {
@@ -438,6 +443,22 @@ window.onload = function() {
 	}
 
 	function resizeCanvas() {
+		if (window.universe && window.universe.objects.length > 0)
+		{
+			const prevWidth = window.universe.canvas.width;
+			const prevHeight = window.universe.canvas.height;
+
+			const newWidth = window.innerWidth;
+			const newHeight = window.innerHeight;
+			const dx = (newWidth - prevWidth) / 2;
+			const dy = (newHeight - prevHeight) / 2;
+
+			const sun = window.universe.objects.find(obj => obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME);
+			sun.setVelocity(dx, dy);
+			
+			window.universe.heliocentric_transform();
+		}
+
 		canvas.width = window.innerWidth;
 		canvas.height = window.innerHeight;
 	}
