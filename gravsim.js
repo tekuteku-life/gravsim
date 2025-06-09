@@ -17,6 +17,14 @@ const DEFAULT_OBJECT_PARAMS = {
 		"COLOR": "#FF4500",
 		"SIZE" : 6,
 	},
+	"Saturn": {
+		"NAME" : "Saturn",
+		"MASS" : 5.6834e26 / 1e3, // ton
+		"COLOR": "#FFD700",
+		"SIZE" : 2.8,
+		"VELOCITY": AU2PIX(M2AU(9.69 *1e3)),
+		"ORBIT_RADIUS": AU2PIX(9.58)
+	},
 	"Jupiter": {
 		"NAME" : "Jupiter",
 		"MASS" : 1.898e27 / 1e3, // ton
@@ -25,6 +33,14 @@ const DEFAULT_OBJECT_PARAMS = {
 		"VELOCITY": AU2PIX(M2AU(13.07 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(5.2)
 	},
+	"Mars": {
+		"NAME" : "Mars",
+		"MASS" : 6.4171e23 / 1e3, // ton
+		"COLOR": "#FF6347",
+		"SIZE" : 1.2,
+		"VELOCITY": AU2PIX(M2AU(24.077 *1e3)),
+		"ORBIT_RADIUS": AU2PIX(1.524)
+	},
 	"Earth": {
 		"NAME" : "Earth",
 		"MASS" : 5.972e24 / 1e3, // ton
@@ -32,6 +48,30 @@ const DEFAULT_OBJECT_PARAMS = {
 		"SIZE" : 1.8,
 		"VELOCITY": AU2PIX(M2AU(29.78 *1e3)),
 		"ORBIT_RADIUS": AU2PIX(1)
+	},
+	"Venus": {
+		"NAME" : "Venus",
+		"MASS" : 4.867e24 / 1e3, // ton
+		"COLOR": "#FFD700",
+		"SIZE" : 1.5,
+		"VELOCITY": AU2PIX(M2AU(35.02 *1e3)),
+		"ORBIT_RADIUS": AU2PIX(0.723)
+	},
+	"Mercury": {
+		"NAME" : "Mercury",
+		"MASS" : 3.3011e23 / 1e3, // ton
+		"COLOR": "#B8860B",
+		"SIZE" : 1,
+		"VELOCITY": AU2PIX(M2AU(47.36 *1e3)),
+		"ORBIT_RADIUS": AU2PIX(0.387)
+	},
+	"Moon": {
+		"NAME" : "Moon",
+		"MASS" : 7.34767309e22 / 1e3, // ton
+		"COLOR": "#C0C0C0",
+		"SIZE" : 1,
+		"VELOCITY": AU2PIX(M2AU(1.022 *1e3)),
+		"ORBIT_RADIUS": AU2PIX(0.00257)
 	},
 	"Asteroid": {
 		"NAME" : "Asteroid",
@@ -43,7 +83,7 @@ const DEFAULT_OBJECT_PARAMS = {
 		"NAME" : "Rocket",
 		"MASS" : 5.75e4 / 1e3, // ton
 		"COLOR": "#32CD32",
-		"SIZE" : 0.5,
+		"SIZE" : 0.6,
 	},
 };
 
@@ -392,11 +432,21 @@ class Universe {
 
 	putDefaultObject(objName) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
+		let x = 0;
+		let y = 0;
+		let dx = 0;
+		let dy = 0;
+
+		// For other objects, we put them in orbit around the Sun
+		x = this.canvas.width / 2;
+		y = this.canvas.height / 2 - param.ORBIT_RADIUS;
+		dx = param.VELOCITY;
+
 		const obj = new Object(
 			param.NAME,
-			this.canvas.width / 2 + 0,
-			this.canvas.height / 2 - param.ORBIT_RADIUS,
-			param.VELOCITY, 0,
+			x,
+			y,
+			dx, 0,
 			param.MASS,
 			param.COLOR,
 			param.SIZE
@@ -484,10 +534,22 @@ window.onload = function() {
 	}
 	requestAnimationFrame(animate);
 
+	document.getElementById('put-saturn-btn').addEventListener('click', () => {
+		universe.putDefaultObject("Saturn");
+	});
 	document.getElementById('put-jupiter-btn').addEventListener('click', () => {
 		universe.putDefaultObject("Jupiter");
 	});
 	document.getElementById('put-earth-btn').addEventListener('click', () => {
 		universe.putDefaultObject("Earth");
+	});
+	document.getElementById('put-venus-btn').addEventListener('click', () => {
+		universe.putDefaultObject("Venus");
+	});
+	document.getElementById('put-mars-btn').addEventListener('click', () => {
+		universe.putDefaultObject("Mars");
+	});
+	document.getElementById('put-mercury-btn').addEventListener('click', () => {
+		universe.putDefaultObject("Mercury");
 	});
 };
