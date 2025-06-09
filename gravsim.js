@@ -6,10 +6,11 @@ const G = 6.67430e-11;
 const METERS_PER_AU = 149597870700; // 1 AU in meters
 const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
-const DISTANCE_SCALE = 100; // AU/px
+const DISTANCE_SCALE = 150; // AU/px
 const THROW_SCALE = 3e17;
 const TIME_SCALE = 1e3;
-const COLLIDED_RADIUS_PX = AU2PIX(1/7);
+const COLLIDED_COEFFICIENT = 0.8;
+const GRAVITY_DISTANCE_LIMIT = 8;
 
 const DEFAULT_OBJECT_PARAMS = {
 	"Sun": {
@@ -210,7 +211,7 @@ class Object {
 		const dx = obj.getXinMeters() - this.getXinMeters();
 		const dy = obj.getYinMeters() - this.getYinMeters();
 		const distSq = dx * dx + dy * dy;
-		const dist = Math.max(Math.sqrt(distSq), PIX2M(this.size + obj.size)); // div by zero avoidance
+		const dist = Math.max(Math.sqrt(distSq), PIX2M(this.size + obj.size)*GRAVITY_DISTANCE_LIMIT); // div by zero avoidance
 		const force = G * this.getMassInKg() * obj.getMassInKg() / distSq;
 		const accel = force / this.getMassInKg();
 		
@@ -240,7 +241,7 @@ class Object {
 		const dx = this.x - obj.x;
 		const dy = this.y - obj.y;
 		const dist = Math.sqrt(dx * dx + dy * dy);
-		return dist <= (this.size + obj.size);
+		return dist <= (this.size + obj.size)*COLLIDED_COEFFICIENT;
 	}
 
 	rel_cordinate_transform(basis) {
@@ -567,7 +568,7 @@ class Universe {
 			this.InfoPanel.resetElapsedTime();
 		}
 		else {
-		this.InfoPanel.updateElapsedTime(dt);
+			this.InfoPanel.updateElapsedTime(dt);
 		}
 		this.InfoPanel.updateObjectCount(this.objects.length);
 		
@@ -636,7 +637,7 @@ window.onload = function() {
 			option.textContent = `${param.NAME} (mass: ${param.MASS.toExponential(2)} t)`;
 			massSelect.appendChild(option);
 
-			if (param.NAME === "Earth") {
+			if (param.NAME === "Rocket") {
 				option.selected = true;
 			}
 		}
