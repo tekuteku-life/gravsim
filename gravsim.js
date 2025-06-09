@@ -10,7 +10,7 @@ const DISTANCE_SCALE = 150; // AU/px
 const THROW_SCALE = 1e17;
 const TIME_SCALE = 1e3;
 const COLLIDED_COEFFICIENT = 0.8;
-const GRAVITY_DISTANCE_LIMIT = 8;
+const GRAVITY_DISTANCE_LIMIT = 7;
 
 const DEFAULT_OBJECT_PARAMS = {
 	"Sun": {
@@ -272,7 +272,7 @@ class Object {
 			const prev = this.history[i - 1];
 			const curr = this.history[i];
 			const t = i / this.history.length; // 0 (oldest) to 1 (newest)
-			const alpha = t * 0.5 + 0.1; // fade in (0.2~1.0)
+			const alpha = t * 0.4 + 0.2; // fade in (0.2~1.0)
 			const width = this.size * (0.5 + 0.8 * t); // thin to thick
 
 			ctx.strokeStyle = hexToRgba(this.color, alpha);
