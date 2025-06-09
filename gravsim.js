@@ -1,11 +1,9 @@
 
-const HISTORY_LENGTH = 512; // 最大履歴数
-
-// 万有引力定数 (m^3 kg^-1 s^-2)
-const G = 6.67430e-11;
+const G = 6.67430e-11;	// Gravitational constant (m^3 kg^-1 s^-2)
 const METERS_PER_AU = 149597870700; // 1 AU in meters
 const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
+const HISTORY_LENGTH = 512; // History length
 const DISTANCE_SCALE = 150; // AU/px
 const THROW_SCALE = 1e17;
 const TIME_SCALE = 1e3;
