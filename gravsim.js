@@ -538,6 +538,24 @@ window.onload = function() {
 	}
 	requestAnimationFrame(animate);
 
+	const massSelect = document.getElementById('mass-select');
+
+	// <option>で並べる
+	if (massSelect) {
+		massSelect.innerHTML = '';
+		for (const key in DEFAULT_OBJECT_PARAMS) {
+			const param = DEFAULT_OBJECT_PARAMS[key];
+			const option = document.createElement('option');
+			option.value = key;
+			option.textContent = `${param.NAME} (mass: ${param.MASS.toExponential(2)} t)`;
+			massSelect.appendChild(option);
+
+			if (param.NAME === "Earth") {
+				option.selected = true;
+			}
+		}
+	}
+
 	document.getElementById('put-saturn-btn').addEventListener('click', () => {
 		universe.putDefaultObject("Saturn");
 	});
