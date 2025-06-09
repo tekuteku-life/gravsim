@@ -282,6 +282,37 @@ class Object {
 	}
 }
 
+class InfoPanel {
+	constructor() {
+		this.panel = document.getElementById('info-panel');
+		if (!this.panel) {
+			throw new Error("Info panel element with id 'info-panel' not found.");
+		}
+
+		this.elapsedTime = 0; // in years
+	}
+
+	resetElapsedTime() {
+		this.elapsedTime = 0;
+	}
+
+	updateElapsedTime(dt) {
+		const elapsedTimeSpan = document.getElementById('elapsed-time');
+		this.elapsedTime += dt /YEARS_PER_SECOND;
+		if (elapsedTimeSpan) {
+			const years = (this.elapsedTime).toFixed(2);
+			elapsedTimeSpan.textContent = `${years}`;
+		}
+	}
+
+	updateObjectCount(counts) {
+		const objectCountSpan = document.getElementById('object-count');
+		if( objectCountSpan ) {
+			objectCountSpan.textContent = `${counts}`;
+		}
+	}
+}
+
 class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
@@ -289,6 +320,7 @@ class Universe {
 		this.objects = [];
 		this._initInput();
 		this.timeScale = 0.2;
+		this.InfoPanel = new InfoPanel();
 
 		this.reset();
 	}
@@ -483,6 +515,12 @@ class Universe {
 
 	update(dt) {
 		dt *= YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
+
+		if( this.objects.length == 1 ) {
+			this.InfoPanel.resetElapsedTime();
+		}
+		this.InfoPanel.updateElapsedTime(dt);
+		this.InfoPanel.updateObjectCount(this.objects.length);
 		
 		this.applyGravity(dt);
 		for (const obj of this.objects) {
