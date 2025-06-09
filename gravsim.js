@@ -83,6 +83,14 @@ class Object {
 	}
 
 	addHistory() {
+		if (this.state !== OBJECT_STATE.ACTIVE) {
+			return;
+		}
+
+		if( this.name == DEFAULT_OBJECT_PARAMS["Sun"].NAME ) {
+			return;
+		}
+
 		if (this.history.length >= HISTORY_LENGTH) {
 			this.history.shift();
 		}
