@@ -566,7 +566,9 @@ class Universe {
 		if( this.objects.length == 1 ) {
 			this.InfoPanel.resetElapsedTime();
 		}
+		else {
 		this.InfoPanel.updateElapsedTime(dt);
+		}
 		this.InfoPanel.updateObjectCount(this.objects.length);
 		
 		this.applyGravity(dt);
