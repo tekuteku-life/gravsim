@@ -10,14 +10,13 @@ const DISTANCE_SCALE = 50; // AU/px
 const THROW_SCALE = 5e17;
 const COLLIDED_RADIUS_PX = 4;
 
-const CENTER_OBJECT_PARAM = 
-{
-	"NAME" : "sun",
+const DEFAULT_OBJECT_PARAMS = {
+	"Sun": {
+		"NAME" : "Sun",
 	"MASS" : 1.9891e30 / 1e3, // ton (Sun's mass)
 	"COLOR": "#FF4500",
 	"SIZE" : 6,
-};
-const USER_OBJECT_PARAMS = {
+	},
 	"Jupiter": {
 		"NAME" : "Jupiter",
 		"MASS" : 1.898e27 / 1e3, // ton
@@ -100,7 +99,7 @@ class Object {
 	}
 
 	setCollided() {
-		if( this.name == CENTER_OBJECT_PARAM.NAME ) {
+		if( this.name == DEFAULT_OBJECT_PARAMS["Sun"].NAME ) {
 			return;
 		}
 
@@ -269,7 +268,7 @@ class Universe {
 		const onEnd = (e) => {
 			if (!isDragging) return;
 			isDragging = false;
-			// mass-selectの内容に応じて、USER_OBJECT_PARAMSからパラメータを設定する
+			// mass-selectの内容に応じて、DEFAULT_OBJECT_PARAMSからパラメータを設定する
 			let pos;
 			if (e.changedTouches && e.changedTouches.length > 0) {
 				pos = {
@@ -280,9 +279,9 @@ class Universe {
 				pos = getPos(e);
 			}
 			const massSelect = document.getElementById('mass-select');
-			let param = USER_OBJECT_PARAMS['earth'];
-			if (massSelect && USER_OBJECT_PARAMS[massSelect.value]) {
-				param = USER_OBJECT_PARAMS[massSelect.value];
+			let param = DEFAULT_OBJECT_PARAMS['earth'];
+			if (massSelect && DEFAULT_OBJECT_PARAMS[massSelect.value]) {
+				param = DEFAULT_OBJECT_PARAMS[massSelect.value];
 			}
 			const endX = pos.x;
 			const endY = pos.y;
@@ -317,14 +316,15 @@ class Universe {
 
 		const centerX = this.canvas.width / 2;
 		const centerY = this.canvas.height / 2;
+		const sunObj = DEFAULT_OBJECT_PARAMS['Sun'];
 		const massiveObj = new Object(
-			CENTER_OBJECT_PARAM.NAME,
+			sunObj.NAME,
 			centerX,
 			centerY,
 			0, 0,
-			CENTER_OBJECT_PARAM.MASS,
-			CENTER_OBJECT_PARAM.COLOR,
-			CENTER_OBJECT_PARAM.SIZE
+			sunObj.MASS,
+			sunObj.COLOR,
+			sunObj.SIZE
 		);
 		this.objects.push(massiveObj);
 	}
@@ -355,24 +355,24 @@ class Universe {
 	}
 
 	heliocentric_transform() {
-		const centerObj = this.objects.find(obj => obj.name === CENTER_OBJECT_PARAM.NAME);
-		if (!centerObj) return;
+		const sunObj = this.objects.find(obj => obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME);
+		if (!sunObj) return;
 
 		for (const obj of this.objects) {
-			if (obj.name === CENTER_OBJECT_PARAM.NAME) continue;
-			obj.rel_cordinate_transform(centerObj);
+			if (obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME) continue;
+			obj.rel_cordinate_transform(sunObj);
 		}
 
-		centerObj.resetGravity();
-		centerObj.setPosition(
+		sunObj.resetGravity();
+		sunObj.setPosition(
 			this.canvas.width / 2,
 			this.canvas.height / 2
 		);
-		centerObj.setVelocity(0, 0);
+		sunObj.setVelocity(0, 0);
 	}
 
 	putDefaultObject(objName) {
-		const param = USER_OBJECT_PARAMS[objName] || USER_OBJECT_PARAMS['Earth'];
+		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
 		const obj = new Object(
 			param.NAME,
 			this.canvas.width / 2 + 0,
