@@ -313,6 +313,47 @@ class InfoPanel {
 	}
 }
 
+class ObjectPlacer {
+	constructor(universe) {
+		this.universe = universe;
+	}
+
+	placeObject(objName, x, y, dx = 0, dy = 0) {
+		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
+		const obj = new Object(
+			param.NAME,
+			x,
+			y,
+			dx,
+			dy,
+			param.MASS,
+			param.COLOR,
+			param.SIZE
+		);
+		this.universe.objects.push(obj);
+		return obj;
+	}
+
+	placeAtOrbit(objName, orbitCenterX, orbitCenterY) {
+		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
+		const x = orbitCenterX;
+		const y = orbitCenterY - (param.ORBIT_RADIUS || 0);
+		const dx = param.VELOCITY || 0;
+		const dy = 0;
+		return this.placeObject(objName, x, y, dx, dy);
+	}
+
+	placeAtOrbitAroundSun(objName) {
+		const sunObj = this.universe.objects.find(obj => obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME);
+		if (!sunObj) {
+			throw new Error("Sun object not found in the universe.");
+		}
+		return this.placeAtOrbit(objName, sunObj.x, sunObj.y);
+	}
+
+	
+}
+
 class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
@@ -321,6 +362,7 @@ class Universe {
 		this._initInput();
 		this.timeScale = 0.2;
 		this.InfoPanel = new InfoPanel();
+		this.ObjectPlacer = new ObjectPlacer(this);
 
 		this.reset();
 	}
@@ -372,25 +414,21 @@ class Universe {
 				pos = getPos(e);
 			}
 			const massSelect = document.getElementById('mass-select');
-			let param = DEFAULT_OBJECT_PARAMS['earth'];
+			let name = 'Earth';
 			if (massSelect && DEFAULT_OBJECT_PARAMS[massSelect.value]) {
-				param = DEFAULT_OBJECT_PARAMS[massSelect.value];
+				name = massSelect.value;
 			}
 			const endX = pos.x;
 			const endY = pos.y;
 			const endTime = Date.now();
-			const dt = Math.max((endTime - startTime) / 1000, 0.01); // 秒
+			const dt = Math.max((endTime - startTime) / TIME_SCALE, 0.01);
 			const dx = PIX2AU(AU2M((endX - startX) / dt / THROW_SCALE));
 			const dy = PIX2AU(AU2M((endY - startY) / dt / THROW_SCALE));
-			const obj = new Object(
-				param.NAME,
+			this.ObjectPlacer.placeObject(
+				name,
 				startX, startY,
-				dx, dy,
-				param.MASS,
-				param.COLOR,
-				param.SIZE
+				dx, dy
 			);
-			this.objects.push(obj);
 		};
 
 		this.canvas.addEventListener('mousedown', onStart);
@@ -456,30 +494,6 @@ class Universe {
 			this.canvas.height / 2
 		);
 		sunObj.setVelocity(0, 0);
-	}
-
-	putDefaultObject(objName) {
-		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
-		let x = 0;
-		let y = 0;
-		let dx = 0;
-		let dy = 0;
-
-		// For other objects, we put them in orbit around the Sun
-		x = this.canvas.width / 2;
-		y = this.canvas.height / 2 - param.ORBIT_RADIUS;
-		dx = param.VELOCITY;
-
-		const obj = new Object(
-			param.NAME,
-			x,
-			y,
-			dx, 0,
-			param.MASS,
-			param.COLOR,
-			param.SIZE
-		);
-		this.objects.push(obj);
 	}
 
 	removeCollided() {
@@ -595,21 +609,21 @@ window.onload = function() {
 	}
 
 	document.getElementById('put-saturn-btn').addEventListener('click', () => {
-		universe.putDefaultObject("Saturn");
+		universe.ObjectPlacer.placeAtOrbitAroundSun("Saturn");
 	});
 	document.getElementById('put-jupiter-btn').addEventListener('click', () => {
-		universe.putDefaultObject("Jupiter");
+		universe.ObjectPlacer.placeAtOrbitAroundSun("Jupiter");
 	});
 	document.getElementById('put-earth-btn').addEventListener('click', () => {
-		universe.putDefaultObject("Earth");
+		universe.ObjectPlacer.placeAtOrbitAroundSun("Earth");
 	});
 	document.getElementById('put-venus-btn').addEventListener('click', () => {
-		universe.putDefaultObject("Venus");
+		universe.ObjectPlacer.placeAtOrbitAroundSun("Venus");
 	});
 	document.getElementById('put-mars-btn').addEventListener('click', () => {
-		universe.putDefaultObject("Mars");
+		universe.ObjectPlacer.placeAtOrbitAroundSun("Mars");
 	});
 	document.getElementById('put-mercury-btn').addEventListener('click', () => {
-		universe.putDefaultObject("Mercury");
+		universe.ObjectPlacer.placeAtOrbitAroundSun("Mercury");
 	});
 };
