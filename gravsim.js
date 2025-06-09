@@ -442,6 +442,7 @@ class ObjectPlacer {
  * @property {CanvasRenderingContext2D} ctx - The 2D rendering context for the canvas.
  * @property {Array} objects - The array of celestial objects in the universe.
  * @property {InfoPanel} InfoPanel - The information panel for displaying simulation data.
+ * @property {ControlPanel} ControlPanel - The control panel for simulation settings.
  * @property {ObjectPlacer} ObjectPlacer - The object placer for adding new objects to the universe.
  * @property {number} timeScale - The scale factor for time progression in the simulation.
 *******************************************************************/
@@ -453,6 +454,7 @@ class Universe {
 		this._initInput();
 		this.timeScale = 0.2;
 		this.InfoPanel = new InfoPanel();
+		this.ControlPanel = new ControlPanel();
 		this.ObjectPlacer = new ObjectPlacer(this);
 
 		this.reset();
@@ -579,6 +581,49 @@ class Universe {
 	}
 }
 
+
+/*******************************************************************
+ * ControlPanel class that manages the simulation control panel UI.
+ * 
+ * @property {HTMLInputElement} timeScaleInput - The input element for adjusting the simulation time scale.
+ * @property {HTMLElement} timeScaleIndicator - The element displaying the current time scale value.
+ * @property {HTMLSelectElement} massSelect - The select element for choosing the type of object to place.
+*******************************************************************/
+class ControlPanel {
+	constructor() {
+		this.timeScaleInput = document.getElementById('time-scale');
+		this.timeScaleIndicator = document.getElementById('time-scale-indicator');
+		this.massSelect = document.getElementById('mass-select');
+
+		this.generateMassSelect();
+	
+		this.timeScaleInput.addEventListener('input', function(e) {
+			if (this.timeScaleIndicator) {
+				this.timeScaleIndicator.textContent = parseFloat(this.timeScaleInput.value).toFixed(2);
+			}
+		}.bind(this));
+	}
+
+	generateMassSelect() {
+		if(!this.massSelect) {
+			return;
+		}
+
+		this.massSelect.innerHTML = '';
+		for (const key in DEFAULT_OBJECT_PARAMS) {
+			const param = DEFAULT_OBJECT_PARAMS[key];
+			const option = document.createElement('option');
+			option.value = key;
+			option.textContent = `${param.NAME} (mass: ${param.MASS.toExponential(2)} t)`;
+			this.massSelect.appendChild(option);
+
+			if (param.NAME === "Rocket") {
+				option.selected = true;
+			}
+		}
+	}
+}
+
 window.onload = function() {
 	const canvas = document.getElementById('gravsim-canvas');
 	if (!canvas) {
@@ -621,23 +666,6 @@ window.onload = function() {
 		requestAnimationFrame(animate);
 	}
 	requestAnimationFrame(animate);
-
-	const massSelect = document.getElementById('mass-select');
-
-	if (massSelect) {
-		massSelect.innerHTML = '';
-		for (const key in DEFAULT_OBJECT_PARAMS) {
-			const param = DEFAULT_OBJECT_PARAMS[key];
-			const option = document.createElement('option');
-			option.value = key;
-			option.textContent = `${param.NAME} (mass: ${param.MASS.toExponential(2)} t)`;
-			massSelect.appendChild(option);
-
-			if (param.NAME === "Rocket") {
-				option.selected = true;
-			}
-		}
-	}
 
 	document.getElementById('put-saturn-btn').addEventListener('click', () => {
 		universe.ObjectPlacer.placeAtOrbitAroundSun("Saturn");
