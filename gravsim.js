@@ -5,9 +5,9 @@ const HISTORY_LENGTH = 512; // 最大履歴数
 const G = 6.67430e-11;
 const METERS_PER_AU = 149597870700; // 1 AU in meters
 
-const TIME_SCALE = 60*60*24*365 *10;
-const DISTANCE_SCALE = 1.8e-1; // AU/px
-const THROW_SCALE = 4e20;
+const TIME_SCALE = 60*60*24*365 /3e3;
+const DISTANCE_SCALE = 50; // AU/px
+const THROW_SCALE = 5e17;
 const COLLIDED_RADIUS_PX = 4;
 
 const CENTER_OBJECT_PARAM = 
@@ -15,36 +15,36 @@ const CENTER_OBJECT_PARAM =
 	"NAME" : "sun",
 	"MASS" : 1.9891e30 / 1e3, // ton (Sun's mass)
 	"COLOR": "#FF4500",
-	"SIZE" : 8,
+	"SIZE" : 6,
 };
 const USER_OBJECT_PARAMS = {
 	"Jupiter": {
 		"NAME" : "Jupiter",
 		"MASS" : 1.898e27 / 1e3, // ton
 		"COLOR": "#FF8C00",
-		"SIZE" : 4,
-		"VELOCITY": AU2PIX(M2AU(13.07 *1e2)),
-		"ORBIT_RADIUS": AU2PIX(5.2 *15)
+		"SIZE" : 3,
+		"VELOCITY": AU2PIX(M2AU(13.07 *1e3)),
+		"ORBIT_RADIUS": AU2PIX(5.2)
 	},
 	"Earth": {
 		"NAME" : "Earth",
 		"MASS" : 5.972e24 / 1e3, // ton
 		"COLOR": "#1E90FF",
-		"SIZE" : 3,
-		"VELOCITY": AU2PIX(M2AU(29.78 *1e2)),
-		"ORBIT_RADIUS": AU2PIX(1 *20)
+		"SIZE" : 2,
+		"VELOCITY": AU2PIX(M2AU(29.78 *1e3)),
+		"ORBIT_RADIUS": AU2PIX(1)
 	},
 	"Asteroid": {
 		"NAME" : "Asteroid",
 		"MASS" : 1e10 / 1e3, // ton
 		"COLOR": "#808080",
-		"SIZE" : 2,
+		"SIZE" : 1,
 	},
 	"Rocket": {
 		"NAME" : "Rocket",
 		"MASS" : 5.75e4 / 1e3, // ton
 		"COLOR": "#32CD32",
-		"SIZE" : 1,
+		"SIZE" : 0.5,
 	},
 };
 
@@ -61,10 +61,10 @@ function M2AU(m) {
 	return m / METERS_PER_AU;
 }
 function PIX2AU(px) {
-	return px * DISTANCE_SCALE;
+	return px / DISTANCE_SCALE;
 }
 function AU2PIX(au) {
-	return au / DISTANCE_SCALE;
+	return au * DISTANCE_SCALE;
 }
 
 class Object {
@@ -141,7 +141,7 @@ class Object {
 		const dx = obj.getXinMeters() - this.getXinMeters();
 		const dy = obj.getYinMeters() - this.getYinMeters();
 		const distSq = dx * dx + dy * dy;
-		const dist = Math.sqrt(distSq) + 1e-8; // div by zero avoidance
+		const dist = Math.sqrt(distSq) + 1; // div by zero avoidance
 		const force = G * this.getMassInKg() * obj.getMassInKg() / distSq;
 		const accel = force / this.getMassInKg();
 		
@@ -163,8 +163,8 @@ class Object {
 		}
 
 		this.addHistory();
-		this.x += AU2PIX(this.dx) * dt;
-		this.y += AU2PIX(this.dy) * dt;
+		this.x += this.dx * dt;
+		this.y += this.dy * dt;
 	}
 
 	collided(obj) {
@@ -441,7 +441,7 @@ window.onload = function() {
 
 	let lastTime = performance.now();
 	function animate(now) {
-		const dt = (now - lastTime) / 1000;
+		const dt = now - lastTime;
 		lastTime = now;
 		universe.update(dt);
 		universe.draw();
