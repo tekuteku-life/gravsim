@@ -4,10 +4,11 @@ const HISTORY_LENGTH = 512; // 最大履歴数
 // 万有引力定数 (m^3 kg^-1 s^-2)
 const G = 6.67430e-11;
 const METERS_PER_AU = 149597870700; // 1 AU in meters
+const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
-const TIME_SCALE = 60*60*24*365 /5e3;
 const DISTANCE_SCALE = 50; // AU/px
 const THROW_SCALE = 8e17;
+const TIME_SCALE = 1e3;
 const COLLIDED_RADIUS_PX = AU2PIX(1/7);
 
 const DEFAULT_OBJECT_PARAMS = {
@@ -287,6 +288,7 @@ class Universe {
 		this.ctx = _canvas.getContext('2d');
 		this.objects = [];
 		this._initInput();
+		this.timeScale = 0.2;
 
 		this.reset();
 	}
@@ -478,8 +480,15 @@ class Universe {
 		this.objects = this.objects.filter(obj => !obj.finished());
 	}
 
+	setTimeScale() {
+		const timeScaleInput = document.getElementById('time-scale');
+		if (timeScaleInput) {
+			this.timeScale = parseFloat(timeScaleInput.value);
+		}
+	}
+
 	update(dt) {
-		dt *= TIME_SCALE;
+		dt *= YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
 		
 		this.applyGravity(dt);
 		for (const obj of this.objects) {
@@ -528,6 +537,7 @@ window.onload = function() {
 	function animate(now) {
 		const dt = now - lastTime;
 		lastTime = now;
+		universe.setTimeScale();
 		universe.update(dt);
 		universe.draw();
 		requestAnimationFrame(animate);

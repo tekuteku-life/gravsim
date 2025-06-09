@@ -10,7 +10,18 @@
 <body>
 	<canvas id="gravsim-canvas"></canvas>
 	<form id="ctrl-form">
-		<label for="mass-select">物体質量:</label>
+		<label for="time-scale">Time scale (year/sec):</label>
+		<input type="range" id="time-scale" name="time-scale" value="0.2" step="0.01" min="0.01" max="1.0" style="width:150px;">
+		<span id="time-scale-value">0.20</span><br>
+		<script>
+			const timeStepInput = document.getElementById('time-scale');
+			const timeStepValue = document.getElementById('time-scale-value');
+			timeStepInput.addEventListener('input', function() {
+				timeStepValue.textContent = parseFloat(this.value).toFixed(2);
+			});
+		</script>
+
+		<label for="mass-select">Object Mass:</label>
 		<select id="mass-select" name="mass">
 			<option value="Saturn">Saturn</option>
 			<option value="Jupiter">Jupiter</option>
@@ -21,14 +32,15 @@
 			<option value="Moon">Moon</option>
 			<option value="Asteroid">Asteroid</option>
 			<option value="Rocket">Rocket</option>
-		</select>
+		</select><br>
 
-		<button type="button" id="put-saturn-btn" style="display:block; margin-top:8px;">Saturn</button>
-		<button type="button" id="put-jupiter-btn" style="display:block; margin-top:8px;">Jupiter</button>
-		<button type="button" id="put-mars-btn" style="display:block; margin-top:8px;">Mars</button>
-		<button type="button" id="put-earth-btn" style="display:block; margin-top:8px;">Earth</button>
-		<button type="button" id="put-venus-btn" style="display:block; margin-top:8px;">Venus</button>
-		<button type="button" id="put-mercury-btn" style="display:block; margin-top:8px;">Mercury</button>
+		<label>Default deploy:</label>
+		<button type="button" id="put-saturn-btn" style="margin-top:8px;">Saturn</button>
+		<button type="button" id="put-jupiter-btn" style="margin-top:8px;">Jupiter</button>
+		<button type="button" id="put-mars-btn" style="margin-top:8px;">Mars</button>
+		<button type="button" id="put-earth-btn" style="margin-top:8px;">Earth</button>
+		<button type="button" id="put-venus-btn" style="margin-top:8px;">Venus</button>
+		<button type="button" id="put-mercury-btn" style="margin-top:8px;">Mercury</button>
 		
 	</form>
 </body>
