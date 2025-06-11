@@ -330,6 +330,21 @@ class InfoPanel {
 			objectCountSpan.textContent = `${counts}`;
 		}
 	}
+
+	updateFPS() {
+		const fpsSpan = document.getElementById('fps');
+		if (!fpsSpan) {
+			console.error("FPS element with id 'fps' not found.");
+			return;
+		}
+
+		const now = new Date();
+		const elapsed = now - this.lastTime;
+		this.lastTime = now;
+
+		const fps = (1000 / elapsed).toFixed(2);
+		fpsSpan.textContent = `${fps}`;
+	}
 }
 
 /*******************************************************************
@@ -567,6 +582,7 @@ class Universe {
 			this.InfoPanel.updateElapsedTime(dt);
 		}
 		this.InfoPanel.updateObjectCount(this.objects.length);
+		this.InfoPanel.updateFPS();
 		
 		this.applyGravity(dt);
 		for (const obj of this.objects) {
