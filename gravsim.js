@@ -1,89 +1,86 @@
 
-const G = 6.67430e-11;	// Gravitational constant (m^3 kg^-1 s^-2)
 const METERS_PER_AU = 149597870700; // 1 AU in meters
 const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
 const HISTORY_LENGTH = 512; // History length
-const DISTANCE_SCALE = 150; // AU/px
+const DISTANCE_SCALE = 180; // AU/px
 const THROW_SCALE = 1e17;
 const TIME_SCALE = 1e3;
-const COLLIDED_COEFFICIENT = 0.8;
-const GRAVITY_DISTANCE_LIMIT = 7;
 
 const DEFAULT_OBJECT_PARAMS = {
 	"Sun": {
 		"NAME" : "Sun",
-		"MASS" : 1.9891e30 / 1e3, // ton (Sun's mass)
+		"MASS" : 1.9891e30 / 1e3,		// ton
 		"COLOR": "#FF4500",
-		"SIZE" : 6,
+		"RADIUS": 6.96340e8,			// meters
 	},
 	"Saturn": {
 		"NAME" : "Saturn",
-		"MASS" : 5.6834e26 / 1e3, // ton
+		"MASS" : 5.6834e26 / 1e3,		// ton
 		"COLOR": "#FFD700",
-		"SIZE" : 2.5,
-		"VELOCITY": AU2PIX(M2AU(9.69 *1e3)),
+		"RADIUS": 5.8232e7,				// meters
+		"VELOCITY": M2PIX(9.69 *1e3),
 		"ORBIT_RADIUS": AU2PIX(9.58)
 	},
 	"Jupiter": {
 		"NAME" : "Jupiter",
-		"MASS" : 1.898e27 / 1e3, // ton
+		"MASS" : 1.898e27 / 1e3,		// ton
 		"COLOR": "#FF8C00",
-		"SIZE" : 2.8,
-		"VELOCITY": AU2PIX(M2AU(13.07 *1e3)),
+		"RADIUS": 6.9911e7,				// meters
+		"VELOCITY": M2PIX(13.07 *1e3),
 		"ORBIT_RADIUS": AU2PIX(5.2)
 	},
 	"Mars": {
 		"NAME" : "Mars",
-		"MASS" : 6.4171e23 / 1e3, // ton
+		"MASS" : 6.4171e23 / 1e3,		// ton
 		"COLOR": "#FF6347",
-		"SIZE" : 1.5,
-		"VELOCITY": AU2PIX(M2AU(24.077 *1e3)),
+		"RADIUS": 3.3895e6,				// meters
+		"VELOCITY": M2PIX(24.077 *1e3),
 		"ORBIT_RADIUS": AU2PIX(1.524)
 	},
 	"Earth": {
 		"NAME" : "Earth",
-		"MASS" : 5.972e24 / 1e3, // ton
+		"MASS" : 5.972e24 / 1e3,		// ton
 		"COLOR": "#1E90FF",
-		"SIZE" : 2,
-		"VELOCITY": AU2PIX(M2AU(29.78 *1e3)),
+		"RADIUS": 6.378e6,				// meters
+		"VELOCITY": M2PIX(29.78 *1e3),
 		"ORBIT_RADIUS": AU2PIX(1)
 	},
 	"Venus": {
 		"NAME" : "Venus",
-		"MASS" : 4.867e24 / 1e3, // ton
+		"MASS" : 4.867e24 / 1e3,		// ton
 		"COLOR": "#FFD700",
-		"SIZE" : 1.8,
-		"VELOCITY": AU2PIX(M2AU(35.02 *1e3)),
+		"RADIUS": 6.0518e6,				// meters
+		"VELOCITY": M2PIX(35.02 *1e3),
 		"ORBIT_RADIUS": AU2PIX(0.723)
 	},
 	"Mercury": {
 		"NAME" : "Mercury",
-		"MASS" : 3.3011e23 / 1e3, // ton
+		"MASS" : 3.3011e23 / 1e3,		// ton
 		"COLOR": "#B8860B",
-		"SIZE" : 1.2,
-		"VELOCITY": AU2PIX(M2AU(47.36 *1e3)),
+		"RADIUS": 2.4397e6,				// meters
+		"VELOCITY": M2PIX(47.36 *1e3),
 		"ORBIT_RADIUS": AU2PIX(0.387)
 	},
 	"Moon": {
 		"NAME" : "Moon",
-		"MASS" : 7.34767309e22 / 1e3, // ton
+		"MASS" : 7.34767309e22 / 1e3,	// ton
 		"COLOR": "#C0C0C0",
-		"SIZE" : 1,
-		"VELOCITY": AU2PIX(M2AU(1.022 *1e3)),
-		"ORBIT_RADIUS": AU2PIX(0.00257)
+		"RADIUS": 1.7374e6,				// meters
+		"VELOCITY": M2PIX(1.022 *1e3),
+		"ORBIT_RADIUS": AU2PIX(0.00257),
 	},
 	"Asteroid": {
 		"NAME" : "Asteroid",
 		"MASS" : 1e10 / 1e3, // ton
 		"COLOR": "#808080",
-		"SIZE" : 0.8,
+		"RADIUS": 90,
 	},
 	"Rocket": {
 		"NAME" : "Rocket",
 		"MASS" : 5.75e4 / 1e3, // ton
 		"COLOR": "#32CD32",
-		"SIZE" : 0.6,
+		"RADIUS": 63,
 	},
 };
 
@@ -113,12 +110,12 @@ function PIX2M(px) {
 }
 
 /*******************************************************************
- * Object class that represents a celestial object in the universe.
+ * gravsimObject class that represents a celestial object in the universe.
  * @property {string} name - The name of the object.
  * @property {number} x - The x-coordinate of the object in pixels.
  * @property {number} y - The y-coordinate of the object in pixels.
- * @property {number} dx - The x-component of the object's velocity in pix/sec.
- * @property {number} dy - The y-component of the object's velocity in pix/sec.
+ * @property {number} vx - The x-component of the object's velocity in pix/sec.
+ * @property {number} vy - The y-component of the object's velocity in pix/sec.
  * @property {number} ax - The x-component of the object's acceleration in pix/sec^2.
  * @property {number} ay - The y-component of the object's acceleration in pix/sec^2.
  * @property {number} mass - The mass of the object in tons.
@@ -127,20 +124,26 @@ function PIX2M(px) {
  * @property {number} state - The state of the object (active, removed, etc.).
  * @property {Array} history - The history of the object's positions, stored as an array of objects with x and y properties.
 *******************************************************************/
-class Object {
-	constructor(name, x, y, dx, dy, mass, color, size) {
+class gravsimObject {
+	constructor(name, x, y, vx, vy, mass, color, size, radius) {
+		gravsimObject._idCounter = (gravsimObject._idCounter || 0);
+
 		this.name = name;
+		this.id = gravsimObject._idCounter;
 		this.x = x;
 		this.y = y;
-		this.dx = dx;
-		this.dy = dy;
+		this.vx = vx;
+		this.vy = vy;
 		this.ax = 0;
 		this.ay = 0;
 		this.mass = mass;       // ton
 		this.color = color;
 		this.size = size;
+		this.radius = radius;	// meters
 		this.state = OBJECT_STATE.ACTIVE;
 		this.history = [];
+
+		gravsimObject._idCounter++;
 	}
 
 	addHistory() {
@@ -156,6 +159,20 @@ class Object {
 			this.history.shift();
 		}
 		this.history.push({ x: this.x, y: this.y });
+	}
+
+	updateHistory() {
+		if (this.state === OBJECT_STATE.ACTIVE) {
+			return;
+		}
+
+		if( this.name == DEFAULT_OBJECT_PARAMS["Sun"].NAME ) {
+			return;
+		}
+
+		if (this.history.length > 0) {
+			this.history.shift();
+		}
 	}
 
 	finished() {
@@ -180,20 +197,9 @@ class Object {
 		this.y = y;
 	}
 
-	setVelocity(dx, dy) {
-		this.dx = dx;
-		this.dy = dy;
-	}
-
-	getXinMeters() {
-		return AU2M(PIX2AU(this.x));
-	}
-	getYinMeters() {
-		return AU2M(PIX2AU(this.y));
-	}
-
-	getMassInKg() {
-		return this.mass * 1e3; // ton to kg
+	setVelocity(vx, vy) {
+		this.vx = vx;
+		this.vy = vy;
 	}
 
 	resetGravity() {
@@ -201,58 +207,17 @@ class Object {
 		this.ay = 0;
 	}
 
-	applyGravity(obj) {
-		if( this.state != OBJECT_STATE.ACTIVE || obj.state != OBJECT_STATE.ACTIVE ) {
-			return;
-		}
-
-		const dx = obj.getXinMeters() - this.getXinMeters();
-		const dy = obj.getYinMeters() - this.getYinMeters();
-		const distSq = dx * dx + dy * dy;
-		const dist = Math.max(Math.sqrt(distSq), PIX2M(this.size + obj.size)*GRAVITY_DISTANCE_LIMIT); // div by zero avoidance
-		const force = G * this.getMassInKg() * obj.getMassInKg() / distSq;
-		const accel = force / this.getMassInKg();
-		
-		this.ax += AU2PIX(M2AU(accel * dx / dist));
-		this.ay += AU2PIX(M2AU(accel * dy / dist));
-	}
-
-	accelerate(dt) {
-		this.dx += this.ax * dt;
-		this.dy += this.ay * dt;
-	}
-
-	move(dt) {
-		// dt: elapsed time (seconds)
-		if( this.state != OBJECT_STATE.ACTIVE) {
-			// remove from history if in removed state
-			this.history.shift();
-			return;
-		}
-
-		this.addHistory();
-		this.x += this.dx * dt;
-		this.y += this.dy * dt;
-	}
-
-	collided(obj) {
-		const dx = this.x - obj.x;
-		const dy = this.y - obj.y;
-		const dist = Math.sqrt(dx * dx + dy * dy);
-		return dist <= (this.size + obj.size)*COLLIDED_COEFFICIENT;
-	}
-
 	rel_cordinate_transform(basis) {
 		if( this.state != OBJECT_STATE.ACTIVE || basis.state != OBJECT_STATE.ACTIVE ) {
 			return;
 		}
 
-		this.x += basis.dx;
-		this.y += basis.dy;
+		this.x += basis.vx;
+		this.y += basis.vy;
 
 		for (let i = 0; i < this.history.length; i++) {
-			this.history[i].x += basis.dx;
-			this.history[i].y += basis.dy;
+			this.history[i].x += basis.vx;
+			this.history[i].y += basis.vy;
 		}
 	}
 
@@ -309,6 +274,7 @@ class InfoPanel {
 		}
 
 		this.elapsedTime = 0; // in years
+		this.lastTime = new Date();
 	}
 
 	resetElapsedTime() {
@@ -361,19 +327,18 @@ class ObjectPlacer {
 		universe.canvas.addEventListener('touchend', this.goLaunch.bind(this));
 	}
 
-	placeObject(objName, x, y, dx = 0, dy = 0) {
+	placeObject(objName, x, y, vx = 0, vy = 0) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
-		const obj = new Object(
+		const obj = new gravsimObject(
 			param.NAME,
-			x,
-			y,
-			dx,
-			dy,
+			x, y,
+			vx, vy,
 			param.MASS,
 			param.COLOR,
-			param.SIZE
+			Math.log10((param.RADIUS || 1)*8)/2.5,
+			param.RADIUS || 1,
 		);
-		this.universe.objects.push(obj);
+		this.universe.addObject(obj);
 		return obj;
 	}
 
@@ -381,13 +346,13 @@ class ObjectPlacer {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
 		const x = orbitCenterX;
 		const y = orbitCenterY - (param.ORBIT_RADIUS || 0);
-		const dx = param.VELOCITY || 0;
-		const dy = 0;
-		return this.placeObject(objName, x, y, dx, dy);
+		const vx = param.VELOCITY || 0;
+		const vy = 0;
+		return this.placeObject(objName, x, y, vx, vy);
 	}
 
 	placeAtOrbitAroundSun(objName) {
-		const sunObj = this.universe.objects.find(obj => obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME);
+		const sunObj = this.universe.objects.find(obj => obj.id === 0);
 		if (!sunObj) {
 			throw new Error("Sun object not found in the universe.");
 		}
@@ -434,19 +399,56 @@ class ObjectPlacer {
 		const endY = pos.y;
 		const endTime = Date.now();
 		const dt = Math.max((endTime - this.startTime) / TIME_SCALE, 0.01);
-		const dx = PIX2AU(AU2M((endX - this.startX) / dt / THROW_SCALE));
-		const dy = PIX2AU(AU2M((endY - this.startY) / dt / THROW_SCALE));
+		const vx = PIX2AU(AU2M((endX - this.startX) / dt / THROW_SCALE));
+		const vy = PIX2AU(AU2M((endY - this.startY) / dt / THROW_SCALE));
 		
 		this.placeObject(
 			name,
 			endX, endY,
-			dx, dy
+			vx, vy
 		);
 		
 		this.startX = null; // Reset start position
 		this.startY = null;
 	}
 
+}
+
+/*******************************************************************
+ * CalcWorkerManager class that manages the calculation worker for physics simulation.
+ * @property {Worker} worker - The Web Worker instance for handling calculations.
+*******************************************************************/
+class CalcWorkerManager {
+	constructor() {
+		this.worker = new Worker('./gravsim_calc.js');
+		this.worker.onmessage = this.handleMessage.bind(this);
+	}
+
+	handleMessage(e) {
+		const data = e.data;
+		switch(data.cmd) {
+		case 'update':
+			window.universe.updateObjectParams(data);
+			break;
+		default:
+			console.error('Unknown command from worker:', data.cmd);
+		}
+	}
+
+	postMessage(msg) {
+		this.worker.postMessage(msg);
+	}
+
+	setTimeScale(timeScale) {
+		this.worker.postMessage({
+			cmd: 'setTimeScale',
+			timeScale: timeScale
+		});
+	}
+
+	destroy() {
+		this.worker.terminate();
+	}
 }
 
 /*******************************************************************
@@ -469,12 +471,35 @@ class Universe {
 		this.InfoPanel = new InfoPanel();
 		this.ControlPanel = new ControlPanel();
 		this.ObjectPlacer = new ObjectPlacer(this);
+		this.CalcWorkerManager = new CalcWorkerManager();
 
 		this.reset();
 	}
 
+	updateObjectParams(data) {
+		data.objects.forEach(obj => {
+			const target = this.objects.find(target => target.id === obj.id);
+			if (target) {
+				target.x = M2PIX(obj.x);
+				target.y = M2PIX(obj.y);
+				target.vx = M2PIX(obj.vx);
+				target.vy = M2PIX(obj.vy);
+				target.ax = M2PIX(obj.ax);
+				target.ay = M2PIX(obj.ay);
+				target.mass = obj.mass /1e3;
+				target.radius = obj.radius;
+				target.addHistory();
+
+				if( obj.collided === true ) {
+					target.setCollided();
+				}
+			}
+		});
+	}
+
 	destroy() {
 		for (let i = 0; i < this.objects.length; i++) {
+			this.removeObject(this.objects[i]);
 			delete this.objects[i];
 		}
 		this.objects = [];
@@ -492,17 +517,7 @@ class Universe {
 
 		const centerX = this.canvas.width / 2;
 		const centerY = this.canvas.height / 2;
-		const sunObj = DEFAULT_OBJECT_PARAMS['Sun'];
-		const massiveObj = new Object(
-			sunObj.NAME,
-			centerX,
-			centerY,
-			0, 0,
-			sunObj.MASS,
-			sunObj.COLOR,
-			sunObj.SIZE
-		);
-		this.objects.push(massiveObj);
+		this.ObjectPlacer.placeObject('Sun', centerX, centerY, 0, 0);
 	}
 
 	draw() {
@@ -512,25 +527,57 @@ class Universe {
 		}
 	}
 
-	applyGravity(dt) {
-		for (let i = 0; i < this.objects.length; i++) {
-			const objA = this.objects[i];
-			objA.resetGravity();
-			for (let j = 0; j < this.objects.length; j++) {
-				if (i === j) continue;
-				const objB = this.objects[j];
-				objA.applyGravity(objB);
-			}
+	addObject(obj) {
+		if (!(obj instanceof gravsimObject)) {
+			throw new Error("Invalid object type. Must be an instance of gravsimObject class.");
 		}
+		this.objects.push(obj);
+		this.CalcWorkerManager.postMessage({
+			cmd: 'add',
+			id: obj.id,
+			x: PIX2M(obj.x), y: PIX2M(obj.y),
+			vx: PIX2M(obj.vx), vy: PIX2M(obj.vy),
+			ax: PIX2M(obj.ax), ay: PIX2M(obj.ay),
+			mass: obj.mass *1e3,
+			radius: obj.radius,
+		});
+	}
+
+	removeObject(obj) {
+		if (!(obj instanceof gravsimObject)) {
+			throw new Error("Invalid object type. Must be an instance of gravsimObject class.");
+		}
+		obj.setCollided();
+		this.CalcWorkerManager.postMessage({
+			cmd: 'remove',
+			id: obj.id,
+		});
+	}
+
+	updateObject(obj) {
+		if (!(obj instanceof gravsimObject)) {
+			throw new Error("Invalid object type. Must be an instance of gravsimObject class.");
+		}
+		this.CalcWorkerManager.postMessage({
+			cmd: 'update',
+			id: obj.id,
+			x: PIX2M(obj.x), y: PIX2M(obj.y),
+			vx: PIX2M(obj.vx), vy: PIX2M(obj.vy),
+			ax: PIX2M(obj.ax), ay: PIX2M(obj.ay),
+			mass: obj.mass *1e3,
+			radius: obj.radius,
+		});
 	}
 
 	heliocentric_transform() {
-		const sunObj = this.objects.find(obj => obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME);
+		const sunObj = this.objects.find(obj => obj.id === 0);
 		if (!sunObj) return;
 
+		const tmpObj = Object.assign({}, sunObj);
 		for (const obj of this.objects) {
-			if (obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME) continue;
-			obj.rel_cordinate_transform(sunObj);
+			if (obj.id === 0) continue;
+			obj.rel_cordinate_transform(tmpObj);
+			this.updateObject(obj);
 		}
 
 		sunObj.resetGravity();
@@ -539,37 +586,15 @@ class Universe {
 			this.canvas.height / 2
 		);
 		sunObj.setVelocity(0, 0);
+		this.updateObject(sunObj);
 	}
 
-	removeCollided() {
-		for (let i = 0; i < this.objects.length; i++) {
-			const objA = this.objects[i];
-			if (objA.state != OBJECT_STATE.ACTIVE) continue;
-
-			for (let j = i + 1; j < this.objects.length; j++) {
-				const objB = this.objects[j];
-				if (objB.state != OBJECT_STATE.ACTIVE) continue;
-
-				if (objA.collided(objB)) {
-					if( objA.mass < objB.mass ) {
-						objA.setCollided();
-					}
-					else if( objA.mass > objB.mass ) {
-						objB.setCollided();
-					}
-				}
-			}
-		}
-
-		// Remove objects that are marked as removed
+	removeFinished() {
 		this.objects = this.objects.filter(obj => !obj.finished());
 	}
 
-	setTimeScale() {
-		const timeScaleInput = document.getElementById('time-scale');
-		if (timeScaleInput) {
-			this.timeScale = parseFloat(timeScaleInput.value);
-		}
+	updateTimeScale() {
+		this.CalcWorkerManager.setTimeScale(this.ControlPanel.getTimeScale());
 	}
 
 	update(dt) {
@@ -583,14 +608,13 @@ class Universe {
 		}
 		this.InfoPanel.updateObjectCount(this.objects.length);
 		this.InfoPanel.updateFPS();
-		
-		this.applyGravity(dt);
+
 		for (const obj of this.objects) {
-			obj.accelerate(dt);
-			obj.move(dt);
+			obj.updateHistory();
 		}
 
-		this.removeCollided();
+		this.updateTimeScale();
+		this.removeFinished();
 		this.heliocentric_transform();
 	}
 }
@@ -636,6 +660,13 @@ class ControlPanel {
 			}
 		}
 	}
+
+	getTimeScale() {
+		if (this.timeScaleInput) {
+			return parseFloat(this.timeScaleInput.value);
+		}
+		return 1.0; // Default time scale
+	}
 }
 
 window.onload = function() {
@@ -652,11 +683,11 @@ window.onload = function() {
 
 			const newWidth = window.innerWidth;
 			const newHeight = window.innerHeight;
-			const dx = (newWidth - prevWidth) / 2;
-			const dy = (newHeight - prevHeight) / 2;
+			const vx = (newWidth - prevWidth) / 2;
+			const vy = (newHeight - prevHeight) / 2;
 
 			const sun = window.universe.objects.find(obj => obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME);
-			sun.setVelocity(dx, dy);
+			sun.setVelocity(vx, vy);
 			
 			window.universe.heliocentric_transform();
 		}
@@ -674,7 +705,6 @@ window.onload = function() {
 	function animate(now) {
 		const dt = now - lastTime;
 		lastTime = now;
-		universe.setTimeScale();
 		universe.update(dt);
 		universe.draw();
 		requestAnimationFrame(animate);
