@@ -35,6 +35,13 @@ canvas {
 #ctrl-form select {
 	font-size: 12px;
 }
+#ctrl-form label::before {
+	content: "\A";
+	white-space: pre;
+}
+#ctrl-form label:first-of-type::before {
+  content: none;
+}
 
 #info-panel {
 	position: absolute;
