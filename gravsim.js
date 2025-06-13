@@ -665,7 +665,7 @@ class ControlPanel {
 		if (this.timeScaleInput) {
 			return parseFloat(this.timeScaleInput.value);
 		}
-		return 1.0; // Default time scale
+		return 0.1; // Default time scale
 	}
 }
 
