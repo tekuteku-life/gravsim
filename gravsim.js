@@ -242,7 +242,7 @@ class gravsimObject {
 			const curr = this.history[i];
 			const t = i / this.history.length; // 0 (oldest) to 1 (newest)
 			const alpha = t * 0.4 + 0.2; // fade in (0.2~1.0)
-			const width = this.size * (0.5 + 0.8 * t); // thin to thick
+			const width = this.size * (0.2 + 0.8 * t); // thin to thick
 
 			ctx.strokeStyle = hexToRgba(this.color, alpha);
 			ctx.lineWidth = width;
