@@ -600,7 +600,8 @@ class Universe {
 	}
 
 	updateTimeScale() {
-		this.CalcWorkerManager.setTimeScale(this.ControlPanel.getTimeScale());
+		this.timeScale = this.ControlPanel.getTimeScale();
+		this.CalcWorkerManager.setTimeScale(this.timeScale);
 	}
 
 	update(dt) {
