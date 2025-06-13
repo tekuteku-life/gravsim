@@ -8,6 +8,12 @@ const THROW_SCALE = 1e17;
 const TIME_SCALE = 1e3;
 
 const DEFAULT_OBJECT_PARAMS = {
+	"BlackHole": {
+		"NAME" : "BlackHole",
+		"MASS" : 1.9891e30 *10 / 1e3,	// ton (10 sun)
+		"COLOR" : "#333333",
+		"RADIUS": 3e4,					// meters
+	},
 	"Sun": {
 		"NAME" : "Sun",
 		"MASS" : 1.9891e30 / 1e3,		// ton
