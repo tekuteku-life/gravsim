@@ -473,11 +473,11 @@ class Universe {
 		this.ctx = _canvas.getContext('2d');
 		this.objects = [];
 		this._initInput();
-		this.timeScale = 0.2;
 		this.InfoPanel = new InfoPanel();
 		this.ControlPanel = new ControlPanel();
 		this.ObjectPlacer = new ObjectPlacer(this);
 		this.CalcWorkerManager = new CalcWorkerManager();
+		this.timeScale = this.ControlPanel.getTimeScale();
 
 		this.reset();
 	}
