@@ -116,7 +116,7 @@ function PIX2M(px) {
 }
 
 /*******************************************************************
- * gravsimObject class that represents a celestial object in the universe.
+ * GravSimObject class that represents a celestial object in the universe.
  * @property {string} name - The name of the object.
  * @property {number} x - The x-coordinate of the object in pixels.
  * @property {number} y - The y-coordinate of the object in pixels.
@@ -130,12 +130,12 @@ function PIX2M(px) {
  * @property {number} state - The state of the object (active, removed, etc.).
  * @property {Array} history - The history of the object's positions, stored as an array of objects with x and y properties.
 *******************************************************************/
-class gravsimObject {
+class GravSimObject {
 	constructor(name, x, y, vx, vy, mass, color, size, radius) {
-		gravsimObject._idCounter = (gravsimObject._idCounter || 0);
+		GravSimObject._idCounter = (GravSimObject._idCounter || 0);
 
 		this.name = name;
-		this.id = gravsimObject._idCounter;
+		this.id = GravSimObject._idCounter;
 		this.x = x;
 		this.y = y;
 		this.vx = vx;
@@ -149,7 +149,7 @@ class gravsimObject {
 		this.state = OBJECT_STATE.ACTIVE;
 		this.history = [];
 
-		gravsimObject._idCounter++;
+		GravSimObject._idCounter++;
 	}
 
 	addHistory() {
@@ -335,7 +335,7 @@ class ObjectPlacer {
 
 	placeObject(objName, x, y, vx = 0, vy = 0) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
-		const obj = new gravsimObject(
+		const obj = new GravSimObject(
 			param.NAME,
 			x, y,
 			vx, vy,
@@ -542,8 +542,8 @@ class Universe {
 	}
 
 	addObject(obj) {
-		if (!(obj instanceof gravsimObject)) {
-			throw new Error("Invalid object type. Must be an instance of gravsimObject class.");
+		if (!(obj instanceof GravSimObject)) {
+			throw new Error("Invalid object type. Must be an instance of GravSimObject class.");
 		}
 		this.objects.push(obj);
 		this.CalcWorkerManager.postMessage({
@@ -558,8 +558,8 @@ class Universe {
 	}
 
 	removeObject(obj) {
-		if (!(obj instanceof gravsimObject)) {
-			throw new Error("Invalid object type. Must be an instance of gravsimObject class.");
+		if (!(obj instanceof GravSimObject)) {
+			throw new Error("Invalid object type. Must be an instance of GravSimObject class.");
 		}
 		obj.setCollided();
 		this.CalcWorkerManager.postMessage({
@@ -569,8 +569,8 @@ class Universe {
 	}
 
 	updateObject(obj) {
-		if (!(obj instanceof gravsimObject)) {
-			throw new Error("Invalid object type. Must be an instance of gravsimObject class.");
+		if (!(obj instanceof GravSimObject)) {
+			throw new Error("Invalid object type. Must be an instance of GravSimObject class.");
 		}
 		this.CalcWorkerManager.postMessage({
 			cmd: 'update',
