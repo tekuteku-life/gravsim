@@ -4,7 +4,7 @@ const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
 const HISTORY_LENGTH = 512; // History length
 const DISTANCE_SCALE = 180; // AU/px
-const THROW_SCALE = 1e17;
+const THROW_SCALE = 4e16;
 const TIME_SCALE = 1e3;
 
 const DEFAULT_OBJECT_PARAMS = {
