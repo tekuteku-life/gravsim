@@ -8,7 +8,7 @@ const TIME_SCALE = 1e3;
 const CALC_INTERVAL = 60;
 
 
-class GravSimObject {
+class GravSimCalcObject {
 	constructor(id, x, y, vx, vy, ax, ay, mass, radius) {
 		this.id = id;
 		this.x = x;
@@ -105,7 +105,7 @@ class GravSimCalc {
 		const data = e.data;
 		switch (data.cmd) {
 			case 'add':
-				const newObj = new GravSimObject(
+				const newObj = new GravSimCalcObject(
 					data.id,
 					data.x, data.y,
 					data.vx || 0, data.vy || 0,
