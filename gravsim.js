@@ -367,10 +367,18 @@ class ObjectPlacer {
 	
 	getLaunchPosition(e) {
 		if (e.touches) {
+			if(e.changedTouches) {
+				return {
+					x: e.changedTouches[0].clientX,
+					y: e.changedTouches[0].clientY
+				};
+			}
+			else {
 			return {
 				x: e.touches[0].clientX,
 				y: e.touches[0].clientY
 			};
+			}
 		} else {
 			return {
 				x: e.clientX,
