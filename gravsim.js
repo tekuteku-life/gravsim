@@ -25,56 +25,56 @@ const DEFAULT_OBJECT_PARAMS = {
 		"MASS" : 5.6834e26 / 1e3,		// ton
 		"COLOR": "#FFD700",
 		"RADIUS": 5.8232e7,				// meters
-		"VELOCITY": M2PIX(9.69 *1e3),
-		"ORBIT_RADIUS": AU2PIX(9.58)
+		"VELOCITY": 9.69 *1e3,			// m/s
+		"ORBIT_RADIUS": 9.58,			// AU
 	},
 	"Jupiter": {
 		"NAME" : "Jupiter",
 		"MASS" : 1.898e27 / 1e3,		// ton
 		"COLOR": "#FF8C00",
 		"RADIUS": 6.9911e7,				// meters
-		"VELOCITY": M2PIX(13.07 *1e3),
-		"ORBIT_RADIUS": AU2PIX(5.2)
+		"VELOCITY": 13.07 *1e3,			// m/s
+		"ORBIT_RADIUS": 5.2,			// AU
 	},
 	"Mars": {
 		"NAME" : "Mars",
 		"MASS" : 6.4171e23 / 1e3,		// ton
 		"COLOR": "#FF6347",
 		"RADIUS": 3.3895e6,				// meters
-		"VELOCITY": M2PIX(24.077 *1e3),
-		"ORBIT_RADIUS": AU2PIX(1.524)
+		"VELOCITY": 24.077 *1e3,		// m/s
+		"ORBIT_RADIUS": 1.524,			// AU
 	},
 	"Earth": {
 		"NAME" : "Earth",
 		"MASS" : 5.972e24 / 1e3,		// ton
 		"COLOR": "#1E90FF",
 		"RADIUS": 6.378e6,				// meters
-		"VELOCITY": M2PIX(29.78 *1e3),
-		"ORBIT_RADIUS": AU2PIX(1)
+		"VELOCITY": 29.78 *1e3,			// m/s
+		"ORBIT_RADIUS": 1,				// AU
 	},
 	"Venus": {
 		"NAME" : "Venus",
 		"MASS" : 4.867e24 / 1e3,		// ton
 		"COLOR": "#FFD700",
 		"RADIUS": 6.0518e6,				// meters
-		"VELOCITY": M2PIX(35.02 *1e3),
-		"ORBIT_RADIUS": AU2PIX(0.723)
+		"VELOCITY": 35.02 *1e3,			// m/s
+		"ORBIT_RADIUS": 0.723,			// AU
 	},
 	"Mercury": {
 		"NAME" : "Mercury",
 		"MASS" : 3.3011e23 / 1e3,		// ton
 		"COLOR": "#B8860B",
 		"RADIUS": 2.4397e6,				// meters
-		"VELOCITY": M2PIX(47.36 *1e3),
-		"ORBIT_RADIUS": AU2PIX(0.387)
+		"VELOCITY": 47.36 *1e3,			// m/s
+		"ORBIT_RADIUS": 0.387,			// AU
 	},
 	"Moon": {
 		"NAME" : "Moon",
 		"MASS" : 7.34767309e22 / 1e3,	// ton
 		"COLOR": "#C0C0C0",
 		"RADIUS": 1.7374e6,				// meters
-		"VELOCITY": M2PIX(1.022 *1e3),
-		"ORBIT_RADIUS": AU2PIX(0.00257),
+		"VELOCITY": 1.022 *1e3,			// m/s
+		"ORBIT_RADIUS": 0.00257,		// AU
 	},
 	"Asteroid": {
 		"NAME" : "Asteroid",
@@ -101,18 +101,6 @@ function AU2M(au) {
 }
 function M2AU(m) {
 	return m / METERS_PER_AU;
-}
-function PIX2AU(px) {
-	return px / DISTANCE_SCALE;
-}
-function AU2PIX(au) {
-	return au * DISTANCE_SCALE;
-}
-function M2PIX(m) {
-	return AU2PIX(M2AU(m));
-}
-function PIX2M(px) {
-	return AU2M(PIX2AU(px));
 }
 
 /*******************************************************************
@@ -213,7 +201,37 @@ class GravSimObject {
 		this.ay = 0;
 	}
 
-	rel_cordinate_transform(basis) {
+	getRelativeX(basis) {
+		if( basis ) {
+			return this.x - basis.x;
+		} else {
+			return this.x;
+		}
+	}
+	getRelativeY(basis) {
+		if( basis ) {
+			return this.y - basis.y;
+		} else {
+			return this.y;
+		}
+	}
+
+	getRelativeHistryX(i, basis) {
+		if( basis ) {
+			return this.history[i].x - basis.x;
+		} else {
+			return this.history[i].x;
+		}
+	}
+	getRelativeHistryY(i, basis) {
+		if( basis ) {
+			return this.history[i].y - basis.y;
+		} else {
+			return this.history[i].y;
+		}
+	}
+
+	transformRelativeCordinate(basis) {
 		if( this.state != OBJECT_STATE.ACTIVE || basis.state != OBJECT_STATE.ACTIVE ) {
 			return;
 		}
@@ -227,19 +245,17 @@ class GravSimObject {
 		}
 	}
 
-	draw(ctx) {
+	draw(ctx, basis) {
 		ctx.fillStyle = this.color;
 
 		if( this.state === OBJECT_STATE.ACTIVE) {
 			ctx.beginPath();
-			ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+			ctx.arc(this.getRelativeX(basis), this.getRelativeY(basis), this.size, 0, Math.PI * 2);
 			ctx.fill();
 		}
 
 		// Draw history with fading color and thinning line
 		for (let i = 1; i < this.history.length; i++) {
-			const prev = this.history[i - 1];
-			const curr = this.history[i];
 			const t = i / this.history.length; // 0 (oldest) to 1 (newest)
 			const alpha = t * 0.4 + 0.2; // fade in (0.2~1.0)
 			const width = this.size * (0.2 + 0.8 * t); // thin to thick
@@ -247,8 +263,8 @@ class GravSimObject {
 			ctx.strokeStyle = hexToRgba(this.color, alpha);
 			ctx.lineWidth = width;
 			ctx.beginPath();
-			ctx.moveTo(prev.x, prev.y);
-			ctx.lineTo(curr.x, curr.y);
+			ctx.moveTo(this.getRelativeHistryX(i - 1, basis), this.getRelativeHistryY(i - 1, basis));
+			ctx.lineTo(this.getRelativeHistryX(i, basis), this.getRelativeHistryY(i, basis));
 			ctx.stroke();
 		}
 		ctx.lineWidth = 1;
@@ -320,6 +336,99 @@ class InfoPanel {
 }
 
 /*******************************************************************
+ * ControlPanel class that manages the simulation control panel UI.
+ * 
+ * @property {HTMLInputElement} timeScaleInput - The input element for adjusting the simulation time scale.
+ * @property {HTMLElement} timeScaleIndicator - The element displaying the current time scale value.
+ * @property {HTMLSelectElement} massSelect - The select element for choosing the type of object to place.
+*******************************************************************/
+class ControlPanel {
+	constructor(universe) {
+		this.universe = universe;
+
+		this.timeScaleInput = document.getElementById('time-scale');
+		this.timeScaleIndicator = document.getElementById('time-scale-indicator');
+		this.zoomScaleInput = document.getElementById('zoom-scale');
+		this.zoomScaleIndicator = document.getElementById('zoom-scale-indicator');
+		this.massSelect = document.getElementById('mass-select');
+
+		this.generateMassSelect();
+	
+		this.timeScaleInput.addEventListener('input', function(e) {
+			this.updateTimeScaleIndicator(this.timeScaleInput.value);
+		}.bind(this));
+	
+		this.zoomScaleInput.addEventListener('input', function(e) {
+			this.updateZoomScaleIndicator(this.zoomScaleInput.value);
+		}.bind(this));
+		
+		document.getElementById('put-saturn-btn').addEventListener('click', function(e) {
+			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Saturn");
+		}.bind(this));
+		document.getElementById('put-jupiter-btn').addEventListener('click', function(e) {
+			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Jupiter");
+		}.bind(this));
+		document.getElementById('put-earth-btn').addEventListener('click', function(e) {
+			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Earth");
+		}.bind(this));
+		document.getElementById('put-venus-btn').addEventListener('click', function(e) {
+			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Venus");
+		}.bind(this));
+		document.getElementById('put-mars-btn').addEventListener('click', function(e) {
+			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Mars");
+		}.bind(this));
+		document.getElementById('put-mercury-btn').addEventListener('click', function(e) {
+			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Mercury");
+		}.bind(this));
+	}
+
+	updateTimeScaleIndicator(val) {
+		if (this.timeScaleIndicator) {
+			this.timeScaleIndicator.textContent = parseFloat(val).toFixed(2);
+		}
+	}
+
+	updateZoomScaleIndicator(val) {
+		if (this.zoomScaleIndicator) {
+			this.zoomScaleIndicator.textContent = parseFloat(val).toFixed(2);
+		}
+	}
+
+	generateMassSelect() {
+		if(!this.massSelect) {
+			return;
+		}
+
+		this.massSelect.innerHTML = '';
+		for (const key in DEFAULT_OBJECT_PARAMS) {
+			const param = DEFAULT_OBJECT_PARAMS[key];
+			const option = document.createElement('option');
+			option.value = key;
+			option.textContent = `${param.NAME} (mass: ${param.MASS.toExponential(2)} t)`;
+			this.massSelect.appendChild(option);
+
+			if (param.NAME === "Rocket") {
+				option.selected = true;
+			}
+		}
+	}
+
+	getTimeScale() {
+		if (this.timeScaleInput) {
+			return parseFloat(this.timeScaleInput.value);
+		}
+		return 0.1; // Default time scale
+	}
+
+	getZoomScale() {
+		if (this.zoomScaleInput) {
+			return parseFloat(this.zoomScaleInput.value);
+		}
+		return 1; // Default zoom scale
+	}
+}
+
+/*******************************************************************
  * ObjectPlacer class that manages the placement of objects in the universe.
  * @property {Universe} universe - The universe instance where objects are placed.
 *******************************************************************/
@@ -351,10 +460,18 @@ class ObjectPlacer {
 	placeAtOrbit(objName, orbitCenterX, orbitCenterY) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
 		const x = orbitCenterX;
-		const y = orbitCenterY - (param.ORBIT_RADIUS || 0);
-		const vx = param.VELOCITY || 0;
+		const y = orbitCenterY - this.universe.au2pix(param.ORBIT_RADIUS || 0);
+		const vx = this.universe.m2pix(param.VELOCITY || 0);
 		const vy = 0;
 		return this.placeObject(objName, x, y, vx, vy);
+	}
+
+	placeAtOrbitAroundHost(hostName, objName) {
+		const hostObj = this.universe.objects.find(obj => obj.name === hostName);
+		if (!hostObj) {
+			throw new Error("Sun object not found in the universe.");
+		}
+		return this.placeAtOrbit(objName, hostObj.x, hostObj.y);
 	}
 
 	placeAtOrbitAroundSun(objName) {
@@ -366,25 +483,29 @@ class ObjectPlacer {
 	}
 	
 	getLaunchPosition(e) {
+		const centerX = this.universe.centerObject.x;
+		const centerY = this.universe.centerObject.y;
+		const zoomScale = this.universe.zoomScale;
+		let x = 0, y = 0;
+
 		if (e.touches) {
 			if(e.changedTouches) {
-				return {
-					x: e.changedTouches[0].clientX,
-					y: e.changedTouches[0].clientY
-				};
+				x = e.changedTouches[0].clientX;
+				y = e.changedTouches[0].clientY;
 			}
 			else {
-			return {
-				x: e.touches[0].clientX,
-				y: e.touches[0].clientY
-			};
+				x = e.touches[0].clientX;
+				y = e.touches[0].clientY;
 			}
 		} else {
-			return {
-				x: e.clientX,
-				y: e.clientY
-			};
+			x = e.clientX;
+			y = e.clientY;
 		}
+		
+		return {
+			x: (x - centerX) / zoomScale + centerX,
+			y: (y - centerY) / zoomScale + centerY,
+		};
 	}
 
 	getLaunchObjectName() {
@@ -413,8 +534,8 @@ class ObjectPlacer {
 		const endY = pos.y;
 		const endTime = Date.now();
 		const dt = Math.max((endTime - this.startTime) / TIME_SCALE, 0.01);
-		const vx = PIX2AU(AU2M((endX - this.startX) / dt / THROW_SCALE));
-		const vy = PIX2AU(AU2M((endY - this.startY) / dt / THROW_SCALE));
+		const vx = this.universe.pix2m((endX - this.startX) / dt / THROW_SCALE);
+		const vy = this.universe.pix2m((endY - this.startY) / dt / THROW_SCALE);
 		
 		this.placeObject(
 			name,
@@ -480,26 +601,41 @@ class Universe {
 		this.canvas = _canvas;
 		this.ctx = _canvas.getContext('2d');
 		this.objects = [];
+		this.centerObject = null;
 		this._initInput();
 		this.InfoPanel = new InfoPanel();
-		this.ControlPanel = new ControlPanel();
+		this.ControlPanel = new ControlPanel(this);
 		this.ObjectPlacer = new ObjectPlacer(this);
 		this.CalcWorkerManager = new CalcWorkerManager();
 		this.timeScale = this.ControlPanel.getTimeScale();
+		this.zoomScale = this.ControlPanel.getZoomScale();
 
 		this.reset();
+	}
+	
+	pix2au(px) {
+		return px / DISTANCE_SCALE;
+	}
+	au2pix(au) {
+		return au * DISTANCE_SCALE;
+	}
+	m2pix(m) {
+		return this.au2pix(M2AU(m));
+	}
+	pix2m(px) {
+		return AU2M(this.pix2au(px));
 	}
 
 	updateObjectParams(data) {
 		data.objects.forEach(obj => {
 			const target = this.objects.find(target => target.id === obj.id);
 			if (target) {
-				target.x = M2PIX(obj.x);
-				target.y = M2PIX(obj.y);
-				target.vx = M2PIX(obj.vx);
-				target.vy = M2PIX(obj.vy);
-				target.ax = M2PIX(obj.ax);
-				target.ay = M2PIX(obj.ay);
+				target.x = this.m2pix(obj.x);
+				target.y = this.m2pix(obj.y);
+				target.vx = this.m2pix(obj.vx);
+				target.vy = this.m2pix(obj.vy);
+				target.ax = this.m2pix(obj.ax);
+				target.ay = this.m2pix(obj.ay);
 				target.mass = obj.mass /1e3;
 				target.radius = obj.radius;
 				target.addHistory();
@@ -532,13 +668,18 @@ class Universe {
 		const centerX = this.canvas.width / 2;
 		const centerY = this.canvas.height / 2;
 		this.ObjectPlacer.placeObject('Sun', centerX, centerY, 0, 0);
+		this.centerObject = this.objects[0];
 	}
 
 	draw() {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		this.ctx.save();
+		this.ctx.translate(this.centerObject.x, this.centerObject.y);
+		this.ctx.scale(this.zoomScale, this.zoomScale);
 		for (const obj of this.objects) {
-			obj.draw(this.ctx);
+			obj.draw(this.ctx, this.centerObject);
 		}
+		this.ctx.restore();
 	}
 
 	addObject(obj) {
@@ -549,9 +690,9 @@ class Universe {
 		this.CalcWorkerManager.postMessage({
 			cmd: 'add',
 			id: obj.id,
-			x: PIX2M(obj.x), y: PIX2M(obj.y),
-			vx: PIX2M(obj.vx), vy: PIX2M(obj.vy),
-			ax: PIX2M(obj.ax), ay: PIX2M(obj.ay),
+			x: this.pix2m(obj.x), y: this.pix2m(obj.y),
+			vx: this.pix2m(obj.vx), vy: this.pix2m(obj.vy),
+			ax: this.pix2m(obj.ax), ay: this.pix2m(obj.ay),
 			mass: obj.mass *1e3,
 			radius: obj.radius,
 		});
@@ -575,32 +716,29 @@ class Universe {
 		this.CalcWorkerManager.postMessage({
 			cmd: 'update',
 			id: obj.id,
-			x: PIX2M(obj.x), y: PIX2M(obj.y),
-			vx: PIX2M(obj.vx), vy: PIX2M(obj.vy),
-			ax: PIX2M(obj.ax), ay: PIX2M(obj.ay),
+			x: this.pix2m(obj.x), y: this.pix2m(obj.y),
+			vx: this.pix2m(obj.vx), vy: this.pix2m(obj.vy),
+			ax: this.pix2m(obj.ax), ay: this.pix2m(obj.ay),
 			mass: obj.mass *1e3,
 			radius: obj.radius,
 		});
 	}
 
-	heliocentric_transform() {
-		const sunObj = this.objects.find(obj => obj.id === 0);
-		if (!sunObj) return;
+	transformRelativeToCenterObject() {
+		if (!this.centerObject) return;
 
-		const tmpObj = Object.assign({}, sunObj);
 		for (const obj of this.objects) {
-			if (obj.id === 0) continue;
-			obj.rel_cordinate_transform(tmpObj);
+			obj.transformRelativeCordinate(this.centerObject);
 			this.updateObject(obj);
 		}
 
-		sunObj.resetGravity();
-		sunObj.setPosition(
+		this.centerObject.resetGravity();
+		this.centerObject.setPosition(
 			this.canvas.width / 2,
 			this.canvas.height / 2
 		);
-		sunObj.setVelocity(0, 0);
-		this.updateObject(sunObj);
+		this.centerObject.setVelocity(0, 0);
+		this.updateObject(this.centerObject);
 	}
 
 	removeFinished() {
@@ -610,6 +748,10 @@ class Universe {
 	updateTimeScale() {
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
+	}
+
+	updateZoomScale() {
+		this.zoomScale = this.ControlPanel.getZoomScale();
 	}
 
 	update(dt) {
@@ -629,58 +771,9 @@ class Universe {
 		}
 
 		this.updateTimeScale();
+		this.updateZoomScale();
 		this.removeFinished();
-		this.heliocentric_transform();
-	}
-}
-
-
-/*******************************************************************
- * ControlPanel class that manages the simulation control panel UI.
- * 
- * @property {HTMLInputElement} timeScaleInput - The input element for adjusting the simulation time scale.
- * @property {HTMLElement} timeScaleIndicator - The element displaying the current time scale value.
- * @property {HTMLSelectElement} massSelect - The select element for choosing the type of object to place.
-*******************************************************************/
-class ControlPanel {
-	constructor() {
-		this.timeScaleInput = document.getElementById('time-scale');
-		this.timeScaleIndicator = document.getElementById('time-scale-indicator');
-		this.massSelect = document.getElementById('mass-select');
-
-		this.generateMassSelect();
-	
-		this.timeScaleInput.addEventListener('input', function(e) {
-			if (this.timeScaleIndicator) {
-				this.timeScaleIndicator.textContent = parseFloat(this.timeScaleInput.value).toFixed(2);
-			}
-		}.bind(this));
-	}
-
-	generateMassSelect() {
-		if(!this.massSelect) {
-			return;
-		}
-
-		this.massSelect.innerHTML = '';
-		for (const key in DEFAULT_OBJECT_PARAMS) {
-			const param = DEFAULT_OBJECT_PARAMS[key];
-			const option = document.createElement('option');
-			option.value = key;
-			option.textContent = `${param.NAME} (mass: ${param.MASS.toExponential(2)} t)`;
-			this.massSelect.appendChild(option);
-
-			if (param.NAME === "Rocket") {
-				option.selected = true;
-			}
-		}
-	}
-
-	getTimeScale() {
-		if (this.timeScaleInput) {
-			return parseFloat(this.timeScaleInput.value);
-		}
-		return 0.1; // Default time scale
+		this.transformRelativeToCenterObject();
 	}
 }
 
@@ -704,7 +797,7 @@ window.onload = function() {
 			const sun = window.universe.objects.find(obj => obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME);
 			sun.setVelocity(vx, vy);
 			
-			window.universe.heliocentric_transform();
+			window.universe.transformRelativeToCenterObject();
 		}
 
 		canvas.width = window.innerWidth;
@@ -725,23 +818,4 @@ window.onload = function() {
 		requestAnimationFrame(animate);
 	}
 	requestAnimationFrame(animate);
-
-	document.getElementById('put-saturn-btn').addEventListener('click', () => {
-		universe.ObjectPlacer.placeAtOrbitAroundSun("Saturn");
-	});
-	document.getElementById('put-jupiter-btn').addEventListener('click', () => {
-		universe.ObjectPlacer.placeAtOrbitAroundSun("Jupiter");
-	});
-	document.getElementById('put-earth-btn').addEventListener('click', () => {
-		universe.ObjectPlacer.placeAtOrbitAroundSun("Earth");
-	});
-	document.getElementById('put-venus-btn').addEventListener('click', () => {
-		universe.ObjectPlacer.placeAtOrbitAroundSun("Venus");
-	});
-	document.getElementById('put-mars-btn').addEventListener('click', () => {
-		universe.ObjectPlacer.placeAtOrbitAroundSun("Mars");
-	});
-	document.getElementById('put-mercury-btn').addEventListener('click', () => {
-		universe.ObjectPlacer.placeAtOrbitAroundSun("Mercury");
-	});
 };

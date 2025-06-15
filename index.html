@@ -12,12 +12,16 @@
 	<form id="ctrl-form">
 		<label for="time-scale">Time scale (year/sec):</label>
 		<input type="range" id="time-scale" name="time-scale" value="0.1" step="0.01" min="0.01" max="1.0" style="width:150px;">
-		<span id="time-scale-indicator">0.10</span><br>
+		<span id="time-scale-indicator">0.10</span>
+		
+		<label for="zoom-scale">Zoom level:</label>
+		<input type="range" id="zoom-scale" name="zoom-scale" value="1" step="0.1" min="0.1" max="5.0" style="width:150px;">
+		<span id="zoom-scale-indicator">1</span>
 
 		<label for="mass-select">Object Mass:</label>
 		<select id="mass-select" name="mass"></select><br>
 
-		<span>Default deploy:</span>
+		<span>Orbital deploy:</span>
 		<button type="button" id="put-saturn-btn" style="margin-top:8px;">Saturn</button>
 		<button type="button" id="put-jupiter-btn" style="margin-top:8px;">Jupiter</button>
 		<button type="button" id="put-mars-btn" style="margin-top:8px;">Mars</button>
