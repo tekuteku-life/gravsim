@@ -297,6 +297,7 @@ class InfoPanel {
 
 		this.elapsedTime = 0; // in years
 		this.lastTime = new Date();
+		this.fpsCount = 0;
 	}
 
 	resetElapsedTime() {
@@ -328,10 +329,15 @@ class InfoPanel {
 
 		const now = new Date();
 		const elapsed = now - this.lastTime;
-		this.lastTime = now;
 
-		const fps = (1000 / elapsed).toFixed(2);
-		fpsSpan.textContent = `${fps}`;
+		this.fpsCount++;
+		if( elapsed >= 500 ) {
+			const fps = (this.fpsCount / (elapsed / 1e3)).toFixed(1);
+			fpsSpan.textContent = `${fps}`;
+			
+			this.lastTime = now;
+			this.fpsCount = 0;
+		}
 	}
 }
 
