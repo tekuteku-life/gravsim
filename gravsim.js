@@ -481,7 +481,7 @@ class ObjectPlacer {
 	}
 
 	placeAtOrbitAroundSun(objName) {
-		const sunObj = this.universe.objects.find(obj => obj.id === 0);
+		const sunObj = this.universe.objects.find(obj => obj.id === this.universe.centerObject.id);
 		if (!sunObj) {
 			throw new Error("Sun object not found in the universe.");
 		}
