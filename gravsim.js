@@ -245,12 +245,12 @@ class GravSimObject {
 		}
 	}
 
-	draw(ctx, basis) {
+	draw(ctx, basis, scale) {
 		ctx.fillStyle = this.color;
 
 		if( this.state === OBJECT_STATE.ACTIVE) {
 			ctx.beginPath();
-			ctx.arc(this.getRelativeX(basis), this.getRelativeY(basis), this.size, 0, Math.PI * 2);
+			ctx.arc(this.getRelativeX(basis), this.getRelativeY(basis), this.size *scale, 0, Math.PI * 2);
 			ctx.fill();
 		}
 
@@ -258,7 +258,7 @@ class GravSimObject {
 		for (let i = 1; i < this.history.length; i++) {
 			const t = i / this.history.length; // 0 (oldest) to 1 (newest)
 			const alpha = t * 0.4 + 0.2; // fade in (0.2~1.0)
-			const width = this.size * (0.2 + 0.8 * t); // thin to thick
+			const width = this.size * (0.2 + 0.8 * t) *scale; // thin to thick
 
 			ctx.strokeStyle = hexToRgba(this.color, alpha);
 			ctx.lineWidth = width;
@@ -697,7 +697,7 @@ class Universe {
 		this.ctx.translate(this.centerObject.x, this.centerObject.y);
 		this.ctx.scale(this.zoomScale, this.zoomScale);
 		for (const obj of this.objects) {
-			obj.draw(this.ctx, this.centerObject);
+			obj.draw(this.ctx, this.centerObject, 1/this.zoomScale);
 		}
 		this.ctx.restore();
 	}
