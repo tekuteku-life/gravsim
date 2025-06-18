@@ -367,6 +367,20 @@ class ControlPanel {
 		this.zoomScaleInput.addEventListener('input', function(e) {
 			this.updateZoomScaleIndicator(this.zoomScaleInput.value);
 		}.bind(this));
+
+		this.universe.canvas.addEventListener('wheel', (e) => {
+			e.preventDefault();
+			let val = parseFloat(this.zoomScaleInput.value);
+			const max = this.zoomScaleInput.max;
+			const min = this.zoomScaleInput.min;
+			const step = ((e.deltaY < 0) ? 1 : -1) *this.zoomScaleInput.step;
+			val += step;
+			if( val > max ) { val = max *1.0; }
+			else if( val < min ) { val = min *1.0; }
+			this.zoomScaleInput.value = val.toFixed(2);
+			this.updateZoomScaleIndicator(val);
+			this.universe.updateZoomScale();
+		});
 		
 		document.getElementById('put-saturn-btn').addEventListener('click', function(e) {
 			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Saturn");
