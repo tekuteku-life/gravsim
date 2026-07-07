@@ -62,7 +62,7 @@ class GravSimCalcObject {
 		const radiusSum = this.radius + other.radius;
 
 		if( distSq < radiusSum * radiusSum ) {
-			true;
+			return true;
 		}
 
 		const max_v1 = Math.max(Math.abs(this.getVXt(dt)), Math.abs(this.getVYt(dt)));
