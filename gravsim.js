@@ -147,7 +147,7 @@ class GravSimObject {
 			return;
 		}
 
-		if( this.name == DEFAULT_OBJECT_PARAMS["Sun"].NAME ) {
+		if( window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id ) {
 			return;
 		}
 
@@ -162,7 +162,7 @@ class GravSimObject {
 			return;
 		}
 
-		if( this.name == DEFAULT_OBJECT_PARAMS["Sun"].NAME ) {
+		if( window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id ) {
 			return;
 		}
 
@@ -181,7 +181,7 @@ class GravSimObject {
 	}
 
 	setCollided() {
-		if( this.name == DEFAULT_OBJECT_PARAMS["Sun"].NAME ) {
+		if( window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id ) {
 			return;
 		}
 
@@ -851,7 +851,7 @@ window.onload = function() {
 			const vx = (newWidth - prevWidth) / 2;
 			const vy = (newHeight - prevHeight) / 2;
 
-			const sun = window.universe.objects.find(obj => obj.name === DEFAULT_OBJECT_PARAMS["Sun"].NAME);
+			const sun = window.universe.objects.find(obj => obj.id === this.universe.centerObject.id);
 			sun.setVelocity(vx, vy);
 			
 			window.universe.transformRelativeToCenterObject();
