@@ -128,6 +128,7 @@ class GravSimCalc {
 					objToUpdate.ax = data.ax || 0;
 					objToUpdate.ay = data.ay || 0;
 					objToUpdate.mass = data.mass || objToUpdate.mass; // Update mass if provided
+					objToUpdate.radius = data.radius || objToUpdate.radius;
 				}
 				break;
 			case 'setTimeScale':
@@ -152,6 +153,8 @@ class GravSimCalc {
 				vy: obj.vy || 0,
 				ax: obj.ax || 0,
 				ay: obj.ay || 0,
+				mass: obj.mass || 1,
+				radius: obj.radius || 1,
 				collided: obj.collided || false,
 			};
 		});
