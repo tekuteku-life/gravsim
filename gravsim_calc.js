@@ -90,7 +90,7 @@ class GravSimCalcObject {
 
 class GravSimCalc {
 	constructor() {
-		this.lastTime = 0;
+		this.lastTime = Date.now();
 		this.objects = [];
 		this.timeScale = 1;
 
@@ -220,7 +220,8 @@ class GravSimCalc {
 
 	update() {
 		const now = Date.now();
-		const dt = (now - this.lastTime) *YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
+		const elapsed = Math.min(now - this.lastTime, 1e3);
+		const dt = elapsed *YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
 		this.lastTime = now;
 
 		this.moveObject(dt);
