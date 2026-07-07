@@ -1,4 +1,6 @@
 
+const GRAVSIM_CALC_JS_FILE = './gravsim_calc.js';
+
 const METERS_PER_AU = 149597870700; // 1 AU in meters
 const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
@@ -610,7 +612,7 @@ class ObjectPlacer {
 *******************************************************************/
 class CalcWorkerManager {
 	constructor() {
-		this.worker = new Worker('./gravsim_calc.js');
+		this.worker = new Worker(GRAVSIM_CALC_JS_FILE);
 		this.worker.onmessage = this.handleMessage.bind(this);
 	}
 
