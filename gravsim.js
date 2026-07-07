@@ -4,6 +4,9 @@ const GRAVSIM_CALC_JS_FILE = './gravsim_calc.js';
 const METERS_PER_AU = 149597870700; // 1 AU in meters
 const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
 
+const G = 6.67430e-11; // Gravitational constant (m^3 kg^-1 s^-2)
+const REMOVE_DISTANCE_AU = 50;
+
 const HISTORY_LENGTH = 512; // History length
 const DISTANCE_SCALE = 180; // AU/px
 const THROW_SCALE = 4e16;
@@ -802,6 +805,36 @@ class Universe {
 		this.objects = this.objects.filter(obj => !obj.finished());
 	}
 
+	removeFarObjects() {
+		if (!this.centerObject) return;
+
+		for (const obj of this.objects) {
+			if (obj.id === this.centerObject.id) continue;
+			if (obj.state !== OBJECT_STATE.ACTIVE) continue;
+
+			const dx = obj.x - this.centerObject.x;
+			const dy = obj.y - this.centerObject.y;
+			const distPx = Math.sqrt(dx * dx + dy * dy);
+			
+			const distAu = this.pix2au(distPx);
+			if (distAu > REMOVE_DISTANCE_AU) {
+				const r = this.pix2m(distPx);
+				const dvx = this.pix2m(obj.vx - this.centerObject.vx);
+				const dvy = this.pix2m(obj.vy - this.centerObject.vy);
+				const v2 = dvx * dvx + dvy * dvy;
+
+				const totalMass = (this.centerObject.mass + obj.mass) * 1e3;
+
+				const escapeV2 = (2 * G * totalMass) / r;
+
+				if (v2 >= escapeV2) {
+					this.removeObject(obj);
+					console.debug(`${obj.name} (id:${obj.id}) got out from heliosphere`);
+				}
+			}
+		}
+	}
+
 	updateTimeScale() {
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
@@ -829,6 +862,7 @@ class Universe {
 
 		this.updateTimeScale();
 		this.updateZoomScale();
+		this.removeFarObjects();
 		this.removeFinished();
 		this.transformRelativeToCenterObject();
 	}
