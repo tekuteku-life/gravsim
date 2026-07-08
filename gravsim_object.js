@@ -40,12 +40,16 @@ export class GravSimObject {
 		GravSimObject._idCounter++;
 	}
 
+	isCenterObject() {
+		return window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id;
+	}
+
 	addHistory() {
 		if (this.state !== OBJECT_STATE.ACTIVE) {
 			return;
 		}
 
-		if( window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id ) {
+		if( this.isCenterObject() ) {
 			return;
 		}
 
@@ -60,7 +64,7 @@ export class GravSimObject {
 			return;
 		}
 
-		if( window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id ) {
+		if( this.isCenterObject() ) {
 			return;
 		}
 
@@ -79,7 +83,7 @@ export class GravSimObject {
 	}
 
 	setCollided() {
-		if( window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id ) {
+		if( this.isCenterObject() ) {
 			return;
 		}
 
