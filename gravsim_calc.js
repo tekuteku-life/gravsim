@@ -1,12 +1,11 @@
 // gravsim_calc.js
 
-const G = 6.67430e-11;	// Gravitational constant (m^3 kg^-1 s^-2)
-const YEARS_PER_SECOND = 60*60*24*365.25; // 1 year in seconds
-const C = 2.99792458e8;			// speed of light (m/s)
+import {
+	G, C, YEARS_PER_SECOND,
+	TIME_SCALE
+} from './gravsim_const.js'
 
-const TIME_SCALE = 1e3;
 const CALC_INTERVAL = 60;
-
 
 class GravSimCalcObject {
 	constructor(id, x, y, vx, vy, ax, ay, mass, radius) {
