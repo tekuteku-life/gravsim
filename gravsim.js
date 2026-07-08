@@ -18,7 +18,7 @@ window.onload = function() {
 			const vx = (newWidth - prevWidth) / 2;
 			const vy = (newHeight - prevHeight) / 2;
 
-			const sun = window.universe.objects.find(obj => obj.id === this.universe.centerObject.id);
+			const sun = window.universe.objects.find(obj => obj.id === window.universe.centerObject.id);
 			sun.setVelocity(vx, vy);
 			
 			window.universe.transformRelativeToCenterObject();
