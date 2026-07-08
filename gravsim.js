@@ -15,13 +15,24 @@ window.onload = function() {
 
 			const newWidth = window.innerWidth;
 			const newHeight = window.innerHeight;
-			const vx = (newWidth - prevWidth) / 2;
-			const vy = (newHeight - prevHeight) / 2;
 
-			const sun = window.universe.objects.find(obj => obj.id === window.universe.centerObject.id);
-			sun.setVelocity(vx, vy);
+			const dx = (newWidth - prevWidth) / 2;
+			const dy = (newHeight - prevHeight) / 2;
+
+			window.universe.CalcWorkerManager.postMessage({ cmd: 'pause', value: true });
+			window.universe.ignoreUpdatesUntil = Date.now() + 100;
+
+			for (const obj of window.universe.objects) {
+				obj.shiftPosition(dx, dy);
+			}
+
+			window.universe.CalcWorkerManager.postMessage({
+				cmd: 'shiftPosition',
+				dx: window.universe.pix2m(dx),
+				dy: window.universe.pix2m(dy)
+			});
 			
-			window.universe.transformRelativeToCenterObject();
+			window.universe.CalcWorkerManager.postMessage({ cmd: 'pause', value: false });
 		}
 
 		canvas.width = window.innerWidth;

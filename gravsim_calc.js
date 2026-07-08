@@ -92,6 +92,7 @@ class GravSimCalc {
 		this.lastTime = Date.now();
 		this.objects = [];
 		this.timeScale = 1;
+		this.isPause = false;
 
 		self.onmessage = this.onmessage.bind(this);
 
@@ -135,6 +136,18 @@ class GravSimCalc {
 					this.timeScale = data.timeScale;
 				} else {
 					console.error('Invalid time scale:', data.timeScale);
+				}
+				break;
+			case 'shiftPosition':
+				this.objects.forEach(obj => {
+					obj.x += data.dx;
+					obj.y += data.dy;
+				});
+				break;
+			case 'pause':
+				this.isPause = data.value;
+				if (!this.isPaused) {
+					this.lastTime = Date.now();
 				}
 				break;
 			default:
@@ -218,6 +231,8 @@ class GravSimCalc {
 	}
 
 	update() {
+		if (this.isPaused) { return; }
+
 		const now = Date.now();
 		const elapsed = Math.min(now - this.lastTime, 1e3);
 		const dt = elapsed *YEARS_PER_SECOND /TIME_SCALE *this.timeScale;

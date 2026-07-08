@@ -96,6 +96,15 @@ export class GravSimObject {
 		this.vy = vy;
 	}
 
+	shiftPosition(dx, dy) {
+		this.x += dx;
+		this.y += dy;
+		for (let i = 0; i < this.history.length; i++) {
+			this.history[i].x += dx;
+			this.history[i].y += dy;
+		}
+	}
+
 	resetGravity() {
 		this.ax = 0;
 		this.ay = 0;

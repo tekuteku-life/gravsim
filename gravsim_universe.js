@@ -201,6 +201,7 @@ export class Universe {
 		this.CalcWorkerManager = new CalcWorkerManager();
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.zoomScale = this.ControlPanel.getZoomScale();
+		this.ignoreUpdatesUntil = 0;
 
 		this.reset();
 	}
@@ -219,6 +220,8 @@ export class Universe {
 	}
 
 	updateObjectParams(data) {
+		if (Date.now() < this.ignoreUpdatesUntil) { return; }
+
 		data.objects.forEach(obj => {
 			const target = this.objects.find(target => target.id === obj.id);
 			if (target) {
