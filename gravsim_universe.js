@@ -134,7 +134,8 @@ class ObjectPlacer {
 		this.placeObject(
 			name,
 			endX, endY,
-			vx, vy
+			vx + this.universe.centerObject.vx,
+			vy + this.universe.centerObject.vy
 		);
 		
 		this.startX = null; // Reset start position
