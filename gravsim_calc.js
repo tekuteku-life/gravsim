@@ -235,11 +235,18 @@ class GravSimCalc {
 
 		const now = Date.now();
 		const elapsed = Math.min(now - this.lastTime, 1e3);
-		const dt = elapsed *YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
+		const totalDt = elapsed *YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
 		this.lastTime = now;
 
-		this.moveObject(dt);
-		this.collisionCheck(dt);
+		// split step
+		let SUB_STEPS = Math.ceil(200 * this.timeScale);
+		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, 240));
+		const dt = totalDt / SUB_STEPS;
+
+		for (let i = 0; i < SUB_STEPS; i++) {
+			this.moveObject(dt);
+			this.collisionCheck(dt);
+		}
 			
 		self.postMessage({
 			cmd: 'update',
