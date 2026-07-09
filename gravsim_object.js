@@ -76,6 +76,10 @@ export class GravSimObject {
 		}
 	}
 
+	clearHistory() {
+		this.history = [];
+	}
+
 	finished() {
 		if( this.state === OBJECT_STATE.REMOVED
 			&& this.history.length === 0

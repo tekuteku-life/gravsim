@@ -81,6 +81,38 @@ export class ControlPanel {
 		document.getElementById('put-mercury-btn').addEventListener('click', function(e) {
 			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Mercury");
 		}.bind(this));
+
+		this.centerSelect = document.getElementById('center-select');
+		if (this.centerSelect) {
+			this.centerSelect.addEventListener('focus', this.updateCenterOptions.bind(this));
+
+			this.centerSelect.addEventListener('change', (e) => {
+				const targetId = parseInt(e.target.value, 10);
+				const targetObj = this.universe.objects.find(obj => obj.id === targetId);
+				if (targetObj) {
+					this.universe.centerObject = targetObj;
+					targetObj.clearHistory();
+				}
+			});
+
+			setTimeout(() => this.updateCenterOptions(), 100);
+		}
+	}
+
+	updateCenterOptions() {
+		if (!this.centerSelect || !this.universe.centerObject) return;
+		
+		this.centerSelect.innerHTML = '';
+		for (const obj of this.universe.objects) {
+			const option = document.createElement('option');
+			option.value = obj.id;
+			option.textContent = `${obj.name} (ID: ${obj.id})`;
+			
+			if (obj.id === this.universe.centerObject.id) {
+				option.selected = true;
+			}
+			this.centerSelect.appendChild(option);
+		}
 	}
 
 	setZoomScaleByStep(step) {

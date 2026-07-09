@@ -49,34 +49,36 @@ class ObjectPlacer {
 		return obj;
 	}
 
-	placeAtOrbit(objName, orbitCenterX, orbitCenterY) {
+	placeAtOrbit(objName, orbitCenterX, orbitCenterY, hostVx = 0, hostVy = 0) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
 		const x = orbitCenterX;
 		const y = orbitCenterY - this.universe.au2pix(param.ORBIT_RADIUS || 0);
-		const vx = this.universe.m2pix(param.VELOCITY || 0);
-		const vy = 0;
+		const vx = this.universe.m2pix(param.VELOCITY || 0) + hostVx;
+		const vy = hostVy;
 		return this.placeObject(objName, x, y, vx, vy);
 	}
 
 	placeAtOrbitAroundHost(hostName, objName) {
 		const hostObj = this.universe.objects.find(obj => obj.name === hostName);
 		if (!hostObj) {
-			throw new Error("Sun object not found in the universe.");
+			throw new Error(hostName + " object not found in the universe.");
 		}
-		return this.placeAtOrbit(objName, hostObj.x, hostObj.y);
+		return this.placeAtOrbit(objName, hostObj.x, hostObj.y, hostObj.vx, hostObj.vy);
 	}
 
 	placeAtOrbitAroundSun(objName) {
-		const sunObj = this.universe.objects.find(obj => obj.isCenterObject());
+		const sunObj = this.universe.objects.find(obj => obj.name === "Sun") || this.universe.centerObject;
 		if (!sunObj) {
 			throw new Error("Sun object not found in the universe.");
 		}
-		return this.placeAtOrbit(objName, sunObj.x, sunObj.y);
+		return this.placeAtOrbit(objName, sunObj.x, sunObj.y, sunObj.vx, sunObj.vy);
 	}
 	
 	getLaunchPosition(e) {
-		const centerX = this.universe.centerObject.x;
-		const centerY = this.universe.centerObject.y;
+		const screenCenterX = this.universe.canvas.width / 2;
+		const screenCenterY = this.universe.canvas.height / 2;
+		const centerObjX = this.universe.centerObject.x;
+		const centerObjY = this.universe.centerObject.y;
 		const zoomScale = this.universe.zoomScale;
 		let x = 0, y = 0;
 
@@ -95,8 +97,8 @@ class ObjectPlacer {
 		}
 		
 		return {
-			x: (x - centerX) / zoomScale + centerX,
-			y: (y - centerY) / zoomScale + centerY,
+			x: (x - screenCenterX) / zoomScale + centerObjX,
+			y: (y - screenCenterY) / zoomScale + centerObjY,
 		};
 	}
 
@@ -269,7 +271,7 @@ export class Universe {
 	draw() {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		this.ctx.save();
-		this.ctx.translate(this.centerObject.x, this.centerObject.y);
+		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
 		this.ctx.scale(this.zoomScale, this.zoomScale);
 		for (const obj of this.objects) {
 			obj.draw(this.ctx, this.centerObject, 1/this.zoomScale);
@@ -380,6 +382,13 @@ export class Universe {
 	}
 
 	update(dt) {
+		if (this.centerObject && this.centerObject.state !== OBJECT_STATE.ACTIVE) {
+			const maxMassObj = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
+			this.centerObject = maxMassObj;
+			
+			this.ControlPanel.updateCenterOptions();
+		}
+
 		dt *= YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
 
 		if( this.objects.length == 1 ) {
@@ -399,6 +408,5 @@ export class Universe {
 		this.updateZoomScale();
 		this.removeFarObjects();
 		this.removeFinished();
-		this.transformRelativeToCenterObject();
 	}
 }

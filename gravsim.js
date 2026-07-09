@@ -8,33 +8,6 @@ window.onload = function() {
 	}
 
 	function resizeCanvas() {
-		if (window.universe && window.universe.objects.length > 0)
-		{
-			const prevWidth = window.universe.canvas.width;
-			const prevHeight = window.universe.canvas.height;
-
-			const newWidth = window.innerWidth;
-			const newHeight = window.innerHeight;
-
-			const dx = (newWidth - prevWidth) / 2;
-			const dy = (newHeight - prevHeight) / 2;
-
-			window.universe.CalcWorkerManager.postMessage({ cmd: 'pause', value: true });
-			window.universe.ignoreUpdatesUntil = Date.now() + 100;
-
-			for (const obj of window.universe.objects) {
-				obj.shiftPosition(dx, dy);
-			}
-
-			window.universe.CalcWorkerManager.postMessage({
-				cmd: 'shiftPosition',
-				dx: window.universe.pix2m(dx),
-				dy: window.universe.pix2m(dy)
-			});
-			
-			window.universe.CalcWorkerManager.postMessage({ cmd: 'pause', value: false });
-		}
-
 		canvas.width = window.innerWidth;
 		canvas.height = window.innerHeight;
 	}
