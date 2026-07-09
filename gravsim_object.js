@@ -219,6 +219,5 @@ export class GravSimObject {
 			const b = num & 255;
 			return `rgba(${r},${g},${b},${alpha})`;
 		}
-		ctx.stroke();
 	}
 }
