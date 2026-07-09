@@ -321,23 +321,6 @@ export class Universe {
 		});
 	}
 
-	transformRelativeToCenterObject() {
-		if (!this.centerObject) return;
-
-		for (const obj of this.objects) {
-			obj.transformRelativeCordinate(this.centerObject);
-			this.updateObject(obj);
-		}
-
-		this.centerObject.resetGravity();
-		this.centerObject.setPosition(
-			this.canvas.width / 2,
-			this.canvas.height / 2
-		);
-		this.centerObject.setVelocity(0, 0);
-		this.updateObject(this.centerObject);
-	}
-
 	removeFinished() {
 		this.objects = this.objects.filter(obj => !obj.finished());
 	}
