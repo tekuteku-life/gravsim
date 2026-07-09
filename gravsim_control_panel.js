@@ -81,6 +81,14 @@ export class ControlPanel {
 		document.getElementById('put-mercury-btn').addEventListener('click', function(e) {
 			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Mercury");
 		}.bind(this));
+		document.getElementById('put-moon-btn').addEventListener('click', function(e) {
+			try {
+				this.universe.ObjectPlacer.placeAtOrbitAroundHost("Earth", "Moon");
+			} catch (err) {
+				this.universe.ObjectPlacer.placeAtOrbitAroundSun("Earth");
+				this.universe.ObjectPlacer.placeAtOrbitAroundHost("Earth", "Moon");
+			}
+		}.bind(this));
 
 		this.centerSelect = document.getElementById('center-select');
 		if (this.centerSelect) {
