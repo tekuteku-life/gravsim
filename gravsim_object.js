@@ -1,7 +1,10 @@
 
 // gravsim_object.js
 
-import { HISTORY_LENGTH, OBJECT_STATE } from './gravsim_const.js';
+import {
+	DISTANCE_SCALE, TARGET_TRAIL_LENGTH_AU, HISTORY_LENGTH,
+	OBJECT_STATE
+} from './gravsim_const.js';
 
 /*******************************************************************
  * GravSimObject class that represents a celestial object in the universe.
@@ -167,9 +170,29 @@ export class GravSimObject {
 			ctx.fill();
 		}
 
+		const targetLength = TARGET_TRAIL_LENGTH_AU * DISTANCE_SCALE;
+		let drawTrailCount = this.history.length;
+
+		if (this.history.length >= 2) {
+			const lastIdx = this.history.length - 1;
+			const dx = this.history[lastIdx].x - this.history[lastIdx - 1].x;
+			const dy = this.history[lastIdx].y - this.history[lastIdx - 1].y;
+			
+			const distPerFrame = Math.sqrt(dx * dx + dy * dy);
+
+			if (distPerFrame > 0.0001) { 
+				drawTrailCount = Math.floor(targetLength / distPerFrame);
+			}
+		}
+
+		drawTrailCount = Math.min(Math.max(drawTrailCount, 2), this.history.length);
+
+		let trailStaIdx = this.history.length - drawTrailCount;
+		if (trailStaIdx < 0) trailStaIdx = 0;
+
 		// Draw history with fading color and thinning line
-		for (let i = 1; i < this.history.length; i++) {
-			const t = i / this.history.length; // 0 (oldest) to 1 (newest)
+		for (let i = trailStaIdx + 1; i < this.history.length; i++) {
+			const t = (i - trailStaIdx) / drawTrailCount; // 0 (oldest) to 1 (newest)
 			const alpha = t * 0.4 + 0.2; // fade in (0.2~1.0)
 			const width = this.size * (0.2 + 0.8 * t) *scale; // thin to thick
 

@@ -14,6 +14,7 @@ export const THROW_SCALE = 4e16;
 
 export const REMOVE_DISTANCE_AU = 50;
 
+export const TARGET_TRAIL_LENGTH_AU = 3;			// Trail length (AU)
 export const HISTORY_LENGTH = 512;					// History length
 export const DISTANCE_SCALE = 180;					// AU/px
 
