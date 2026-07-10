@@ -12,7 +12,7 @@ export const C = 2.99792458e8;						// speed of light (m/s)
 export const TIME_SCALE = 1e3;
 export const THROW_SCALE = 4e16;
 
-export const REMOVE_DISTANCE_AU = 50;
+export const REMOVE_DISTANCE_AU = 80;
 
 export const TARGET_TRAIL_LENGTH_AU = 3;			// Trail length (AU)
 export const HISTORY_LENGTH = 512;					// History length
