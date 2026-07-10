@@ -142,20 +142,6 @@ export class GravSimObject {
 		}
 	}
 
-	transformRelativeCordinate(basis) {
-		if( this.state != OBJECT_STATE.ACTIVE || basis.state != OBJECT_STATE.ACTIVE ) {
-			return;
-		}
-
-		this.x += basis.vx;
-		this.y += basis.vy;
-
-		for (let i = 0; i < this.history.length; i++) {
-			this.history[i].x += basis.vx;
-			this.history[i].y += basis.vy;
-		}
-	}
-
 	draw(ctx, basis, scale) {
 		if (!basis) { return; }
 
