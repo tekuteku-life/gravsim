@@ -166,6 +166,8 @@ export class GravSimObject {
 	}
 
 	draw(ctx, basis, scale) {
+		if (!basis) { return; }
+
 		ctx.fillStyle = this.color;
 
 		if( this.state === OBJECT_STATE.ACTIVE) {
@@ -173,6 +175,9 @@ export class GravSimObject {
 			ctx.arc(this.getRelativeX(basis), this.getRelativeY(basis), this.size *scale, 0, Math.PI * 2);
 			ctx.fill();
 		}
+
+		// Skip drawing center object trail
+		if (this.id === basis.id) { return; }
 
 		const targetLength = TARGET_TRAIL_LENGTH_AU * DISTANCE_SCALE;
 		let drawTrailCount = this.history.length;
