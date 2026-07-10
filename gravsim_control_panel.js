@@ -99,7 +99,6 @@ export class ControlPanel {
 				const targetObj = this.universe.objects.find(obj => obj.id === targetId);
 				if (targetObj) {
 					this.universe.centerObject = targetObj;
-					targetObj.clearHistory();
 				}
 			});
 

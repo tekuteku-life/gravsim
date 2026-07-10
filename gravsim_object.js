@@ -52,10 +52,6 @@ export class GravSimObject {
 			return;
 		}
 
-		if( this.isCenterObject() ) {
-			return;
-		}
-
 		if (this.history.length >= HISTORY_LENGTH) {
 			this.history.shift();
 		}
@@ -64,10 +60,6 @@ export class GravSimObject {
 
 	updateHistory() {
 		if (this.state === OBJECT_STATE.ACTIVE) {
-			return;
-		}
-
-		if( this.isCenterObject() ) {
 			return;
 		}
 
@@ -90,10 +82,6 @@ export class GravSimObject {
 	}
 
 	setCollided() {
-		if( this.isCenterObject() ) {
-			return;
-		}
-
 		this.state = OBJECT_STATE.REMOVED;
 	}
 
@@ -138,14 +126,26 @@ export class GravSimObject {
 
 	getRelativeHistryX(i, basis) {
 		if( basis ) {
-			return this.history[i].x - basis.x;
+			const basisIdx = basis.history.length - (this.history.length - i);
+			if (basisIdx >= 0 && basisIdx < basis.history.length) {
+				return this.history[i].x - basis.history[basisIdx].x;
+			}
+			else {
+				return this.history[i].x - basis.x;
+			}
 		} else {
 			return this.history[i].x;
 		}
 	}
 	getRelativeHistryY(i, basis) {
 		if( basis ) {
-			return this.history[i].y - basis.y;
+			const basisIdx = basis.history.length - (this.history.length - i);
+			if (basisIdx >= 0 && basisIdx < basis.history.length) {
+				return this.history[i].y - basis.history[basisIdx].y;
+			}
+			else {
+				return this.history[i].y - basis.y;
+			}
 		} else {
 			return this.history[i].y;
 		}
