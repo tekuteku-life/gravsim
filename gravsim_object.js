@@ -124,7 +124,7 @@ export class GravSimObject {
 		}
 	}
 
-	getRelativeHistryX(i, basis) {
+	getRelativeHistoryX(i, basis) {
 		if( basis ) {
 			const basisIdx = basis.history.length - (this.history.length - i);
 			if (basisIdx >= 0 && basisIdx < basis.history.length) {
@@ -137,7 +137,7 @@ export class GravSimObject {
 			return this.history[i].x;
 		}
 	}
-	getRelativeHistryY(i, basis) {
+	getRelativeHistoryY(i, basis) {
 		if( basis ) {
 			const basisIdx = basis.history.length - (this.history.length - i);
 			if (basisIdx >= 0 && basisIdx < basis.history.length) {
@@ -203,8 +203,8 @@ export class GravSimObject {
 			ctx.strokeStyle = hexToRgba(this.color, alpha);
 			ctx.lineWidth = width;
 			ctx.beginPath();
-			ctx.moveTo(this.getRelativeHistryX(i - 1, basis), this.getRelativeHistryY(i - 1, basis));
-			ctx.lineTo(this.getRelativeHistryX(i, basis), this.getRelativeHistryY(i, basis));
+			ctx.moveTo(this.getRelativeHistoryX(i - 1, basis), this.getRelativeHistoryY(i - 1, basis));
+			ctx.lineTo(this.getRelativeHistoryX(i, basis), this.getRelativeHistoryY(i, basis));
 			ctx.stroke();
 		}
 		ctx.lineWidth = 1;

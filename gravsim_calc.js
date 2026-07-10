@@ -92,7 +92,7 @@ class GravSimCalc {
 		this.lastTime = Date.now();
 		this.objects = [];
 		this.timeScale = 1;
-		this.isPause = false;
+		this.isPaused = false;
 
 		self.onmessage = this.onmessage.bind(this);
 
@@ -145,7 +145,7 @@ class GravSimCalc {
 				});
 				break;
 			case 'pause':
-				this.isPause = data.value;
+				this.isPaused = data.value;
 				if (!this.isPaused) {
 					this.lastTime = Date.now();
 				}
