@@ -239,8 +239,8 @@ class GravSimCalc {
 		this.lastTime = now;
 
 		// split step
-		let SUB_STEPS = Math.ceil(200 * this.timeScale);
-		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, 240));
+		let SUB_STEPS = Math.ceil(600 * this.timeScale);
+		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, 480));
 		const dt = totalDt / SUB_STEPS;
 
 		for (let i = 0; i < SUB_STEPS; i++) {
