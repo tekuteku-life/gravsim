@@ -138,12 +138,6 @@ class GravSimCalc {
 					console.error('Invalid time scale:', data.timeScale);
 				}
 				break;
-			case 'shiftPosition':
-				this.objects.forEach(obj => {
-					obj.x += data.dx;
-					obj.y += data.dy;
-				});
-				break;
 			case 'pause':
 				this.isPaused = data.value;
 				if (!this.isPaused) {
