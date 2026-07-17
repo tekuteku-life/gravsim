@@ -123,26 +123,38 @@ export class ControlPanel {
 	}
 
 	setZoomScaleByStep(step) {
-		let val = this.getZoomScale();
-		const max = this.zoomScaleInput.max;
-		const min = this.zoomScaleInput.min;
-		val += step;
-		if( val > max ) { val = max *1.0; }
-		else if( val < min ) { val = min *1.0; }
-		this.zoomScaleInput.value = val.toFixed(2);
-		this.updateZoomScaleIndicator(val);
+		let currentExp = parseFloat(this.zoomScaleInput.value);
+		const max = parseFloat(this.zoomScaleInput.max);
+		const min = parseFloat(this.zoomScaleInput.min);
+		
+		currentExp += step;
+		if (currentExp > max) { currentExp = max; }
+		else if (currentExp < min) { currentExp = min; }
+
+		this.zoomScaleInput.value = currentExp.toFixed(2);
+		
+		const realZoom = Math.pow(10, currentExp);
+		this.updateZoomScaleIndicator(realZoom);
 		this.universe.updateZoomScale();
 	}
 
 	updateTimeScaleIndicator(val) {
 		if (this.timeScaleIndicator) {
-			this.timeScaleIndicator.textContent = parseFloat(val).toFixed(2);
+			if (val < 0.01) {
+				this.timeScaleIndicator.textContent = val.toExponential(2);
+			} else {
+				this.timeScaleIndicator.textContent = val.toFixed(3);
+			}
 		}
 	}
 
 	updateZoomScaleIndicator(val) {
 		if (this.zoomScaleIndicator) {
-			this.zoomScaleIndicator.textContent = parseFloat(val).toFixed(2);
+			if (val < 0.1 || val > 1000) {
+				this.zoomScaleIndicator.textContent = val.toExponential(2);
+			} else {
+				this.zoomScaleIndicator.textContent = val.toFixed(2);
+			}
 		}
 	}
 
@@ -167,14 +179,16 @@ export class ControlPanel {
 
 	getTimeScale() {
 		if (this.timeScaleInput) {
-			return parseFloat(this.timeScaleInput.value);
+			const exp = parseFloat(this.timeScaleInput.value);
+			return Math.pow(10, exp);
 		}
 		return 0.1; // Default time scale
 	}
 
 	getZoomScale() {
 		if (this.zoomScaleInput) {
-			return parseFloat(this.zoomScaleInput.value);
+			const exp = parseFloat(this.zoomScaleInput.value);
+			return Math.pow(10, exp);
 		}
 		return 1; // Default zoom scale
 	}
