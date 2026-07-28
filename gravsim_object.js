@@ -145,17 +145,60 @@ export class GravSimObject {
 	draw(ctx, basis, scale) {
 		if (!basis) { return; }
 
-		ctx.fillStyle = this.color;
+		// Draw main body and effects
+		if (this.state === OBJECT_STATE.ACTIVE) {
+			const relX = this.getRelativeX(basis);
+			const relY = this.getRelativeY(basis);
+			
+			this._drawBody(ctx, relX, relY, scale);
 
-		if( this.state === OBJECT_STATE.ACTIVE) {
-			ctx.beginPath();
-			ctx.arc(this.getRelativeX(basis), this.getRelativeY(basis), this.size *scale, 0, Math.PI * 2);
-			ctx.fill();
+			if (this.isEscaping) {
+				this._drawSparkle(ctx, relX, relY, scale);
+			}
 		}
 
-		// Skip drawing center object trail
-		if (this.id === basis.id) { return; }
+		// Draw trail (Skip for center object)
+		if (this.id !== basis.id) {
+			this._drawTrail(ctx, basis, scale);
+		}
+	}
 
+	_drawBody(ctx, x, y, scale) {
+		ctx.fillStyle = this.color;
+		ctx.beginPath();
+		ctx.arc(x, y, this.size * scale, 0, Math.PI * 2);
+		ctx.fill();
+	}
+
+	_drawSparkle(ctx, x, y, scale) {
+		const now = Date.now();
+		const blink = Math.abs(Math.sin(now / 80 + this.id)); 
+		
+		ctx.save();
+		ctx.translate(x, y);
+		ctx.rotate(now / 500); 
+		
+		ctx.globalAlpha = blink;
+		ctx.fillStyle = "#FFFFFF"; 
+		
+		const starSize = this.size * scale * 3.0; 
+		const innerSize = this.size * scale * 0.4; 
+		
+		ctx.beginPath();
+		ctx.moveTo(0, -starSize);
+		ctx.lineTo(innerSize, -innerSize);
+		ctx.lineTo(starSize, 0);
+		ctx.lineTo(innerSize, innerSize);
+		ctx.lineTo(0, starSize);
+		ctx.lineTo(-innerSize, innerSize);
+		ctx.lineTo(-starSize, 0);
+		ctx.lineTo(-innerSize, -innerSize);
+		ctx.fill();
+		
+		ctx.restore();
+	}
+
+	_drawTrail(ctx, basis, scale) {
 		const targetLength = TARGET_TRAIL_LENGTH_AU * DISTANCE_SCALE;
 		let drawTrailCount = this.history.length;
 
@@ -180,9 +223,9 @@ export class GravSimObject {
 		for (let i = trailStaIdx + 1; i < this.history.length; i++) {
 			const t = (i - trailStaIdx) / drawTrailCount; // 0 (oldest) to 1 (newest)
 			const alpha = t * 0.4 + 0.2; // fade in (0.2~1.0)
-			const width = this.size * (0.2 + 0.8 * t) *scale; // thin to thick
+			const width = this.size * (0.2 + 0.8 * t) * scale; // thin to thick
 
-			ctx.strokeStyle = hexToRgba(this.color, alpha);
+			ctx.strokeStyle = this._hexToRgba(this.color, alpha);
 			ctx.lineWidth = width;
 			ctx.beginPath();
 			ctx.moveTo(this.getRelativeHistoryX(i - 1, basis), this.getRelativeHistoryY(i - 1, basis));
@@ -190,16 +233,16 @@ export class GravSimObject {
 			ctx.stroke();
 		}
 		ctx.lineWidth = 1;
+	}
 
-		// Helper: convert hex color to rgba
-		function hexToRgba(hex, alpha) {
-			let c = hex.replace('#', '');
-			if (c.length === 3) c = c.split('').map(x => x + x).join('');
-			const num = parseInt(c, 16);
-			const r = (num >> 16) & 255;
-			const g = (num >> 8) & 255;
-			const b = num & 255;
-			return `rgba(${r},${g},${b},${alpha})`;
-		}
+	// convert hex color to rgba
+	_hexToRgba(hex, alpha) {
+		let c = hex.replace('#', '');
+		if (c.length === 3) c = c.split('').map(x => x + x).join('');
+		const num = parseInt(c, 16);
+		const r = (num >> 16) & 255;
+		const g = (num >> 8) & 255;
+		const b = num & 255;
+		return `rgba(${r},${g},${b},${alpha})`;
 	}
 }

@@ -312,33 +312,42 @@ class ObjectManager {
 	}
 
 	cleanupObjects() {
-		this._removeFarObjects();
+		this._checkEscapeAndRemove();
 		this.objects = this.objects.filter(obj => !obj.finished());
 	}
 
-	_removeFarObjects() {
-		if (!this.centerObject) return;
+	_checkEscapeAndRemove() {
+		if (!this.centerObject) { return; }
 
 		for (const obj of this.objects) {
-			if (obj.id === this.centerObject.id || obj.state !== OBJECT_STATE.ACTIVE) continue;
+			if (obj.id === this.centerObject.id || obj.state !== OBJECT_STATE.ACTIVE) {
+				obj.isEscaping = false;
+				continue;
+			}
 
 			const dx = obj.x - this.centerObject.x;
 			const dy = obj.y - this.centerObject.y;
 			const distPx = Math.sqrt(dx * dx + dy * dy);
-			
-			if (this.renderer.pix2au(distPx) > REMOVE_DISTANCE_AU) {
-				const r = this.renderer.pix2m(distPx);
-				const dvx = this.renderer.pix2m(obj.vx - this.centerObject.vx);
-				const dvy = this.renderer.pix2m(obj.vy - this.centerObject.vy);
-				const v2 = dvx * dvx + dvy * dvy;
 
-				const totalMass = (this.centerObject.mass + obj.mass) * 1e3;
-				const escapeV2 = (2 * G * totalMass) / r;
+			const r = this.renderer.pix2m(distPx);
+			if (r === 0) { continue; }
 
-				if (v2 >= escapeV2) {
-					this.removeObject(obj);
-					console.debug(`${obj.name} (id:${obj.id}) got out from heliosphere`);
-				}
+			const dvx = this.renderer.pix2m(obj.vx - this.centerObject.vx);
+			const dvy = this.renderer.pix2m(obj.vy - this.centerObject.vy);
+
+			// Relative velocity squared
+			const v2 = dvx * dvx + dvy * dvy;
+
+			const totalMass = (this.centerObject.mass + obj.mass) * 1e3;
+			const escapeV2 = (2 * G * totalMass) / r; // Escape velocity squared (v_e^2 = 2GM / r)
+
+			// Check if the object is escaping the center object's gravity
+			obj.isEscaping = (v2 >= escapeV2);
+
+			// Remove the object if it is escaping and far enough
+			if (obj.isEscaping && this.renderer.pix2au(distPx) > REMOVE_DISTANCE_AU) {
+				this.removeObject(obj);
+				console.debug(`${obj.name} (id:${obj.id}) got out from heliosphere`);
 			}
 		}
 	}
