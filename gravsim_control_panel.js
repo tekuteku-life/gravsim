@@ -31,6 +31,8 @@ export class ControlPanel {
 
 		// Map for dynamic button bindings
 		this.deployButtons = {
+			'put-neptune-btn': 'Neptune',
+			'put-uranus-btn': 'Uranus',
 			'put-saturn-btn': 'Saturn',
 			'put-jupiter-btn': 'Jupiter',
 			'put-mars-btn': 'Mars',

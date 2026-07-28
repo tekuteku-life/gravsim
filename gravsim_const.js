@@ -26,84 +26,114 @@ export const OBJECT_STATE = {
 };
 
 // Object parameter
+// mass: [ton]
+// radius: [m]
+// A: semi-major axis
+// E: orbital eccentricity
+// PERIHELION_DEG: Longitude of Perihelion degree
 export const DEFAULT_OBJECT_PARAMS = {
 	"BlackHole": {
 		"NAME" : "BlackHole",
-		"MASS" : 1.9891e30 *10 / 1e3,	// ton (10 sun)
+		"MASS" : 1.9891e30 *20 / 1e3, // 20 times of the sun
 		"COLOR" : "#333333",
-		"RADIUS": 3e4,					// meters
+		"RADIUS": 3e4,
 	},
 	"Sun": {
 		"NAME" : "Sun",
-		"MASS" : 1.9891e30 / 1e3,		// ton
+		"MASS" : 1.9891e30 / 1e3,
 		"COLOR": "#FF4500",
-		"RADIUS": 6.96340e8,			// meters
-	},
-	"Saturn": {
-		"NAME" : "Saturn",
-		"MASS" : 5.6834e26 / 1e3,		// ton
-		"COLOR": "#FFD700",
-		"RADIUS": 5.8232e7,				// meters
-		"VELOCITY": 9.69 *1e3,			// m/s
-		"ORBIT_RADIUS": 9.58,			// AU
-	},
-	"Jupiter": {
-		"NAME" : "Jupiter",
-		"MASS" : 1.898e27 / 1e3,		// ton
-		"COLOR": "#FF8C00",
-		"RADIUS": 6.9911e7,				// meters
-		"VELOCITY": 13.07 *1e3,			// m/s
-		"ORBIT_RADIUS": 5.2,			// AU
-	},
-	"Mars": {
-		"NAME" : "Mars",
-		"MASS" : 6.4171e23 / 1e3,		// ton
-		"COLOR": "#FF6347",
-		"RADIUS": 3.3895e6,				// meters
-		"VELOCITY": 24.077 *1e3,		// m/s
-		"ORBIT_RADIUS": 1.524,			// AU
-	},
-	"Earth": {
-		"NAME" : "Earth",
-		"MASS" : 5.972e24 / 1e3,		// ton
-		"COLOR": "#1E90FF",
-		"RADIUS": 6.378e6,				// meters
-		"VELOCITY": 29.78 *1e3,			// m/s
-		"ORBIT_RADIUS": 1,				// AU
-	},
-	"Venus": {
-		"NAME" : "Venus",
-		"MASS" : 4.867e24 / 1e3,		// ton
-		"COLOR": "#FFD700",
-		"RADIUS": 6.0518e6,				// meters
-		"VELOCITY": 35.02 *1e3,			// m/s
-		"ORBIT_RADIUS": 0.723,			// AU
+		"RADIUS": 6.96340e8,
 	},
 	"Mercury": {
 		"NAME" : "Mercury",
-		"MASS" : 3.3011e23 / 1e3,		// ton
+		"MASS" : 3.3011e23 / 1e3,
 		"COLOR": "#B8860B",
-		"RADIUS": 2.4397e6,				// meters
-		"VELOCITY": 47.36 *1e3,			// m/s
-		"ORBIT_RADIUS": 0.387,			// AU
+		"RADIUS": 2.4397e6,
+		"A": 0.387,
+		"E": 0.2056,
+		"PERIHELION_DEG": 77.46,
+	},
+	"Venus": {
+		"NAME" : "Venus",
+		"MASS" : 4.867e24 / 1e3,
+		"COLOR": "#FFD700",
+		"RADIUS": 6.0518e6,
+		"A": 0.723,
+		"E": 0.0067,
+		"PERIHELION_DEG": 131.53,
+	},
+	"Earth": {
+		"NAME" : "Earth",
+		"MASS" : 5.972e24 / 1e3,
+		"COLOR": "#1E90FF",
+		"RADIUS": 6.378e6,
+		"A": 1.000,
+		"E": 0.0167,
+		"PERIHELION_DEG": 102.95,
+	},
+	"Mars": {
+		"NAME" : "Mars",
+		"MASS" : 6.4171e23 / 1e3,
+		"COLOR": "#FF6347",
+		"RADIUS": 3.3895e6,
+		"A": 1.524,
+		"E": 0.0934,
+		"PERIHELION_DEG": 336.04,
+	},
+	"Jupiter": {
+		"NAME" : "Jupiter",
+		"MASS" : 1.898e27 / 1e3,
+		"COLOR": "#FF8C00",
+		"RADIUS": 6.9911e7,
+		"A": 5.204,
+		"E": 0.0489,
+		"PERIHELION_DEG": 14.75,
+	},
+	"Saturn": {
+		"NAME" : "Saturn",
+		"MASS" : 5.6834e26 / 1e3,
+		"COLOR": "#FFD700",
+		"RADIUS": 5.8232e7,
+		"A": 9.582,
+		"E": 0.0565,
+		"PERIHELION_DEG": 92.43,
+	},
+	"Uranus": {
+		"NAME" : "Uranus",
+		"MASS" : 8.6810e25 / 1e3,
+		"COLOR": "#AFEEEE",
+		"RADIUS": 2.5362e7,
+		"A": 19.191,
+		"E": 0.0457,
+		"PERIHELION_DEG": 170.96,
+	},
+	"Neptune": {
+		"NAME" : "Neptune",
+		"MASS" : 1.02413e26 / 1e3,
+		"COLOR": "#4169E1",
+		"RADIUS": 2.4622e7,
+		"A": 30.070,
+		"E": 0.0113,
+		"PERIHELION_DEG": 44.97,
 	},
 	"Moon": {
 		"NAME" : "Moon",
-		"MASS" : 7.34767309e22 / 1e3,	// ton
+		"MASS" : 7.34767309e22 / 1e3,
 		"COLOR": "#C0C0C0",
-		"RADIUS": 1.7374e6,				// meters
-		"VELOCITY": 1.022 *1e3,			// m/s
-		"ORBIT_RADIUS": 0.00257,		// AU
+		"RADIUS": 1.7374e6,
+		"A": 0.00257,
+		"E": 0.0549,
+		"PERIHELION_DEG": 0,
 	},
 	"Asteroid": {
 		"NAME" : "Asteroid",
-		"MASS" : 1e10 / 1e3, // ton
+		"MASS" : 1e10 / 1e3,
 		"COLOR": "#808080",
 		"RADIUS": 90,
 	},
 	"Rocket": {
 		"NAME" : "Rocket",
-		"MASS" : 5.75e4 / 1e3, // ton
+		"MASS" : 5.75e4 / 1e3,
 		"COLOR": "#32CD32",
 		"RADIUS": 63,
 	},

@@ -49,12 +49,37 @@ class ObjectPlacer {
 		return obj;
 	}
 
-	placeAtOrbit(objName, orbitCenterX, orbitCenterY, hostVx = 0, hostVy = 0) {
+	placeAtOrbit(objName, hostObj) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
-		const x = orbitCenterX;
-		const y = orbitCenterY - this.universe.au2pix(param.ORBIT_RADIUS || 0);
-		const vx = this.universe.m2pix(param.VELOCITY || 0) + hostVx;
-		const vy = hostVy;
+		
+		// Get A/E (circular orbit by default)
+		const a_au = param.A || 1;
+		const e = param.E || 0;
+		const a_m = AU2M(a_au);
+		const r_p_m = a_m * (1 - e); // perihelion distance (m)
+		
+		// Calculate velocity at perihelion by using Vis-viva equation
+		const totalMassKg = (hostObj.mass + param.MASS) * 1e3;
+		const v_p_m = Math.sqrt(G * totalMassKg * (2 / r_p_m - 1 / a_m));
+
+		const perihelionDeg = param.PERIHELION_DEG || 0;
+		const theta = perihelionDeg * (Math.PI / 180);
+		
+		const r_p_px = this.universe.m2pix(r_p_m);
+		const relX = r_p_px * Math.cos(theta);
+		const relY = r_p_px * Math.sin(theta);
+		
+		// Calculate velocity vector
+		// (At perihelion, the velocity vector is perpendicular to the radius vector)
+		const v_p_px = this.universe.m2pix(v_p_m);
+		const relVx = -v_p_px * Math.sin(theta);
+		const relVy = v_p_px * Math.cos(theta);
+
+		const x = hostObj.x + relX;
+		const y = hostObj.y + relY;
+		const vx = hostObj.vx + relVx;
+		const vy = hostObj.vy + relVy;
+
 		return this.placeObject(objName, x, y, vx, vy);
 	}
 
@@ -63,7 +88,7 @@ class ObjectPlacer {
 		if (!hostObj) {
 			throw new Error(hostName + " object not found in the universe.");
 		}
-		return this.placeAtOrbit(objName, hostObj.x, hostObj.y, hostObj.vx, hostObj.vy);
+		return this.placeAtOrbit(objName, hostObj);
 	}
 
 	placeAtOrbitAroundSun(objName) {
@@ -71,7 +96,7 @@ class ObjectPlacer {
 		if (!sunObj) {
 			throw new Error("Sun object not found in the universe.");
 		}
-		return this.placeAtOrbit(objName, sunObj.x, sunObj.y, sunObj.vx, sunObj.vy);
+		return this.placeAtOrbit(objName, sunObj);
 	}
 	
 	getLaunchPosition(e) {
