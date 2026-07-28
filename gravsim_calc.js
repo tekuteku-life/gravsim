@@ -7,6 +7,9 @@ import {
 
 const CALC_INTERVAL = 60;
 
+/*******************************************************************
+ * Entity Class
+*******************************************************************/
 class GravSimCalcObject {
 	constructor(id, x, y, vx, vy, ax, ay, mass, radius) {
 		this.id = id;
@@ -18,25 +21,14 @@ class GravSimCalcObject {
 		this.ay = ay;
 		this.mass = mass;
 		this.radius = radius;
+		this.collided = false;
 	}
 	
-	getXt(dt) {
-		return this.x + this.vx*dt + 1/2*this.ax*dt*dt;
-	}
-	getYt(dt) {
-		return this.y + this.vy*dt + 1/2*this.ay*dt*dt;
-	}
-
-	getVXt(dt) {
-		return this.vx + this.ax*dt;
-	}
-	getVYt(dt) {
-		return this.vy + this.ay*dt;
-	}
-
-	getV() {
-		return Math.sqrt(this.vx*this.vx + this.vy*this.vy);
-	}
+	getXt(dt) { return this.x + this.vx * dt + 1/2 * this.ax * dt * dt; }
+	getYt(dt) { return this.y + this.vy * dt + 1/2 * this.ay * dt * dt; }
+	getVXt(dt) { return this.vx + this.ax * dt; }
+	getVYt(dt) { return this.vy + this.ay * dt; }
+	getV() { return Math.sqrt(this.vx * this.vx + this.vy * this.vy); }
 	
 	applyGravity(other) {
 		const dx = other.x - this.x;
@@ -44,11 +36,9 @@ class GravSimCalcObject {
 		const radiusSum = this.radius + other.radius;
 		const distSq = Math.max(dx * dx + dy * dy, radiusSum * radiusSum);
 		const dist = Math.sqrt(distSq);
-		const mass1 = this.mass;
-		const mass2 = other.mass;
 
-		const force = (G * mass1 * mass2) / distSq;
-		const accel = force / mass1;
+		const force = (G * this.mass * other.mass) / distSq;
+		const accel = force / this.mass;
 
 		this.ax += accel * dx / dist;
 		this.ay += accel * dy / dist;
@@ -60,23 +50,21 @@ class GravSimCalcObject {
 		const distSq = dx * dx + dy * dy;
 		const radiusSum = this.radius + other.radius;
 
-		if( distSq < radiusSum * radiusSum ) {
-			return true;
-		}
+		if (distSq < radiusSum * radiusSum) { return true; }
 
 		const max_v1 = Math.max(Math.abs(this.getVXt(dt)), Math.abs(this.getVYt(dt)));
 		const max_v2 = Math.max(Math.abs(other.getVXt(dt)), Math.abs(other.getVYt(dt)));
-		const expandRadiusSum = radiusSum + (max_v1 + max_v2)*dt;
+		const expandRadiusSum = radiusSum + (max_v1 + max_v2) * dt;
 		
-		if( distSq < expandRadiusSum * expandRadiusSum ) {
+		if (distSq < expandRadiusSum * expandRadiusSum) {
 			const EXPAND_DIV_NUM = 20;
 			for( let i = 1; i < EXPAND_DIV_NUM; i++ ) {
-				const dts = dt/EXPAND_DIV_NUM*i;
+				const dts = dt / EXPAND_DIV_NUM * i;
 				const dxs = other.getXt(dts) - this.getXt(dts);
 				const dys = other.getYt(dts) - this.getYt(dts);
 				const distSqs = dxs * dxs + dys * dys;
 				
-				if( distSqs < radiusSum * radiusSum ) {
+				if (distSqs < radiusSum * radiusSum) {
 					return true;
 				}
 			}
@@ -86,142 +74,138 @@ class GravSimCalcObject {
 	}
 }
 
-
-class GravSimCalc {
+/*******************************************************************
+ * Physics Engine Class
+*******************************************************************/
+class PhysicsEngine {
 	constructor() {
-		this.lastTime = Date.now();
 		this.objects = [];
-		this.timeScale = 1;
-		this.isPaused = false;
-
-		self.onmessage = this.onmessage.bind(this);
-
-		setInterval(() => {
-			this.update();
-		}, 1000 / CALC_INTERVAL);
 	}
 
-	onmessage(e) {
-		const data = e.data;
-		switch (data.cmd) {
-			case 'add':
-				const newObj = new GravSimCalcObject(
-					data.id,
-					data.x, data.y,
-					data.vx || 0, data.vy || 0,
-					data.ax || 0, data.ay || 0,
-					data.mass || 1,
-					data.radius || 1,
-				);
-				this.objects.push(newObj);
-				break;
-			case 'remove':
-				this.objects = this.objects.filter(obj => obj.id !== data.id);
-				break;
-			case 'update':
-				const objToUpdate = this.objects.find(obj => obj.id === data.id);
-				if (objToUpdate) {
-					objToUpdate.x = data.x;
-					objToUpdate.y = data.y;
-					objToUpdate.vx = data.vx || 0;
-					objToUpdate.vy = data.vy || 0;
-					objToUpdate.ax = data.ax || 0;
-					objToUpdate.ay = data.ay || 0;
-					objToUpdate.mass = data.mass || objToUpdate.mass; // Update mass if provided
-					objToUpdate.radius = data.radius || objToUpdate.radius;
-				}
-				break;
-			case 'setTimeScale':
-				if (typeof data.timeScale === 'number' && data.timeScale > 0) {
-					this.timeScale = data.timeScale;
-				} else {
-					console.error('Invalid time scale:', data.timeScale);
-				}
-				break;
-			case 'pause':
-				this.isPaused = data.value;
-				if (!this.isPaused) {
-					this.lastTime = Date.now();
-				}
-				break;
-			default:
-				console.error('Unknown command:', data.cmd);
+	addObject(data) {
+		this.objects.push(new GravSimCalcObject(
+			data.id, data.x, data.y,
+			data.vx || 0, data.vy || 0,
+			data.ax || 0, data.ay || 0,
+			data.mass || 1, data.radius || 1
+		));
+	}
+
+	removeObject(id) {
+		this.objects = this.objects.filter(obj => obj.id !== id);
+	}
+
+	updateObject(data) {
+		const obj = this.objects.find(o => o.id === data.id);
+		if (obj) {
+			obj.x = data.x;
+			obj.y = data.y;
+			obj.vx = data.vx || 0;
+			obj.vy = data.vy || 0;
+			obj.ax = data.ax || 0;
+			obj.ay = data.ay || 0;
+			if (data.mass !== undefined) obj.mass = data.mass;
+			if (data.radius !== undefined) obj.radius = data.radius;
 		}
 	}
 
-	convertToMessage() {
-		return this.objects.map(obj => {
-			return {
-				id: obj.id,
-				x: obj.x || 0,
-				y: obj.y || 0,
-				vx: obj.vx || 0,
-				vy: obj.vy || 0,
-				ax: obj.ax || 0,
-				ay: obj.ay || 0,
-				mass: obj.mass || 1,
-				radius: obj.radius || 1,
-				collided: obj.collided || false,
-			};
-		});
+	removeCollided() {
+		this.objects = this.objects.filter(obj => !obj.collided);
 	}
 
-	collisionCheck(dt) {
+	step(dt) {
+		this._checkCollisions(dt);
+		this._moveObjects(dt);
+	}
+
+	_checkCollisions(dt) {
 		for (let i = 0; i < this.objects.length; i++) {
 			const obj = this.objects[i];
-			for (let j = i+1; j < this.objects.length; j++) {
-				const other = this.objects[j];
+			if (obj.collided) continue;
 
-				if (obj.id !== other.id) {
-					if( obj.isColliding(other, dt) ) {
-						if( obj.mass < other.mass ) {
-							obj.collided = true;
-						}
-						else {
-							other.collided = true;
-						}
-					}
+			for (let j = i + 1; j < this.objects.length; j++) {
+				const other = this.objects[j];
+				if (other.collided) continue;
+
+				if (obj.isColliding(other, dt)) {
+					if (obj.mass < other.mass) obj.collided = true;
+					else other.collided = true;
 				}
 			}
 		}
 	}
 
-	updateGravity(obj) {
+	_moveObjects(dt) {
+		for (const obj of this.objects) {
+			if (obj.collided) continue;
+
+			this._updateGravityFor(obj);
+			const half_vx = obj.vx + obj.ax * dt / 2;
+			const half_vy = obj.vy + obj.ay * dt / 2;
+			obj.x += half_vx * dt;
+			obj.y += half_vy * dt;
+
+			this._updateGravityFor(obj);
+			obj.vx = half_vx + obj.ax * dt / 2;
+			obj.vy = half_vy + obj.ay * dt / 2;
+
+			// Limit to C
+			const v = obj.getV();
+			if (v > C) {
+				obj.vx = C * (obj.vx / v);
+				obj.vy = C * (obj.vy / v);
+			}
+		}
+	}
+
+	_updateGravityFor(obj) {
 		obj.ax = 0;
 		obj.ay = 0;
-
-		for (let j = 0; j < this.objects.length; j++) {
-			const other = this.objects[j];
-
-			if (obj.id !== other.id) {
+		for (const other of this.objects) {
+			if (obj.id !== other.id && !other.collided) {
 				obj.applyGravity(other);
 			}
 		}
 	}
+}
 
-	moveObject(dt) {
-		for (let i = 0; i < this.objects.length; i++) {
-			const obj = this.objects[i];
+/*******************************************************************
+ * Simulation Controller
+*******************************************************************/
+class SimulationController {
+	constructor() {
+		this.engine = new PhysicsEngine();
+		this.lastTime = Date.now();
+		this.timeScale = 1;
+		this.isPaused = false;
 
-			if( obj.collided ) continue;
+		self.onmessage = this.handleMessage.bind(this);
 
-			this.updateGravity(obj);
-			const half_vx = obj.vx + obj.ax * dt/2;
-			const half_vy = obj.vy + obj.ay * dt/2;
-			obj.x += half_vx * dt;
-			obj.y += half_vy * dt;
+		setInterval(() => this.update(), 1000 / CALC_INTERVAL);
+	}
 
-			this.updateGravity(obj);
-			obj.vx = half_vx + obj.ax * dt/2;
-			obj.vy = half_vy + obj.ay * dt/2;
-
-			const v = obj.getV();
-			if(v > C) {
-				obj.vx = C *(obj.vx/v);
-				obj.vy = C *(obj.vy/v);
-			}
+	handleMessage(e) {
+		const data = e.data;
+		switch (data.cmd) {
+			case 'add':
+				this.engine.addObject(data);
+				break;
+			case 'remove':
+				this.engine.removeObject(data.id);
+				break;
+			case 'update':
+				this.engine.updateObject(data);
+				break;
+			case 'setTimeScale':
+				if (typeof data.timeScale === 'number' && data.timeScale > 0) {
+					this.timeScale = data.timeScale;
+				}
+				break;
+			case 'pause':
+				this.isPaused = data.value;
+				if (!this.isPaused) this.lastTime = Date.now();
+				break;
 		}
-
 	}
 
 	update() {
@@ -229,27 +213,46 @@ class GravSimCalc {
 
 		const now = Date.now();
 		const elapsed = Math.min(now - this.lastTime, 1e3);
-		const totalDt = elapsed *YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
+
+		// Avoidance of div 0
+		if (elapsed <= 0) { return; }
+
+		const totalDt = elapsed * YEARS_PER_SECOND / TIME_SCALE * this.timeScale;
 		this.lastTime = now;
 
-		// split step
+		// Calculate sub-step
 		let SUB_STEPS = Math.ceil(600 * this.timeScale);
 		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, 480));
 		const dt = totalDt / SUB_STEPS;
 
 		for (let i = 0; i < SUB_STEPS; i++) {
-			this.moveObject(dt);
-			this.collisionCheck(dt);
+			this.engine.step(dt);
 		}
 			
+		// Return result to main thread
 		self.postMessage({
 			cmd: 'update',
 			deltaTime: dt,
-			objects: this.convertToMessage()
+			objects: this.formatForMessage()
 		});
 
-		this.objects = this.objects.filter(obj => !obj.collided);
+		this.engine.removeCollided();
+	}
+
+	formatForMessage() {
+		return this.engine.objects.map(obj => ({
+			id: obj.id,
+			x: obj.x || 0,
+			y: obj.y || 0,
+			vx: obj.vx || 0,
+			vy: obj.vy || 0,
+			ax: obj.ax || 0,
+			ay: obj.ay || 0,
+			mass: obj.mass || 1,
+			radius: obj.radius || 1,
+			collided: obj.collided || false,
+		}));
 	}
 }
 
-const calc = new GravSimCalc();
+const calc = new SimulationController();

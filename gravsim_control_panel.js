@@ -5,111 +5,136 @@ import { DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 
 /*******************************************************************
  * ControlPanel class that manages the simulation control panel UI.
- * 
- * @property {HTMLInputElement} timeScaleInput - The input element for adjusting the simulation time scale.
- * @property {HTMLElement} timeScaleIndicator - The element displaying the current time scale value.
- * @property {HTMLSelectElement} massSelect - The select element for choosing the type of object to place.
-*******************************************************************/
+ *******************************************************************/
 export class ControlPanel {
 	constructor(universe) {
 		this.universe = universe;
-
-		this.timeScaleInput = document.getElementById('time-scale');
-		this.timeScaleIndicator = document.getElementById('time-scale-indicator');
-		this.zoomScaleInput = document.getElementById('zoom-scale');
-		this.zoomScaleIndicator = document.getElementById('zoom-scale-indicator');
-		this.massSelect = document.getElementById('mass-select');
-
-		this.generateMassSelect();
-	
-		this.timeScaleInput.addEventListener('input', function(e) {
-			this.updateTimeScaleIndicator(this.getTimeScale());
-		}.bind(this));
-	
-		this.zoomScaleInput.addEventListener('input', function(e) {
-			this.updateZoomScaleIndicator(this.getZoomScale());
-		}.bind(this));
-
-		this.universe.canvas.addEventListener('wheel', (e) => {
-			e.preventDefault();
-			let step = this.getZoomStep();
-			step = (e.deltaY < 0) ? step : -step;
-			this.setZoomScaleByStep(step);
-		});
-
 		this.lastTouchDist = null;
-		this.universe.canvas.addEventListener('touchmove', (e) => {
-			if (e.touches.length === 2) {
-				e.preventDefault();
-				const dx = e.touches[0].clientX - e.touches[1].clientX;
-				const dy = e.touches[0].clientY - e.touches[1].clientY;
-				const dist = Math.sqrt(dx * dx + dy * dy);
 
-				if (this.lastTouchDist !== null) {
-					const delta = dist - this.lastTouchDist;
-					let step = this.getZoomStep() || 0.1;
-					step = (delta > 0 ? step : -step) * Math.abs(delta) * 0.05;
-					this.setZoomScaleByStep(step);
-				}
-				this.lastTouchDist = dist;
-			}
-		});
-		this.universe.canvas.addEventListener('touchend', (e) => {
-			if (e.touches.length < 2) {
-				this.lastTouchDist = null;
-			}
-		});
-		this.universe.canvas.addEventListener('touchcancel', () => {
-			this.lastTouchDist = null;
-		});
+		this._initElements();
+		this._bindEvents();
 		
-		document.getElementById('put-saturn-btn').addEventListener('click', function(e) {
-			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Saturn");
-		}.bind(this));
-		document.getElementById('put-jupiter-btn').addEventListener('click', function(e) {
-			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Jupiter");
-		}.bind(this));
-		document.getElementById('put-earth-btn').addEventListener('click', function(e) {
-			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Earth");
-		}.bind(this));
-		document.getElementById('put-venus-btn').addEventListener('click', function(e) {
-			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Venus");
-		}.bind(this));
-		document.getElementById('put-mars-btn').addEventListener('click', function(e) {
-			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Mars");
-		}.bind(this));
-		document.getElementById('put-mercury-btn').addEventListener('click', function(e) {
-			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Mercury");
-		}.bind(this));
-		document.getElementById('put-moon-btn').addEventListener('click', function(e) {
-			try {
-				this.universe.ObjectPlacer.placeAtOrbitAroundHost("Earth", "Moon");
-			} catch (err) {
-				this.universe.ObjectPlacer.placeAtOrbitAroundSun("Earth");
-				this.universe.ObjectPlacer.placeAtOrbitAroundHost("Earth", "Moon");
-			}
-		}.bind(this));
+		this.generateMassSelect();
+	}
 
-		this.centerSelect = document.getElementById('center-select');
-		if (this.centerSelect) {
-			this.centerSelect.addEventListener('focus', this.updateCenterOptions.bind(this));
+	// Initialize and cache DOM elements
+	_initElements() {
+		this.ui = {
+			timeScale: document.getElementById('time-scale'),
+			timeIndicator: document.getElementById('time-scale-indicator'),
+			zoomScale: document.getElementById('zoom-scale'),
+			zoomIndicator: document.getElementById('zoom-scale-indicator'),
+			massSelect: document.getElementById('mass-select'),
+			centerSelect: document.getElementById('center-select'),
+			moonBtn: document.getElementById('put-moon-btn')
+		};
 
-			this.centerSelect.addEventListener('change', (e) => {
-				const targetId = parseInt(e.target.value, 10);
-				const targetObj = this.universe.objects.find(obj => obj.id === targetId);
-				if (targetObj) {
-					this.universe.centerObject = targetObj;
-				}
-			});
+		// Map for dynamic button bindings
+		this.deployButtons = {
+			'put-saturn-btn': 'Saturn',
+			'put-jupiter-btn': 'Jupiter',
+			'put-mars-btn': 'Mars',
+			'put-earth-btn': 'Earth',
+			'put-venus-btn': 'Venus',
+			'put-mercury-btn': 'Mercury'
+		};
+	}
 
+	// Bind all event listeners
+	_bindEvents() {
+		// UI Controls
+		if (this.ui.timeScale) {
+			this.ui.timeScale.addEventListener('input', () => this.updateTimeScaleIndicator(this.getTimeScale()));
+		}
+		if (this.ui.zoomScale) {
+			this.ui.zoomScale.addEventListener('input', () => this.updateZoomScaleIndicator(this.getZoomScale()));
+		}
+		if (this.ui.centerSelect) {
+			this.ui.centerSelect.addEventListener('focus', () => this.updateCenterOptions());
+			this.ui.centerSelect.addEventListener('change', (e) => this._onCenterChanged(e));
 			setTimeout(() => this.updateCenterOptions(), 100);
+		}
+
+		// Orbital deploy buttons (Loop instead of repeating code)
+		for (const [btnId, objName] of Object.entries(this.deployButtons)) {
+			const btn = document.getElementById(btnId);
+			if (btn) {
+				btn.addEventListener('click', () => this.universe.ObjectPlacer.placeAtOrbitAroundSun(objName));
+			}
+		}
+		if (this.ui.moonBtn) {
+			this.ui.moonBtn.addEventListener('click', () => this._deployMoon());
+		}
+
+		// Canvas Zoom Events (Wheel & Touch)
+		const canvas = this.universe.canvas;
+		canvas.addEventListener('wheel', (e) => this._handleWheelZoom(e));
+		canvas.addEventListener('touchmove', (e) => this._handleTouchZoom(e));
+		canvas.addEventListener('touchend', (e) => this._resetTouchDist(e));
+		canvas.addEventListener('touchcancel', () => this._resetTouchDist(null));
+	}
+
+
+	// ==========================================
+	// Event Handlers (Private logic)
+	// ==========================================
+
+	_onCenterChanged(e) {
+		const targetId = parseInt(e.target.value, 10);
+		const targetObj = this.universe.objects.find(obj => obj.id === targetId);
+		if (targetObj) {
+			this.universe.centerObject = targetObj;
 		}
 	}
 
+	_deployMoon() {
+		try {
+			this.universe.ObjectPlacer.placeAtOrbitAroundHost("Earth", "Moon");
+		} catch (err) {
+			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Earth");
+			this.universe.ObjectPlacer.placeAtOrbitAroundHost("Earth", "Moon");
+		}
+	}
+
+	_handleWheelZoom(e) {
+		e.preventDefault();
+		let step = this.getZoomStep();
+		step = (e.deltaY < 0) ? step : -step;
+		this.setZoomScaleByStep(step);
+	}
+
+	_handleTouchZoom(e) {
+		if (e.touches.length === 2) {
+			e.preventDefault();
+			const dx = e.touches[0].clientX - e.touches[1].clientX;
+			const dy = e.touches[0].clientY - e.touches[1].clientY;
+			const dist = Math.sqrt(dx * dx + dy * dy);
+
+			if (this.lastTouchDist !== null) {
+				const delta = dist - this.lastTouchDist;
+				let step = this.getZoomStep() || 0.1;
+				step = (delta > 0 ? step : -step) * Math.abs(delta) * 0.05;
+				this.setZoomScaleByStep(step);
+			}
+			this.lastTouchDist = dist;
+		}
+	}
+
+	_resetTouchDist(e) {
+		if (!e || e.touches.length < 2) {
+			this.lastTouchDist = null;
+		}
+	}
+
+
+	// ==========================================
+	// Public UI Update Methods
+	// ==========================================
+
 	updateCenterOptions() {
-		if (!this.centerSelect || !this.universe.centerObject) return;
+		if (!this.ui.centerSelect || !this.universe.centerObject) return;
 		
-		this.centerSelect.innerHTML = '';
+		this.ui.centerSelect.innerHTML = '';
 		for (const obj of this.universe.objects) {
 			const option = document.createElement('option');
 			option.value = obj.id;
@@ -118,20 +143,20 @@ export class ControlPanel {
 			if (obj.id === this.universe.centerObject.id) {
 				option.selected = true;
 			}
-			this.centerSelect.appendChild(option);
+			this.ui.centerSelect.appendChild(option);
 		}
 	}
 
 	setZoomScaleByStep(step) {
-		let currentExp = parseFloat(this.zoomScaleInput.value);
-		const max = parseFloat(this.zoomScaleInput.max);
-		const min = parseFloat(this.zoomScaleInput.min);
+		let currentExp = parseFloat(this.ui.zoomScale.value);
+		const max = parseFloat(this.ui.zoomScale.max);
+		const min = parseFloat(this.ui.zoomScale.min);
 		
 		currentExp += step;
 		if (currentExp > max) { currentExp = max; }
 		else if (currentExp < min) { currentExp = min; }
 
-		this.zoomScaleInput.value = currentExp.toFixed(2);
+		this.ui.zoomScale.value = currentExp.toFixed(2);
 		
 		const realZoom = Math.pow(10, currentExp);
 		this.updateZoomScaleIndicator(realZoom);
@@ -139,37 +164,35 @@ export class ControlPanel {
 	}
 
 	updateTimeScaleIndicator(val) {
-		if (this.timeScaleIndicator) {
+		if (this.ui.timeIndicator) {
 			if (val < 0.01) {
-				this.timeScaleIndicator.textContent = val.toExponential(2);
+				this.ui.timeIndicator.textContent = val.toExponential(2);
 			} else {
-				this.timeScaleIndicator.textContent = val.toFixed(3);
+				this.ui.timeIndicator.textContent = val.toFixed(3);
 			}
 		}
 	}
 
 	updateZoomScaleIndicator(val) {
-		if (this.zoomScaleIndicator) {
+		if (this.ui.zoomIndicator) {
 			if (val < 0.1 || val > 1000) {
-				this.zoomScaleIndicator.textContent = val.toExponential(2);
+				this.ui.zoomIndicator.textContent = val.toExponential(2);
 			} else {
-				this.zoomScaleIndicator.textContent = val.toFixed(2);
+				this.ui.zoomIndicator.textContent = val.toFixed(2);
 			}
 		}
 	}
 
 	generateMassSelect() {
-		if(!this.massSelect) {
-			return;
-		}
+		if(!this.ui.massSelect) { return; }
 
-		this.massSelect.innerHTML = '';
+		this.ui.massSelect.innerHTML = '';
 		for (const key in DEFAULT_OBJECT_PARAMS) {
 			const param = DEFAULT_OBJECT_PARAMS[key];
 			const option = document.createElement('option');
 			option.value = key;
 			option.textContent = `${param.NAME} (mass: ${param.MASS.toExponential(2)} t)`;
-			this.massSelect.appendChild(option);
+			this.ui.massSelect.appendChild(option);
 
 			if (param.NAME === "Rocket") {
 				option.selected = true;
@@ -178,22 +201,22 @@ export class ControlPanel {
 	}
 
 	getTimeScale() {
-		if (this.timeScaleInput) {
-			const exp = parseFloat(this.timeScaleInput.value);
+		if (this.ui.timeScale) {
+			const exp = parseFloat(this.ui.timeScale.value);
 			return Math.pow(10, exp);
 		}
-		return 0.1; // Default time scale
+		return 0.1;
 	}
 
 	getZoomScale() {
-		if (this.zoomScaleInput) {
-			const exp = parseFloat(this.zoomScaleInput.value);
+		if (this.ui.zoomScale) {
+			const exp = parseFloat(this.ui.zoomScale.value);
 			return Math.pow(10, exp);
 		}
-		return 1; // Default zoom scale
+		return 1;
 	}
 
 	getZoomStep() {
-		return parseFloat(this.zoomScaleInput.step) || 0.1;
+		return parseFloat(this.ui.zoomScale.step) || 0.1;
 	}
 }

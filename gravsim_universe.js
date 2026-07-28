@@ -182,167 +182,132 @@ class CalcWorkerManager {
 }
 
 /*******************************************************************
- * Universe class that manages the simulation of celestial objects.
- * @property {HTMLCanvasElement} canvas - The canvas element for rendering.
- * @property {CanvasRenderingContext2D} ctx - The 2D rendering context for the canvas.
- * @property {Array} objects - The array of celestial objects in the universe.
- * @property {InfoPanel} InfoPanel - The information panel for displaying simulation data.
- * @property {ControlPanel} ControlPanel - The control panel for simulation settings.
- * @property {ObjectPlacer} ObjectPlacer - The object placer for adding new objects to the universe.
- * @property {number} timeScale - The scale factor for time progression in the simulation.
+ * Renderer Class
 *******************************************************************/
-export class Universe {
-	constructor(_canvas) {
-		this.canvas = _canvas;
-		this.ctx = _canvas.getContext('2d');
+class Renderer {
+	constructor(canvas) {
+		this.canvas = canvas;
+		this.ctx = canvas.getContext('2d');
+		this.zoomScale = 1;
+	}
+
+	setZoomScale(scale) {
+		this.zoomScale = scale;
+	}
+
+	pix2au(px) { return px / DISTANCE_SCALE; }
+	au2pix(au) { return au * DISTANCE_SCALE; }
+	m2pix(m) { return this.au2pix(M2AU(m)); }
+	pix2m(px) { return AU2M(this.pix2au(px)); }
+
+	draw(objects, centerObject) {
+		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		this.ctx.save();
+		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+		this.ctx.scale(this.zoomScale, this.zoomScale);
+		
+		objects.forEach(obj => obj.draw(this.ctx, centerObject, 1 / this.zoomScale));
+		
+		this.ctx.restore();
+	}
+}
+
+/*******************************************************************
+ * ObjectManager Class
+*******************************************************************/
+class ObjectManager {
+	constructor(renderer, workerManager) {
+		this.renderer = renderer;
+		this.workerManager = workerManager;
 		this.objects = [];
 		this.centerObject = null;
-		this._initInput();
-		this.InfoPanel = new InfoPanel();
-		this.ControlPanel = new ControlPanel(this);
-		this.ObjectPlacer = new ObjectPlacer(this);
-		this.CalcWorkerManager = new CalcWorkerManager();
-		this.timeScale = this.ControlPanel.getTimeScale();
-		this.zoomScale = this.ControlPanel.getZoomScale();
+	}
 
-		this.reset();
+	ensureCenterObject() {
+		if (this.centerObject && this.centerObject.state !== OBJECT_STATE.ACTIVE) {
+			const maxMassObj = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
+			this.centerObject = maxMassObj;
+			return true;
+		}
+		return false;
 	}
-	
-	pix2au(px) {
-		return px / DISTANCE_SCALE;
+
+	addObject(obj) {
+		if (!(obj instanceof GravSimObject)) throw new Error("Invalid object type.");
+		this.objects.push(obj);
+		this.workerManager.postMessage({
+			cmd: 'add',
+			id: obj.id,
+			x: this.renderer.pix2m(obj.x), y: this.renderer.pix2m(obj.y),
+			vx: this.renderer.pix2m(obj.vx), vy: this.renderer.pix2m(obj.vy),
+			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
+			mass: obj.mass * 1e3,
+			radius: obj.radius,
+		});
 	}
-	au2pix(au) {
-		return au * DISTANCE_SCALE;
+
+	removeObject(obj) {
+		if (!(obj instanceof GravSimObject)) throw new Error("Invalid object type.");
+		obj.setCollided();
+		this.workerManager.postMessage({ cmd: 'remove', id: obj.id });
 	}
-	m2pix(m) {
-		return this.au2pix(M2AU(m));
-	}
-	pix2m(px) {
-		return AU2M(this.pix2au(px));
+
+	updateObject(obj) {
+		if (!(obj instanceof GravSimObject)) throw new Error("Invalid object type.");
+		this.workerManager.postMessage({
+			cmd: 'update',
+			id: obj.id,
+			x: this.renderer.pix2m(obj.x), y: this.renderer.pix2m(obj.y),
+			vx: this.renderer.pix2m(obj.vx), vy: this.renderer.pix2m(obj.vy),
+			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
+			mass: obj.mass * 1e3,
+			radius: obj.radius,
+		});
 	}
 
 	updateObjectParams(data) {
-		data.objects.forEach(obj => {
-			const target = this.objects.find(target => target.id === obj.id);
+		data.objects.forEach(workerObj => {
+			const target = this.objects.find(t => t.id === workerObj.id);
 			if (target) {
-				target.x = this.m2pix(obj.x);
-				target.y = this.m2pix(obj.y);
-				target.vx = this.m2pix(obj.vx);
-				target.vy = this.m2pix(obj.vy);
-				target.ax = this.m2pix(obj.ax);
-				target.ay = this.m2pix(obj.ay);
-				target.mass = obj.mass /1e3;
-				target.radius = obj.radius;
+				target.x = this.renderer.m2pix(workerObj.x);
+				target.y = this.renderer.m2pix(workerObj.y);
+				target.vx = this.renderer.m2pix(workerObj.vx);
+				target.vy = this.renderer.m2pix(workerObj.vy);
+				target.ax = this.renderer.m2pix(workerObj.ax);
+				target.ay = this.renderer.m2pix(workerObj.ay);
+				target.mass = workerObj.mass / 1e3;
+				target.radius = workerObj.radius;
 				target.addHistory();
 
-				if( obj.collided === true ) {
+				if (workerObj.collided) {
 					target.setCollided();
 				}
 			}
 		});
 	}
 
-	destroy() {
-		for (let i = 0; i < this.objects.length; i++) {
-			this.removeObject(this.objects[i]);
-			delete this.objects[i];
-		}
-		this.objects = [];
-	}
-
-	_initInput() {
-		this.canvas.addEventListener('contextmenu', (e) => {
-			e.preventDefault();
-			this.reset();
-		});
-	}
-
-	reset() {
-		this.destroy();
-
-		const centerX = this.canvas.width / 2;
-		const centerY = this.canvas.height / 2;
-		this.ObjectPlacer.placeObject('Sun', centerX, centerY, 0, 0);
-		this.centerObject = this.objects[0];
-	}
-
-	draw() {
-		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-		this.ctx.save();
-		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
-		this.ctx.scale(this.zoomScale, this.zoomScale);
-		for (const obj of this.objects) {
-			obj.draw(this.ctx, this.centerObject, 1/this.zoomScale);
-		}
-		this.ctx.restore();
-	}
-
-	addObject(obj) {
-		if (!(obj instanceof GravSimObject)) {
-			throw new Error("Invalid object type. Must be an instance of GravSimObject class.");
-		}
-		this.objects.push(obj);
-		this.CalcWorkerManager.postMessage({
-			cmd: 'add',
-			id: obj.id,
-			x: this.pix2m(obj.x), y: this.pix2m(obj.y),
-			vx: this.pix2m(obj.vx), vy: this.pix2m(obj.vy),
-			ax: this.pix2m(obj.ax), ay: this.pix2m(obj.ay),
-			mass: obj.mass *1e3,
-			radius: obj.radius,
-		});
-	}
-
-	removeObject(obj) {
-		if (!(obj instanceof GravSimObject)) {
-			throw new Error("Invalid object type. Must be an instance of GravSimObject class.");
-		}
-		obj.setCollided();
-		this.CalcWorkerManager.postMessage({
-			cmd: 'remove',
-			id: obj.id,
-		});
-	}
-
-	updateObject(obj) {
-		if (!(obj instanceof GravSimObject)) {
-			throw new Error("Invalid object type. Must be an instance of GravSimObject class.");
-		}
-		this.CalcWorkerManager.postMessage({
-			cmd: 'update',
-			id: obj.id,
-			x: this.pix2m(obj.x), y: this.pix2m(obj.y),
-			vx: this.pix2m(obj.vx), vy: this.pix2m(obj.vy),
-			ax: this.pix2m(obj.ax), ay: this.pix2m(obj.ay),
-			mass: obj.mass *1e3,
-			radius: obj.radius,
-		});
-	}
-
-	removeFinished() {
+	cleanupObjects() {
+		this._removeFarObjects();
 		this.objects = this.objects.filter(obj => !obj.finished());
 	}
 
-	removeFarObjects() {
+	_removeFarObjects() {
 		if (!this.centerObject) return;
 
 		for (const obj of this.objects) {
-			if (obj.id === this.centerObject.id) continue;
-			if (obj.state !== OBJECT_STATE.ACTIVE) continue;
+			if (obj.id === this.centerObject.id || obj.state !== OBJECT_STATE.ACTIVE) continue;
 
 			const dx = obj.x - this.centerObject.x;
 			const dy = obj.y - this.centerObject.y;
 			const distPx = Math.sqrt(dx * dx + dy * dy);
 			
-			const distAu = this.pix2au(distPx);
-			if (distAu > REMOVE_DISTANCE_AU) {
-				const r = this.pix2m(distPx);
-				const dvx = this.pix2m(obj.vx - this.centerObject.vx);
-				const dvy = this.pix2m(obj.vy - this.centerObject.vy);
+			if (this.renderer.pix2au(distPx) > REMOVE_DISTANCE_AU) {
+				const r = this.renderer.pix2m(distPx);
+				const dvx = this.renderer.pix2m(obj.vx - this.centerObject.vx);
+				const dvy = this.renderer.pix2m(obj.vy - this.centerObject.vy);
 				const v2 = dvx * dvx + dvy * dvy;
 
 				const totalMass = (this.centerObject.mass + obj.mass) * 1e3;
-
 				const escapeV2 = (2 * G * totalMass) / r;
 
 				if (v2 >= escapeV2) {
@@ -353,41 +318,106 @@ export class Universe {
 		}
 	}
 
-	updateTimeScale() {
+	destroy() {
+		this.objects.forEach(obj => this.removeObject(obj));
+		this.objects = [];
+	}
+}
+
+/*******************************************************************
+ * Universe Class
+*******************************************************************/
+export class Universe {
+	constructor(_canvas) {
+		this.canvas = _canvas;
+		
+		// Initialize Modules
+		this.Renderer = new Renderer(_canvas);
+		this.CalcWorkerManager = new CalcWorkerManager();
+		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
+		
+		this.InfoPanel = new InfoPanel();
+		this.ControlPanel = new ControlPanel(this);
+		this.ObjectPlacer = new ObjectPlacer(this);
+
 		this.timeScale = this.ControlPanel.getTimeScale();
-		this.CalcWorkerManager.setTimeScale(this.timeScale);
+		
+		this._initInput();
+		this.reset();
+	}
+
+	// ------------------------------------------
+	// Getters/Setters
+	// ------------------------------------------
+	get objects() { return this.ObjectManager.objects; }
+	get centerObject() { return this.ObjectManager.centerObject; }
+	set centerObject(obj) { this.ObjectManager.centerObject = obj; }
+	get zoomScale() { return this.Renderer.zoomScale; }
+	
+	// ------------------------------------------
+	// Delegates
+	// ------------------------------------------
+	addObject(obj) { this.ObjectManager.addObject(obj); }
+	removeObject(obj) { this.ObjectManager.removeObject(obj); }
+	updateObject(obj) { this.ObjectManager.updateObject(obj); }
+	updateObjectParams(data) { this.ObjectManager.updateObjectParams(data); }
+
+	pix2au(px) { return this.Renderer.pix2au(px); }
+	au2pix(au) { return this.Renderer.au2pix(au); }
+	m2pix(m) { return this.Renderer.m2pix(m); }
+	pix2m(px) { return this.Renderer.pix2m(px); }
+
+	// ------------------------------------------
+	// Core Loop & Control
+	// ------------------------------------------
+	_initInput() {
+		this.canvas.addEventListener('contextmenu', (e) => {
+			e.preventDefault();
+			this.reset();
+		});
+	}
+
+	reset() {
+		this.ObjectManager.destroy();
+		const centerX = this.canvas.width / 2;
+		const centerY = this.canvas.height / 2;
+		this.ObjectPlacer.placeObject('Sun', centerX, centerY, 0, 0);
+		this.centerObject = this.objects[0];
 	}
 
 	updateZoomScale() {
-		this.zoomScale = this.ControlPanel.getZoomScale();
+		this.Renderer.setZoomScale(this.ControlPanel.getZoomScale());
 	}
 
 	update(dt) {
-		if (this.centerObject && this.centerObject.state !== OBJECT_STATE.ACTIVE) {
-			const maxMassObj = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
-			this.centerObject = maxMassObj;
-			
+		// 1. Center Object Check
+		const centerChanged = this.ObjectManager.ensureCenterObject();
+		if (centerChanged) {
 			this.ControlPanel.updateCenterOptions();
 		}
 
-		dt *= YEARS_PER_SECOND /TIME_SCALE *this.timeScale;
+		// 2. Time Management
+		this.timeScale = this.ControlPanel.getTimeScale();
+		this.CalcWorkerManager.setTimeScale(this.timeScale);
+		const scaledDt = dt * (YEARS_PER_SECOND / TIME_SCALE) * this.timeScale;
 
-		if( this.objects.length == 1 ) {
+		// 3. UI Update
+		if (this.objects.length === 1) {
 			this.InfoPanel.resetElapsedTime();
-		}
-		else {
-			this.InfoPanel.updateElapsedTime(dt);
+		} else {
+			this.InfoPanel.updateElapsedTime(scaledDt);
 		}
 		this.InfoPanel.updateObjectCount(this.objects.length);
 		this.InfoPanel.updateFPS();
 
-		for (const obj of this.objects) {
-			obj.updateHistory();
-		}
-
-		this.updateTimeScale();
+		// 4. Object Update
+		this.objects.forEach(obj => obj.updateHistory());
+		
 		this.updateZoomScale();
-		this.removeFarObjects();
-		this.removeFinished();
+		this.ObjectManager.cleanupObjects();
+	}
+
+	draw() {
+		this.Renderer.draw(this.objects, this.centerObject);
 	}
 }
