@@ -48,6 +48,8 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"MASS" : 1.9891e30 *20 / 1e3, // 20 times of the sun
 		"COLOR" : "#333333",
 		"RADIUS": 3e4,
+		"BORDER_COLOR": "#FF8C00",
+		"BORDER_WIDTH": 0.3,
 	},
 	"Sun": {
 		"NAME" : "Sun",

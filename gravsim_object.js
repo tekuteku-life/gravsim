@@ -22,7 +22,8 @@ import {
  * @property {Array} history - The history of the object's positions, stored as an array of objects with x and y properties.
 *******************************************************************/
 export class GravSimObject {
-	constructor(name, x, y, vx, vy, mass, color, size, radius, isDebris = false) {
+	constructor(name, x, y, vx, vy, mass, color, size, radius,
+		isDebris = false, borderColor = null, borderWidth = 0) {
 		GravSimObject._idCounter = (GravSimObject._idCounter || 0);
 
 		this.name = name;
@@ -37,6 +38,9 @@ export class GravSimObject {
 		this.color = color;
 		this.size = size;
 		this.radius = radius;	// meters
+		this.borderColor = borderColor;
+		this.borderWidth = borderWidth;
+
 		this.state = OBJECT_STATE.ACTIVE;
 		this.history = [];
 		this.isDebris = isDebris;
@@ -154,7 +158,7 @@ export class GravSimObject {
 			// Calculate the optimal drawing radius
 			const drawRadius = this._getDrawRadius(scale);
 
-			this._drawBody(ctx, relX, relY, drawRadius);
+			this._drawBody(ctx, relX, relY, drawRadius, scale);
 
 			if (this.isEscaping) {
 				this._drawSparkle(ctx, relX, relY, drawRadius);
@@ -183,11 +187,26 @@ export class GravSimObject {
 		}
 	}
 
-	_drawBody(ctx, x, y, drawRadius) {
+	_drawBody(ctx, x, y, drawRadius, scale) {
 		ctx.fillStyle = this.color;
 		ctx.beginPath();
 		ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
 		ctx.fill();
+
+		// Stroke border (if configured)
+		if (this.borderColor && this.borderWidth > 0) {
+			const screenLineWidthPx = Math.max(1, this.size * this.borderWidth);
+			ctx.lineWidth = screenLineWidthPx * scale;
+
+			const innerRadius = Math.max(1e-5, drawRadius - (ctx.lineWidth / 2));
+
+			ctx.strokeStyle = this.borderColor;
+			ctx.beginPath();
+			ctx.arc(x, y, innerRadius, 0, Math.PI * 2);
+			ctx.stroke();
+
+			ctx.lineWidth = 1;
+		}
 	}
 
 	_drawSparkle(ctx, x, y, drawRadius) {

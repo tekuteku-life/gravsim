@@ -45,6 +45,9 @@ class ObjectPlacer {
 			param.COLOR,
 			Math.log10((param.RADIUS || 1)*8)/2.5,
 			param.RADIUS || 1,
+			false,
+			param.BORDER_COLOR || null,
+			param.BORDER_WIDTH || 0
 		);
 		this.universe.addObject(obj);
 		return obj;
