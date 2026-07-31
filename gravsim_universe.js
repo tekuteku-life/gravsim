@@ -4,9 +4,8 @@
 import {
 	METERS_PER_AU, YEARS_PER_SECOND, G,
 	TIME_SCALE, THROW_SCALE, REMOVE_DISTANCE_AU, 
-	HISTORY_LENGTH, DEBRIS_SHOCKWAVE_TIME,
-	DEBRIS_MIN_FRAG, DEBRIS_SHOCKWAVE_RADIUS, OBJECT_STATE,
-	DEFAULT_OBJECT_PARAMS
+	HISTORY_LENGTH, DEBRIS_MIN_FRAG,
+	OBJECT_STATE, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
 import { InfoPanel } from './gravsim_info_panel.js';
