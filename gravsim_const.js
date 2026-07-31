@@ -43,6 +43,14 @@ export const OBJECT_STATE = {
 // E: orbital eccentricity
 // PERIHELION_DEG: Longitude of Perihelion degree
 export const DEFAULT_OBJECT_PARAMS = {
+	"SgrAStar": {
+		"NAME" : "Sagittarius A*",
+		"MASS" : 1.9891e30 * 4.31e6 / 1e3, // 4.31 million times of the sun
+		"COLOR" : "#000000",
+		"RADIUS": 1.27e10,
+		"BORDER_COLOR": "#FF4500",
+		"BORDER_WIDTH": 0.1,
+	},
 	"BlackHole": {
 		"NAME" : "BlackHole",
 		"MASS" : 1.9891e30 *20 / 1e3, // 20 times of the sun
