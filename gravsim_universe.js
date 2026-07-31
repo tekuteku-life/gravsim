@@ -5,7 +5,8 @@ import {
 	METERS_PER_AU, YEARS_PER_SECOND, G,
 	TIME_SCALE, THROW_SCALE, REMOVE_DISTANCE_AU, 
 	HISTORY_LENGTH, DISTANCE_SCALE, DEBRIS_SHOCKWAVE_TIME,
-	DEBRIS_SHOCKWAVE_RADIUS, OBJECT_STATE, DEFAULT_OBJECT_PARAMS
+	DEBRIS_MIN_FRAG, DEBRIS_SHOCKWAVE_RADIUS, OBJECT_STATE,
+	DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
 import { InfoPanel } from './gravsim_info_panel.js';
 import { ControlPanel } from './gravsim_control_panel.js';
@@ -381,7 +382,7 @@ class ObjectManager {
 		this.renderer.addShockwave(obj.x, obj.y, obj.color);
 
 		// Calculate the number of debris by its mass
-		const fragmentCount = Math.max(3, Math.floor(Math.log10(obj.mass) * 1.5));
+		const fragmentCount = Math.max(DEBRIS_MIN_FRAG, Math.floor(Math.log10(obj.mass) * 1.5));
 		const baseMass = obj.mass / fragmentCount;
 		
 		// Generate the color of debris
@@ -395,17 +396,22 @@ class ObjectManager {
 			
 			// Calculate the radius based on the mass (r ∝ M^(1/3))
 			const fragRadius = obj.radius * Math.cbrt(fragMass / obj.mass);
+
+			// Append random coordinates to original coordinates
+			const angle = (i / fragmentCount) * Math.PI * 2;
+			const spreadPx = this.renderer.m2pix(obj.radius * 2);
+			const fragX = obj.x + Math.cos(angle) * spreadPx;
+			const fragY = obj.y + Math.sin(angle) * spreadPx;
 			
 			// Append random velocity to original velocity (almost 1km/s = 1000m/s)
 			const scatterPx = this.renderer.m2pix(1000 + (Math.random() * 2000));
-			const angle = Math.random() * Math.PI * 2;
 			const fragVx = obj.vx + (Math.cos(angle) * scatterPx);
 			const fragVy = obj.vy + (Math.sin(angle) * scatterPx);
 
 			// Deploy debris objects
 			const fragment = new GravSimObject(
 				`${obj.name} Debris`, 
-				obj.x, obj.y, 
+				fragX, fragY,
 				fragVx, fragVy, 
 				fragMass, 
 				debrisColor, 

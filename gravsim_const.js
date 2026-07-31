@@ -24,6 +24,7 @@ export const TARGET_TRAIL_LENGTH_AU = 3;			// Trail length (AU)
 export const HISTORY_LENGTH = 512;					// History length
 export const DISTANCE_SCALE = 180;					// AU/px
 
+export const DEBRIS_MIN_FRAG = 3;					// The min number of fragment
 export const DEBRIS_GRAY_MIX_RATIO = 0.6;			// gray blending ratio of becoming debris (0.0=original, 1.0=gray)
 export const DEBRIS_SHOCKWAVE_TIME = 800;			// Duaration of shock-wave when debris generated
 export const DEBRIS_SHOCKWAVE_RADIUS = 100;			// Max radius of shock-wave
