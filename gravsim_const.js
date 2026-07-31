@@ -29,6 +29,11 @@ export const DEBRIS_GRAY_MIX_RATIO = 0.6;			// gray blending ratio of becoming d
 export const DEBRIS_SHOCKWAVE_TIME = 800;			// Duaration of shock-wave when debris generated
 export const DEBRIS_SHOCKWAVE_RADIUS = 100;			// Max radius of shock-wave
 
+export const SCALE_BAR_WIDTH = 150;					// scale bar width (px)
+export const SCALE_BAR_LINE_WIDTH = 2;				// scale bar line width (px)
+export const SCALE_BAR_RIGHT = 20;					// position from right-side (px)
+export const SCALE_BAR_BOTTOM = 20;					// position from bottom (px)
+
 // constant definition
 export const OBJECT_STATE = {
 	"ACTIVE": 0,

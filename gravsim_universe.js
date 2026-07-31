@@ -4,10 +4,11 @@
 import {
 	METERS_PER_AU, YEARS_PER_SECOND, G,
 	TIME_SCALE, THROW_SCALE, REMOVE_DISTANCE_AU, 
-	HISTORY_LENGTH, DISTANCE_SCALE, DEBRIS_SHOCKWAVE_TIME,
+	HISTORY_LENGTH, DEBRIS_SHOCKWAVE_TIME,
 	DEBRIS_MIN_FRAG, DEBRIS_SHOCKWAVE_RADIUS, OBJECT_STATE,
 	DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
+import { Renderer } from './gravsim_renderer.js';
 import { InfoPanel } from './gravsim_info_panel.js';
 import { ControlPanel } from './gravsim_control_panel.js';
 import { GravSimObject } from './gravsim_object.js';
@@ -207,86 +208,6 @@ class CalcWorkerManager {
 
 	destroy() {
 		this.worker.terminate();
-	}
-}
-
-/*******************************************************************
- * Renderer Class
-*******************************************************************/
-class Renderer {
-	constructor(canvas) {
-		this.canvas = canvas;
-		this.ctx = canvas.getContext('2d');
-		this.zoomScale = 1;
-		this.visualEffects = [];
-	}
-
-	setZoomScale(scale) {
-		this.zoomScale = scale;
-	}
-
-	pix2au(px) { return px / DISTANCE_SCALE; }
-	au2pix(au) { return au * DISTANCE_SCALE; }
-	m2pix(m) { return this.au2pix(M2AU(m)); }
-	pix2m(px) { return AU2M(this.pix2au(px)); }
-
-	// Register shock-wave of impact
-	addShockwave(x, y, color) {
-		this.visualEffects.push({
-			x: x,
-			y: y,
-			color: color,
-			startTime: Date.now(),
-			duration: DEBRIS_SHOCKWAVE_TIME // Vanishes in 800 ms
-		});
-	}
-
-	draw(objects, centerObject) {
-		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-		this.ctx.save();
-		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
-		this.ctx.scale(this.zoomScale, this.zoomScale);
-		
-		// draw object
-		objects.forEach(obj => obj.draw(this.ctx, centerObject, 1 / this.zoomScale));
-		
-		// draw visual effect
-		const now = Date.now();
-		this.visualEffects = this.visualEffects.filter(eff => {
-			const progress = (now - eff.startTime) / eff.duration;
-
-			// vanishing
-			if (progress >= 1) { return false; }
-
-			// more larger and transparent as it progresses
-			const radius = (progress * DEBRIS_SHOCKWAVE_RADIUS) * (1 / this.zoomScale);
-			const alpha = 1.0 - progress;
-
-			this.ctx.save();
-			const relX = eff.x - centerObject.x;
-			const relY = eff.y - centerObject.y;
-			
-			this.ctx.strokeStyle = this._hexToRgba(eff.color, alpha);
-			this.ctx.lineWidth = 2 * (1 / this.zoomScale);
-			this.ctx.beginPath();
-			this.ctx.arc(relX, relY, radius, 0, Math.PI * 2);
-			this.ctx.stroke();
-			this.ctx.restore();
-
-			return true;
-		});
-
-		this.ctx.restore();
-	}
-
-	_hexToRgba(hex, alpha) {
-		let c = hex.replace('#', '');
-		if (c.length === 3) c = c.split('').map(x => x + x).join('');
-		const num = parseInt(c, 16);
-		const r = (num >> 16) & 255;
-		const g = (num >> 8) & 255;
-		const b = num & 255;
-		return `rgba(${r},${g},${b},${alpha})`;
 	}
 }
 
