@@ -3,7 +3,7 @@
 
 import {
 	DISTANCE_SCALE, TARGET_TRAIL_LENGTH_AU, HISTORY_LENGTH,
-	OBJECT_STATE
+	OBJECT_STATE, METERS_PER_AU
 } from './gravsim_const.js';
 
 /*******************************************************************
@@ -22,7 +22,7 @@ import {
  * @property {Array} history - The history of the object's positions, stored as an array of objects with x and y properties.
 *******************************************************************/
 export class GravSimObject {
-	constructor(name, x, y, vx, vy, mass, color, size, radius) {
+	constructor(name, x, y, vx, vy, mass, color, size, radius, isDebris = false) {
 		GravSimObject._idCounter = (GravSimObject._idCounter || 0);
 
 		this.name = name;
@@ -39,6 +39,7 @@ export class GravSimObject {
 		this.radius = radius;	// meters
 		this.state = OBJECT_STATE.ACTIVE;
 		this.history = [];
+		this.isDebris = isDebris;
 
 		GravSimObject._idCounter++;
 	}
@@ -150,10 +151,13 @@ export class GravSimObject {
 			const relX = this.getRelativeX(basis);
 			const relY = this.getRelativeY(basis);
 			
-			this._drawBody(ctx, relX, relY, scale);
+			// Calculate the optimal drawing radius
+			const drawRadius = this._getDrawRadius(scale);
+
+			this._drawBody(ctx, relX, relY, drawRadius);
 
 			if (this.isEscaping) {
-				this._drawSparkle(ctx, relX, relY, scale);
+				this._drawSparkle(ctx, relX, relY, drawRadius);
 			}
 		}
 
@@ -163,14 +167,30 @@ export class GravSimObject {
 		}
 	}
 
-	_drawBody(ctx, x, y, scale) {
+	// Calculate switching between fixed size and real physical size
+	_getDrawRadius(scale) {
+		const zoomScale = 1 / scale;
+		// Convert real physical radius (meters) to canvas pixels
+		const realRadiusPx = (this.radius / METERS_PER_AU) * DISTANCE_SCALE;
+		// Calculate how many pixels it takes on the screen right now
+		const screenRadiusPx = realRadiusPx * zoomScale;
+
+		// this.size acts as the minimum visual radius on the screen
+		if (screenRadiusPx < this.size) {
+			return this.size * scale;	// Keep fixed visible size
+		} else {
+			return realRadiusPx;		// Use real physical size
+		}
+	}
+
+	_drawBody(ctx, x, y, drawRadius) {
 		ctx.fillStyle = this.color;
 		ctx.beginPath();
-		ctx.arc(x, y, this.size * scale, 0, Math.PI * 2);
+		ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
 		ctx.fill();
 	}
 
-	_drawSparkle(ctx, x, y, scale) {
+	_drawSparkle(ctx, x, y, drawRadius) {
 		const now = Date.now();
 		const blink = Math.abs(Math.sin(now / 80 + this.id)); 
 		
@@ -181,8 +201,8 @@ export class GravSimObject {
 		ctx.globalAlpha = blink;
 		ctx.fillStyle = "#FFFFFF"; 
 		
-		const starSize = this.size * scale * 3.0; 
-		const innerSize = this.size * scale * 0.4; 
+		const starSize = drawRadius * 3.0; 
+		const innerSize = drawRadius * 0.4; 
 		
 		ctx.beginPath();
 		ctx.moveTo(0, -starSize);
@@ -223,7 +243,7 @@ export class GravSimObject {
 		for (let i = trailStaIdx + 1; i < this.history.length; i++) {
 			const t = (i - trailStaIdx) / drawTrailCount; // 0 (oldest) to 1 (newest)
 			const alpha = t * 0.4 + 0.2; // fade in (0.2~1.0)
-			const width = this.size * (0.2 + 0.8 * t) * scale; // thin to thick
+			const width = this.size * (0.2 + 0.8 * t) * scale; 
 
 			ctx.strokeStyle = this._hexToRgba(this.color, alpha);
 			ctx.lineWidth = width;

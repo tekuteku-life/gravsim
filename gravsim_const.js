@@ -8,6 +8,12 @@ export const YEARS_PER_SECOND = 60*60*24*365.25;	// 1 year in seconds
 export const G = 6.67430e-11;						// Gravitational constant (m^3 kg^-1 s^-2)
 export const C = 2.99792458e8;						// speed of light (m/s)
 
+// Roche limit physical thresholds
+export const ROCHE_MIN_MASS_TO_DESTROY = 1e15;		// ton: Minimum mass required to tear another object apart
+export const ROCHE_UNBREAKABLE_DENSITY = 1e10;		// ton/m^3: Objects with density higher than this cannot be destroyed (e.g., Black holes)
+export const ROCHE_RIGID_BODY_RADIUS = 10000;		// m: Objects smaller than this radius are considered rigid bodies
+export const ROCHE_RIGID_DESTROYER_MASS = 1e25;		// ton: Minimum mass required to tear apart rigid bodies (e.g., Stars, Black holes)
+
 // Program setting
 export const TIME_SCALE = 1e3;
 export const THROW_SCALE = 4e16;
@@ -17,6 +23,10 @@ export const REMOVE_DISTANCE_AU = 120;
 export const TARGET_TRAIL_LENGTH_AU = 3;			// Trail length (AU)
 export const HISTORY_LENGTH = 512;					// History length
 export const DISTANCE_SCALE = 180;					// AU/px
+
+export const DEBRIS_GRAY_MIX_RATIO = 0.6;			// gray blending ratio of becoming debris (0.0=original, 1.0=gray)
+export const DEBRIS_SHOCKWAVE_TIME = 800;			// Duaration of shock-wave when debris generated
+export const DEBRIS_SHOCKWAVE_RADIUS = 100;			// Max radius of shock-wave
 
 // constant definition
 export const OBJECT_STATE = {

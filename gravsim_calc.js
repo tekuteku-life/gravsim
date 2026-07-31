@@ -2,7 +2,11 @@
 
 import {
 	G, C, YEARS_PER_SECOND,
-	TIME_SCALE
+	TIME_SCALE,
+	ROCHE_MIN_MASS_TO_DESTROY,
+	ROCHE_UNBREAKABLE_DENSITY,
+	ROCHE_RIGID_BODY_RADIUS,
+	ROCHE_RIGID_DESTROYER_MASS
 } from './gravsim_const.js'
 
 const CALC_INTERVAL = 60;
@@ -11,7 +15,7 @@ const CALC_INTERVAL = 60;
  * Entity Class
 *******************************************************************/
 class GravSimCalcObject {
-	constructor(id, x, y, vx, vy, ax, ay, mass, radius) {
+	constructor(id, x, y, vx, vy, ax, ay, mass, radius, isDebris) {
 		this.id = id;
 		this.x = x;
 		this.y = y;
@@ -22,6 +26,8 @@ class GravSimCalcObject {
 		this.mass = mass;
 		this.radius = radius;
 		this.collided = false;
+		this.shattered = false;
+		this.isDebris = isDebris || false;
 	}
 	
 	getXt(dt) { return this.x + this.vx * dt + 1/2 * this.ax * dt * dt; }
@@ -87,7 +93,8 @@ class PhysicsEngine {
 			data.id, data.x, data.y,
 			data.vx || 0, data.vy || 0,
 			data.ax || 0, data.ay || 0,
-			data.mass || 1, data.radius || 1
+			data.mass || 1, data.radius || 1,
+			data.isDebris || false
 		));
 	}
 
@@ -109,23 +116,24 @@ class PhysicsEngine {
 		}
 	}
 
-	removeCollided() {
-		this.objects = this.objects.filter(obj => !obj.collided);
+	removeDeadObjects() {
+		this.objects = this.objects.filter(obj => !obj.collided && !obj.shattered);
 	}
 
 	step(dt) {
 		this._checkCollisions(dt);
+		this._checkRocheLimit();
 		this._moveObjects(dt);
 	}
 
 	_checkCollisions(dt) {
 		for (let i = 0; i < this.objects.length; i++) {
 			const obj = this.objects[i];
-			if (obj.collided) continue;
+			if (obj.collided || obj.shattered) continue;
 
 			for (let j = i + 1; j < this.objects.length; j++) {
 				const other = this.objects[j];
-				if (other.collided) continue;
+				if (other.collided || other.shattered) continue;
 
 				if (obj.isColliding(other, dt)) {
 					if (obj.mass < other.mass) obj.collided = true;
@@ -135,9 +143,50 @@ class PhysicsEngine {
 		}
 	}
 
+	_checkRocheLimit() {
+		for (let i = 0; i < this.objects.length; i++) {
+			const massiveObj = this.objects[i];
+
+			if (massiveObj.collided || massiveObj.shattered) { continue; }
+
+			// Destructor must be bigger than min-threshold
+			if (massiveObj.mass < ROCHE_MIN_MASS_TO_DESTROY) { continue; }
+
+			const massiveDensity = massiveObj.mass / Math.pow(massiveObj.radius, 3);
+
+			for (let j = 0; j < this.objects.length; j++) {
+				if (i === j) { continue; }
+				const fragileObj = this.objects[j];
+
+				if (fragileObj.collided || fragileObj.shattered || fragileObj.isDebris) { continue; }
+				
+				// Destructee must be smaller than destructor
+				if (massiveObj.mass <= fragileObj.mass) { continue; }
+
+				// Density of destructee must not be too high
+				const fragileDensity = fragileObj.mass / Math.pow(fragileObj.radius, 3);
+				if (fragileDensity > ROCHE_UNBREAKABLE_DENSITY) { continue; }
+
+				// Destructee must be smaller than radius-threthold
+				if (fragileObj.radius < ROCHE_RIGID_BODY_RADIUS) { continue; }
+
+				// Calculate roche-limit
+				const rocheLimitM = 2.44 * massiveObj.radius * Math.cbrt(massiveDensity / fragileDensity);
+
+				const dx = fragileObj.x - massiveObj.x;
+				const dy = fragileObj.y - massiveObj.y;
+				const distSq = dx * dx + dy * dy;
+
+				if (distSq < rocheLimitM * rocheLimitM) {
+					fragileObj.shattered = true;
+				}
+			}
+		}
+	}
+
 	_moveObjects(dt) {
 		for (const obj of this.objects) {
-			if (obj.collided) continue;
+			if (obj.collided || obj.shattered) continue;
 
 			this._updateGravityFor(obj);
 			const half_vx = obj.vx + obj.ax * dt / 2;
@@ -162,7 +211,7 @@ class PhysicsEngine {
 		obj.ax = 0;
 		obj.ay = 0;
 		for (const other of this.objects) {
-			if (obj.id !== other.id && !other.collided) {
+			if (obj.id !== other.id && !other.collided && !other.shattered) {
 				obj.applyGravity(other);
 			}
 		}
@@ -229,14 +278,14 @@ class SimulationController {
 			this.engine.step(dt);
 		}
 			
-		// Return result to main thread
+		// Return result to main thread (Includes newly shattered objects before removal)
 		self.postMessage({
 			cmd: 'update',
 			deltaTime: dt,
 			objects: this.formatForMessage()
 		});
 
-		this.engine.removeCollided();
+		this.engine.removeDeadObjects();
 	}
 
 	formatForMessage() {
@@ -251,6 +300,7 @@ class SimulationController {
 			mass: obj.mass || 1,
 			radius: obj.radius || 1,
 			collided: obj.collided || false,
+			shattered: obj.shattered || false,
 		}));
 	}
 }

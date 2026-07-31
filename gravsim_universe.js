@@ -4,8 +4,8 @@
 import {
 	METERS_PER_AU, YEARS_PER_SECOND, G,
 	TIME_SCALE, THROW_SCALE, REMOVE_DISTANCE_AU, 
-	HISTORY_LENGTH, DISTANCE_SCALE, OBJECT_STATE,
-	DEFAULT_OBJECT_PARAMS
+	HISTORY_LENGTH, DISTANCE_SCALE, DEBRIS_SHOCKWAVE_TIME,
+	DEBRIS_SHOCKWAVE_RADIUS, OBJECT_STATE, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
 import { InfoPanel } from './gravsim_info_panel.js';
 import { ControlPanel } from './gravsim_control_panel.js';
@@ -214,6 +214,7 @@ class Renderer {
 		this.canvas = canvas;
 		this.ctx = canvas.getContext('2d');
 		this.zoomScale = 1;
+		this.visualEffects = [];
 	}
 
 	setZoomScale(scale) {
@@ -225,15 +226,63 @@ class Renderer {
 	m2pix(m) { return this.au2pix(M2AU(m)); }
 	pix2m(px) { return AU2M(this.pix2au(px)); }
 
+	// Register shock-wave of impact
+	addShockwave(x, y, color) {
+		this.visualEffects.push({
+			x: x,
+			y: y,
+			color: color,
+			startTime: Date.now(),
+			duration: DEBRIS_SHOCKWAVE_TIME // Vanishes in 800 ms
+		});
+	}
+
 	draw(objects, centerObject) {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
 		this.ctx.scale(this.zoomScale, this.zoomScale);
 		
+		// draw object
 		objects.forEach(obj => obj.draw(this.ctx, centerObject, 1 / this.zoomScale));
 		
+		// draw visual effect
+		const now = Date.now();
+		this.visualEffects = this.visualEffects.filter(eff => {
+			const progress = (now - eff.startTime) / eff.duration;
+
+			// vanishing
+			if (progress >= 1) { return false; }
+
+			// more larger and transparent as it progresses
+			const radius = (progress * DEBRIS_SHOCKWAVE_RADIUS) * (1 / this.zoomScale);
+			const alpha = 1.0 - progress;
+
+			this.ctx.save();
+			const relX = eff.x - centerObject.x;
+			const relY = eff.y - centerObject.y;
+			
+			this.ctx.strokeStyle = this._hexToRgba(eff.color, alpha);
+			this.ctx.lineWidth = 2 * (1 / this.zoomScale);
+			this.ctx.beginPath();
+			this.ctx.arc(relX, relY, radius, 0, Math.PI * 2);
+			this.ctx.stroke();
+			this.ctx.restore();
+
+			return true;
+		});
+
 		this.ctx.restore();
+	}
+
+	_hexToRgba(hex, alpha) {
+		let c = hex.replace('#', '');
+		if (c.length === 3) c = c.split('').map(x => x + x).join('');
+		const num = parseInt(c, 16);
+		const r = (num >> 16) & 255;
+		const g = (num >> 8) & 255;
+		const b = num & 255;
+		return `rgba(${r},${g},${b},${alpha})`;
 	}
 }
 
@@ -268,6 +317,7 @@ class ObjectManager {
 			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
 			mass: obj.mass * 1e3,
 			radius: obj.radius,
+			isDebris: obj.isDebris,
 		});
 	}
 
@@ -287,6 +337,7 @@ class ObjectManager {
 			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
 			mass: obj.mass * 1e3,
 			radius: obj.radius,
+			isDebris: obj.isDebris,
 		});
 	}
 
@@ -307,6 +358,11 @@ class ObjectManager {
 				if (workerObj.collided) {
 					target.setCollided();
 				}
+				
+				// Handle object shattered by tidal force in the worker
+				if (workerObj.shattered && target.state === OBJECT_STATE.ACTIVE) {
+					this._shatterObject(target);
+				}
 			}
 		});
 	}
@@ -314,6 +370,68 @@ class ObjectManager {
 	cleanupObjects() {
 		this._checkEscapeAndRemove();
 		this.objects = this.objects.filter(obj => !obj.finished());
+	}
+
+	// Vanish target object and create debris
+	_shatterObject(obj) {
+		console.debug(`${obj.name} (id:${obj.id}) shattered by tidal force.`);
+		
+		// Vanish object & add shock-wave
+		this.removeObject(obj);
+		this.renderer.addShockwave(obj.x, obj.y, obj.color);
+
+		// Calculate the number of debris by its mass
+		const fragmentCount = Math.max(3, Math.floor(Math.log10(obj.mass) * 1.5));
+		const baseMass = obj.mass / fragmentCount;
+		
+		// Generate the color of debris
+		const debrisColor = this._mixWithGray(obj.color, 0.6);
+
+		// Generate debris
+		for (let i = 0; i < fragmentCount; i++) {
+			// Decide the mass by random (ignore the accuracy)
+			const massVariation = 0.8 + (Math.random() * 0.4); 
+			const fragMass = baseMass * massVariation;
+			
+			// Calculate the radius based on the mass (r ∝ M^(1/3))
+			const fragRadius = obj.radius * Math.cbrt(fragMass / obj.mass);
+			
+			// Append random velocity to original velocity (almost 1km/s = 1000m/s)
+			const scatterPx = this.renderer.m2pix(1000 + (Math.random() * 2000));
+			const angle = Math.random() * Math.PI * 2;
+			const fragVx = obj.vx + (Math.cos(angle) * scatterPx);
+			const fragVy = obj.vy + (Math.sin(angle) * scatterPx);
+
+			// Deploy debris objects
+			const fragment = new GravSimObject(
+				`${obj.name} Debris`, 
+				obj.x, obj.y, 
+				fragVx, fragVy, 
+				fragMass, 
+				debrisColor, 
+				Math.log10(fragRadius * 8) / 2.5,
+				fragRadius,
+				true
+			);
+			this.addObject(fragment);
+		}
+	}
+
+	// Mix with gray (#808080)
+	_mixWithGray(hexColor, grayRatio) {
+		let c = hexColor.replace('#', '');
+		if (c.length === 3) c = c.split('').map(x => x + x).join('');
+		const num = parseInt(c, 16);
+		const r = (num >> 16) & 255;
+		const g = (num >> 8) & 255;
+		const b = num & 255;
+
+		const gray = 128; // #808080
+		const mixR = Math.round(r * (1 - grayRatio) + gray * grayRatio);
+		const mixG = Math.round(g * (1 - grayRatio) + gray * grayRatio);
+		const mixB = Math.round(b * (1 - grayRatio) + gray * grayRatio);
+
+		return '#' + ((1 << 24) + (mixR << 16) + (mixG << 8) + mixB).toString(16).slice(1).toUpperCase();
 	}
 
 	_checkEscapeAndRemove() {
@@ -424,18 +542,18 @@ export class Universe {
 	}
 
 	update(dt) {
-		// 1. Center Object Check
+		// Center Object Check
 		const centerChanged = this.ObjectManager.ensureCenterObject();
 		if (centerChanged) {
 			this.ControlPanel.updateCenterOptions();
 		}
 
-		// 2. Time Management
+		// Time Management
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
 		const scaledDt = dt * (YEARS_PER_SECOND / TIME_SCALE) * this.timeScale;
 
-		// 3. UI Update
+		// UI Update
 		if (this.objects.length === 1) {
 			this.InfoPanel.resetElapsedTime();
 		} else {
