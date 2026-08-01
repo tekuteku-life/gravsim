@@ -1,7 +1,7 @@
 
 // gravsim_control_panel.js
 
-import { DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
+import { DEFAULT_OBJECT_PARAMS, DISTANCE_SCALE, METERS_PER_AU, TIME_SCALE } from './gravsim_const.js';
 
 /*******************************************************************
  * ControlPanel class that manages the simulation control panel UI.
@@ -15,6 +15,8 @@ export class ControlPanel {
 		this._bindEvents();
 		
 		this.generateMassSelect();
+		this.updateTimeScaleIndicator(this.getTimeScale());
+		this.updateZoomScaleIndicator(this.getZoomScale());
 	}
 
 	// Initialize and cache DOM elements
@@ -166,23 +168,46 @@ export class ControlPanel {
 	}
 
 	updateTimeScaleIndicator(val) {
-		if (this.ui.timeIndicator) {
-			if (val < 0.01) {
-				this.ui.timeIndicator.textContent = val.toExponential(2);
-			} else {
-				this.ui.timeIndicator.textContent = val.toFixed(3);
-			}
+		if (!this.ui.timeIndicator) { return; }
+
+		const yearsPerSec = (1000 / TIME_SCALE) * val;
+		let text = "";
+
+		if (yearsPerSec >= 1) {
+			text = `${yearsPerSec >= 10 ? Math.round(yearsPerSec).toLocaleString('en-US') : yearsPerSec.toFixed(2)} year/sec`;
+		} else if (yearsPerSec * 12 >= 1) {
+			text = `${(yearsPerSec * 12).toFixed(2)} mon/sec`;
+		} else if (yearsPerSec * 365.25 >= 1) {
+			text = `${(yearsPerSec * 365.25).toFixed(2)} day/sec`;
+		} else if (yearsPerSec * 365.25 * 24 >= 1) {
+			text = `${(yearsPerSec * 365.25 * 24).toFixed(2)} hr/sec`;
+		} else if (yearsPerSec * 365.25 * 24 * 60 >= 1) {
+			text = `${(yearsPerSec * 365.25 * 24 * 60).toFixed(2)} min/sec`;
+		} else {
+			const secPerSec = yearsPerSec * 365.25 * 24 * 60 * 60;
+			text = `${secPerSec >= 10 ? Math.round(secPerSec).toLocaleString('en-US') : secPerSec.toFixed(2)} sec/sec`;
 		}
+		
+		this.ui.timeIndicator.textContent = text;
 	}
 
 	updateZoomScaleIndicator(val) {
-		if (this.ui.zoomIndicator) {
-			if (val < 0.1 || val > 1000) {
-				this.ui.zoomIndicator.textContent = val.toExponential(2);
-			} else {
-				this.ui.zoomIndicator.textContent = val.toFixed(2);
-			}
+		if (!this.ui.zoomIndicator) return;
+
+		const auPer100Px = 100 / (val * DISTANCE_SCALE);
+		const kmPer100Px = auPer100Px * (METERS_PER_AU / 1000);
+		let text = "";
+
+		if (auPer100Px >= 0.1) {
+			text = `${auPer100Px >= 10 ? Math.round(auPer100Px).toLocaleString('en-US') : auPer100Px.toFixed(2)} AU/100px`;
+		} else if (kmPer100Px >= 1) {
+			text = `${kmPer100Px >= 10 ? Math.round(kmPer100Px).toLocaleString('en-US') : kmPer100Px.toFixed(2)} km/100px`;
+		} else {
+			const mPer100Px = kmPer100Px * 1000;
+			text = `${mPer100Px >= 10 ? Math.round(mPer100Px).toLocaleString('en-US') : mPer100Px.toFixed(2)} m/100px`;
 		}
+		
+		this.ui.zoomIndicator.textContent = text;
 	}
 
 	generateMassSelect() {

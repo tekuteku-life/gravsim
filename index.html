@@ -10,13 +10,13 @@
 <body>
 	<canvas id="gravsim-canvas"></canvas>
 	<form id="ctrl-form">
-		<label for="time-scale">Time scale (year/sec):</label>
-			<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-6" max="1" style="width:60%;">
-		<span id="time-scale-indicator">0.10</span>
+		<label for="time-scale">Time scale:</label>
+			<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-6" max="1" style="width:70%;">
+		<span id="time-scale-indicator"></span>
 		
 		<label for="zoom-scale">Zoom level:</label>
 			<input type="range" id="zoom-scale" name="zoom-scale" value="0" step="0.05" min="-2" max="4" style="width:70%;">
-		<span id="zoom-scale-indicator">1</span>
+		<span id="zoom-scale-indicator"></span>
 		
 		<label for="center-select">Center Object (Camera):</label>
 		<select id="center-select" name="center"></select>
