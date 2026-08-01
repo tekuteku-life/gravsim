@@ -20,7 +20,7 @@ canvas {
 	background-color: #000000;
 }
 
-#ctrl-form {
+#ctrl-panel {
 	font-size: 12px;
 	position: absolute;
 	top: 10px;
@@ -29,17 +29,21 @@ canvas {
 	padding: 10px;
 	border-radius: 5px;
 	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+
+	user-select: none;
+	-webkit-user-select: none;
+	touch-action: none;
 }
-#ctrl-form input,
-#ctrl-form button,
-#ctrl-form select {
+#ctrl-panel input,
+#ctrl-panel button,
+#ctrl-panel select {
 	font-size: 12px;
 }
-#ctrl-form label::before {
+#ctrl-panel label::before {
 	content: "\A";
 	white-space: pre;
 }
-#ctrl-form label:first-of-type::before {
+#ctrl-panel label:first-of-type::before {
   content: none;
 }
 
@@ -55,6 +59,10 @@ canvas {
 	padding: 5px 10px;
 	border-radius: 5px;
 	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+
+	user-select: none;
+	-webkit-user-select: none;
+	touch-action: none;
 }
 #info-panel > p {
 	line-height: 0.5;

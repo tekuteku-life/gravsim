@@ -2,14 +2,14 @@
 <html lang="ja">
 <head>
 	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width,initial-scale=1.0">
+	<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 	<title>gravsim</title>
 	<link rel="stylesheet" href="style.css">
 	<script src="gravsim.js" type="module"></script>
 </head>
 <body>
 	<canvas id="gravsim-canvas"></canvas>
-	<form id="ctrl-form">
+	<form id="ctrl-panel">
 		<label for="time-scale">Time scale:</label>
 			<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-6" max="1" style="width:70%;">
 		<span id="time-scale-indicator"></span>
