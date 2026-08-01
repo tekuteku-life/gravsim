@@ -353,36 +353,42 @@ class SimulationController {
 		}
 			
 		// Return result to main thread (Includes newly shattered objects before removal)
+		const buffer = this.formatForMessage();
 		self.postMessage({
 			cmd: 'update',
 			deltaTime: dt,
-			objects: this.formatForMessage()
-		});
+			objectsData: buffer.buffer 
+		}, [buffer.buffer]);
 
 		this.engine.removeDeadObjects();
 	}
 
 	formatForMessage() {
-		return this.engine.objects.map(obj => ({
-			id: obj.id,
-			x: obj.x || 0,
-			y: obj.y || 0,
-			vx: obj.vx || 0,
-			vy: obj.vy || 0,
-			ax: obj.ax || 0,
-			ay: obj.ay || 0,
-			mass: obj.mass || 1,
-			radius: obj.radius || 1,
-			collided: obj.collided || false,
-			shattered: obj.shattered || false,
-			isImpact: obj.isImpact || false,
-			debrisMass: obj.debrisMass || 0,
-			impactVx: obj.impactVx || 0,
-			impactVy: obj.impactVy || 0,
-			impactWinnerX: obj.impactWinnerX || 0,
-			impactWinnerY: obj.impactWinnerY || 0,
-			impactWinnerRadius: obj.impactWinnerRadius || 0,
-		}));
+		const OBJ_ATTR_COUNT = 18;
+		const buffer = new Float64Array(this.engine.objects.length * OBJ_ATTR_COUNT);
+
+		for (let i = 0; i < this.engine.objects.length; i++) {
+			const obj = this.engine.objects[i];
+			const offset = i * OBJ_ATTR_COUNT;
+
+			buffer[offset + 0] = obj.id;
+			buffer[offset + 1] = obj.x || 0;
+			buffer[offset + 2] = obj.y || 0;
+			buffer[offset + 3] = obj.vx || 0;
+			buffer[offset + 4] = obj.vy || 0;
+			buffer[offset + 5] = obj.ax || 0;
+			buffer[offset + 6] = obj.ay || 0;
+			buffer[offset + 7] = obj.mass || 1;
+			buffer[offset + 8] = obj.radius || 1;
+			buffer[offset + 9] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0);
+			buffer[offset + 10] = obj.debrisMass || 0;
+			buffer[offset + 11] = obj.impactVx || 0;
+			buffer[offset + 12] = obj.impactVy || 0;
+			buffer[offset + 13] = obj.impactWinnerX || 0;
+			buffer[offset + 14] = obj.impactWinnerY || 0;
+			buffer[offset + 15] = obj.impactWinnerRadius || 0;
+		}
+		return buffer;
 	}
 }
 

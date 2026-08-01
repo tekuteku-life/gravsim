@@ -60,41 +60,53 @@ export class ObjectManager {
 	}
 
 	updateObjectParams(data) {
-		data.objects.forEach(workerObj => {
-			const target = this.objects.find(t => t.id === workerObj.id);
+		const buffer = new Float64Array(data.objectsData);
+		const OBJ_ATTR_COUNT = 18;
+		const objCount = buffer.length / OBJ_ATTR_COUNT;
+
+		for (let i = 0; i < objCount; i++) {
+			const offset = i * OBJ_ATTR_COUNT;
+			const id = buffer[offset + 0];
+
+			const target = this.objects.find(t => t.id === id);
 			if (target) {
-				target.x = this.renderer.m2pix(workerObj.x);
-				target.y = this.renderer.m2pix(workerObj.y);
-				target.vx = this.renderer.m2pix(workerObj.vx);
-				target.vy = this.renderer.m2pix(workerObj.vy);
-				target.ax = this.renderer.m2pix(workerObj.ax);
-				target.ay = this.renderer.m2pix(workerObj.ay);
-				target.mass = workerObj.mass / 1e3;
-				target.radius = workerObj.radius;
+				target.x = this.renderer.m2pix(buffer[offset + 1]);
+				target.y = this.renderer.m2pix(buffer[offset + 2]);
+				target.vx = this.renderer.m2pix(buffer[offset + 3]);
+				target.vy = this.renderer.m2pix(buffer[offset + 4]);
+				target.ax = this.renderer.m2pix(buffer[offset + 5]);
+				target.ay = this.renderer.m2pix(buffer[offset + 6]);
+				target.mass = buffer[offset + 7] / 1e3;
+				target.radius = buffer[offset + 8];
 				target.addHistory();
-				
-				if (workerObj.collided) {
-					if (workerObj.isImpact && target.state === OBJECT_STATE.ACTIVE) {
+
+				const flags = buffer[offset + 9];
+				const isCollided = (flags & 1) !== 0;
+				const isShattered = (flags & 2) !== 0;
+				const isImpact = (flags & 4) !== 0;
+
+				if (isCollided) {
+					if (isImpact && target.state === OBJECT_STATE.ACTIVE) {
 						this._generateImpactDebris(
 							target, 
-							workerObj.debrisMass / 1e3,
-							this.renderer.m2pix(workerObj.impactVx), 
-							this.renderer.m2pix(workerObj.impactVy),
-							this.renderer.m2pix(workerObj.impactWinnerX),
-							this.renderer.m2pix(workerObj.impactWinnerY),
-							this.renderer.m2pix(workerObj.impactWinnerRadius)
+							buffer[offset + 10] / 1e3,
+							this.renderer.m2pix(buffer[offset + 11]), 
+							this.renderer.m2pix(buffer[offset + 12]),
+							this.renderer.m2pix(buffer[offset + 13]),
+							this.renderer.m2pix(buffer[offset + 14]),
+							this.renderer.m2pix(buffer[offset + 15])
 						);
 					}
 
 					target.setCollided();
 				}
-				
+
 				// Handle object shattered by tidal force in the worker
-				if (workerObj.shattered && target.state === OBJECT_STATE.ACTIVE) {
+				if (isShattered && target.state === OBJECT_STATE.ACTIVE) {
 					this._shatterObject(target);
 				}
 			}
-		});
+		}
 	}
 
 	cleanupObjects() {
