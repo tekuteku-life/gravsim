@@ -14,6 +14,9 @@ export const ROCHE_UNBREAKABLE_DENSITY = 1e10;		// ton/m^3: Objects with density
 export const ROCHE_RIGID_BODY_RADIUS = 10000;		// m: Objects smaller than this radius are considered rigid bodies
 export const ROCHE_RIGID_DESTROYER_MASS = 1e25;		// ton: Minimum mass required to tear apart rigid bodies (e.g., Stars, Black holes)
 
+// UI setting
+export const UI_DOUBLE_TAP_DUARATION = 400;			// Duaration which double tap detected
+
 // Program setting
 export const TIME_SCALE = 1e3;
 export const THROW_SCALE = 4e16;

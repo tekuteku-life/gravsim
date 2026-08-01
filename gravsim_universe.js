@@ -4,6 +4,7 @@
 import {
 	METERS_PER_AU, YEARS_PER_SECOND, G,
 	TIME_SCALE, THROW_SCALE, REMOVE_DISTANCE_AU, 
+	UI_DOUBLE_TAP_DUARATION,
 	HISTORY_LENGTH, DEBRIS_MIN_FRAG,
 	DEBRIS_MAX_GENERATION, DEBRIS_FRAG_DECAY_RATE,
 	OBJECT_STATE, DEFAULT_OBJECT_PARAMS
@@ -30,6 +31,8 @@ function M2AU(m) {
 class ObjectPlacer {
 	constructor(universe) {
 		this.universe = universe;
+		this.isDragging = false;
+		this.wasMultiTouch = false;
 	
 		universe.canvas.addEventListener('mousedown', this.setReadyForLaunch.bind(this));
 		universe.canvas.addEventListener('touchstart', this.setReadyForLaunch.bind(this));
@@ -142,6 +145,17 @@ class ObjectPlacer {
 	}
 
 	setReadyForLaunch(e) {
+		if (e.touches) {
+			if (e.touches.length > 1) {
+				this.isDragging = false;
+				this.wasMultiTouch = true;
+				return;
+			}
+			if (e.touches.length === 1) {
+				this.wasMultiTouch = false;
+			}
+		}
+
 		const pos = this.getLaunchPosition(e);
 		this.startX = pos.x;
 		this.startY = pos.y;
@@ -150,8 +164,11 @@ class ObjectPlacer {
 	}
 
 	goLaunch(e) {
-		if (!this.isDragging) return; // Ensure we are in dragging state
-		this.isDragging = false; // Reset dragging state
+		if (!this.isDragging || this.wasMultiTouch) {
+			this.isDragging = false;
+			return; 
+		}
+		this.isDragging = false;
 		
 		const name = this.getLaunchObjectName();
 		const pos = this.getLaunchPosition(e);
@@ -259,10 +276,27 @@ export class Universe {
 	// Core Loop & Control
 	// ------------------------------------------
 	_initInput() {
+		// Reset for PC
 		this.canvas.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
 			this.reset();
 		});
+
+		// Reset for smart phone (double tap with 2 fingers)
+		let lastTwoFingerTapTime = 0;
+		this.canvas.addEventListener('touchstart', (e) => {
+			if (e.touches && e.touches.length === 2) {
+				const now = Date.now();
+
+				if (now - lastTwoFingerTapTime < UI_DOUBLE_TAP_DUARATION) {
+					e.preventDefault();
+					this.reset();
+					lastTwoFingerTapTime = 0; 
+				} else {
+					lastTwoFingerTapTime = now;
+				}
+			}
+		}, { passive: false });
 	}
 
 	reset() {
