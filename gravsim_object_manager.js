@@ -1,6 +1,9 @@
 import {
 	G, REMOVE_DISTANCE_AU, DEBRIS_MIN_FRAG,
-	DEBRIS_FRAG_DECAY_RATE, OBJECT_STATE
+	DEBRIS_FRAG_DECAY_RATE, OBJECT_STATE,
+	DEBRIS_IMPACT_SCATTER_BASE, DEBRIS_IMPACT_SCATTER_VAR,
+	DEBRIS_SHATTER_SCATTER_BASE, DEBRIS_SHATTER_SCATTER_VAR,
+	DEBRIS_MASS_VAR_BASE, DEBRIS_MASS_VAR_RANGE,
 } from './gravsim_const.js';
 import { GravSimObject } from './gravsim_object.js';
 
@@ -114,12 +117,48 @@ export class ObjectManager {
 		this.objects = this.objects.filter(obj => !obj.finished());
 	}
 
+	_spawnDebrisParticles(sourceObj, fragmentCount, baseMass, debrisColor, nextGen,
+		baseVx, baseVy, centerX, centerY, scatterBaseM, scatterVarM, impactData = null) {
+		for (let i = 0; i < fragmentCount; i++) {
+			const massVariation = DEBRIS_MASS_VAR_BASE + (Math.random() * DEBRIS_MASS_VAR_RANGE);
+			const fragMass = baseMass * massVariation;
+			const fragRadius = sourceObj.radius * Math.cbrt(fragMass / sourceObj.mass);
+
+			let angle, fragX, fragY;
+			if (impactData) {
+				const marginPx = this.renderer.m2pix(fragRadius * 2);
+				const spawnRadiusPx = impactData.winnerRadiusPx + Math.max(marginPx, 2);
+				const spreadAngle = (Math.random() - 0.5) * Math.PI;
+				angle = impactData.baseAngle + spreadAngle;
+				fragX = centerX + impactData.nx * spawnRadiusPx + Math.cos(angle) * (Math.random() * 5);
+				fragY = centerY + impactData.ny * spawnRadiusPx + Math.sin(angle) * (Math.random() * 5);
+			} else {
+				const spreadPx = this.renderer.m2pix(sourceObj.radius * 2);
+				angle = (i / fragmentCount) * Math.PI * 2;
+				fragX = centerX + Math.cos(angle) * spreadPx;
+				fragY = centerY + Math.sin(angle) * spreadPx;
+			}
+
+			const scatterPx = this.renderer.m2pix(scatterBaseM + (Math.random() * scatterVarM));
+			const fragVx = baseVx + (Math.cos(angle) * scatterPx);
+			const fragVy = baseVy + (Math.sin(angle) * scatterPx);
+
+			const fragName = sourceObj.name.endsWith(' Debris') ? sourceObj.name : `${sourceObj.name} Debris`;
+
+			const fragment = new GravSimObject(
+				fragName, fragX, fragY, fragVx, fragVy, fragMass, debrisColor, 
+				Math.log10(fragRadius * 8) / 2.5, fragRadius, nextGen
+			);
+			this.addObject(fragment);
+		}
+	}
+
 	_generateImpactDebris(loserObj, totalDebrisMass, baseVx, baseVy, winnerX, winnerY, winnerRadiusPx) {
 		this.renderer.addShockwave(loserObj.x, loserObj.y, loserObj.color);
 
 		if (totalDebrisMass <= 0) { return; }
 
-		const fragmentCount = Math.max(3, Math.floor(Math.log10(totalDebrisMass) * 1.5));
+		const fragmentCount = Math.max(DEBRIS_MIN_FRAG, Math.floor(Math.log10(totalDebrisMass) * 1.5));
 		const baseMass = totalDebrisMass / fragmentCount;
 		const debrisColor = this._mixWithGray(loserObj.color, 0.4);
 
@@ -132,40 +171,12 @@ export class ObjectManager {
 		const ny = dy / dist;
 		const baseAngle = Math.atan2(ny, nx);
 
-		for (let i = 0; i < fragmentCount; i++) {
-			const massVariation = 0.8 + (Math.random() * 0.4); 
-			const fragMass = baseMass * massVariation;
-			const fragRadius = loserObj.radius * Math.cbrt(fragMass / loserObj.mass);
-			
-			// Shift spawn position to avoid re-collision
-			const marginPx = this.renderer.m2pix(fragRadius * 2);
-			const spawnRadiusPx = winnerRadiusPx + Math.max(marginPx, 2); 
-			
-			// Scatter along normals
-			const spreadAngle = (Math.random() - 0.5) * Math.PI;
-			const angle = baseAngle + spreadAngle;
-			
-			const fragX = winnerX + nx * spawnRadiusPx + Math.cos(angle) * (Math.random() * 5);
-			const fragY = winnerY + ny * spawnRadiusPx + Math.sin(angle) * (Math.random() * 5);
-			
-			const scatterPx = this.renderer.m2pix(2000 + (Math.random() * 3000));
-			const fragVx = baseVx + (Math.cos(angle) * scatterPx);
-			const fragVy = baseVy + (Math.sin(angle) * scatterPx);
-
-			const fragName = loserObj.name.endsWith(' Debris') ? loserObj.name : `${loserObj.name} Debris`;
-
-			const fragment = new GravSimObject(
-				fragName,
-				fragX, fragY,
-				fragVx, fragVy,
-				fragMass,
-				debrisColor,
-				Math.log10(fragRadius * 8) / 2.5,
-				fragRadius,
-				1
-			);
-			this.addObject(fragment);
-		}
+		this._spawnDebrisParticles(
+			loserObj, fragmentCount, baseMass, debrisColor, 1,
+			baseVx, baseVy, winnerX, winnerY,
+			DEBRIS_IMPACT_SCATTER_BASE, DEBRIS_IMPACT_SCATTER_VAR,
+			{ nx, ny, baseAngle, winnerRadiusPx }
+		);
 	}
 
 	// Vanish target object and create debris
@@ -193,41 +204,12 @@ export class ObjectManager {
 		const debrisColor = this._mixWithGray(obj.color, 0.6);
 
 		// Generate debris
-		for (let i = 0; i < fragmentCount; i++) {
-			// Decide the mass by random (ignore the accuracy)
-			const massVariation = 0.8 + (Math.random() * 0.4); 
-			const fragMass = baseMass * massVariation;
-
-			// Calculate the radius based on the mass (r ∝ M^(1/3))
-			const fragRadius = obj.radius * Math.cbrt(fragMass / obj.mass);
-			
-			// Append random coordinates to original coordinates
-			const angle = (i / fragmentCount) * Math.PI * 2;
-			const spreadPx = this.renderer.m2pix(obj.radius * 2);
-			const fragX = obj.x + Math.cos(angle) * spreadPx;
-			const fragY = obj.y + Math.sin(angle) * spreadPx;
-			
-			// Append random velocity to original velocity (almost 1km/s = 1000m/s)
-			const scatterPx = this.renderer.m2pix(1000 + (Math.random() * 2000));
-			const fragVx = obj.vx + (Math.cos(angle) * scatterPx);
-			const fragVy = obj.vy + (Math.sin(angle) * scatterPx);
-
-			// Deploy debris objects
-			const fragName = obj.name.endsWith(' Debris') ? obj.name : `${obj.name} Debris`;
-
-			// Deploy debris objects
-			const fragment = new GravSimObject(
-				fragName,
-				fragX, fragY,
-				fragVx, fragVy,
-				fragMass,
-				debrisColor,
-				Math.log10(fragRadius * 8) / 2.5,
-				fragRadius,
-				nextGen
-			);
-			this.addObject(fragment);
-		}
+		this._spawnDebrisParticles(
+			obj, fragmentCount, baseMass, debrisColor, nextGen,
+			obj.vx, obj.vy, obj.x, obj.y,
+			DEBRIS_SHATTER_SCATTER_BASE, DEBRIS_SHATTER_SCATTER_VAR,
+			null
+		);
 	}
 
 	// Mix with gray (#808080)

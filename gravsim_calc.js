@@ -3,12 +3,10 @@
 import {
 	G, C, YEARS_PER_SECOND,
 	TIME_SCALE,
-	ROCHE_MIN_MASS_TO_DESTROY,
-	ROCHE_UNBREAKABLE_DENSITY,
-	ROCHE_RIGID_BODY_RADIUS,
-	ROCHE_RIGID_DESTROYER_MASS,
-	DEBRIS_MAX_GENERATION,
-	DEBRIS_MIN_MASS_TO_SHATTER,
+	ROCHE_MIN_MASS_TO_DESTROY, ROCHE_UNBREAKABLE_DENSITY,
+	ROCHE_RIGID_BODY_RADIUS, ROCHE_RIGID_DESTROYER_MASS,
+	DEBRIS_MAX_GENERATION, DEBRIS_MIN_MASS_TO_SHATTER,
+	CALC_EXPAND_DIV_NUM, CALC_SUB_STEPS_BASE, CALC_SUB_STEPS_MAX,
 } from './gravsim_const.js'
 
 const CALC_INTERVAL = 60;
@@ -73,7 +71,7 @@ class GravSimCalcObject {
 		const expandRadiusSum = radiusSum + (max_v1 + max_v2) * dt;
 		
 		if (distSq < expandRadiusSum * expandRadiusSum) {
-			const EXPAND_DIV_NUM = 20;
+			const EXPAND_DIV_NUM = CALC_EXPAND_DIV_NUM;
 			for( let i = 1; i < EXPAND_DIV_NUM; i++ ) {
 				const dts = dt / EXPAND_DIV_NUM * i;
 				const dxs = other.getXt(dts) - this.getXt(dts);
@@ -344,8 +342,8 @@ class SimulationController {
 		this.lastTime = now;
 
 		// Calculate sub-step
-		let SUB_STEPS = Math.ceil(600 * this.timeScale);
-		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, 480));
+		let SUB_STEPS = Math.ceil(CALC_SUB_STEPS_BASE * this.timeScale);
+		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, CALC_SUB_STEPS_MAX));
 		const dt = totalDt / SUB_STEPS;
 
 		for (let i = 0; i < SUB_STEPS; i++) {

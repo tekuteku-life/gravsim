@@ -3,7 +3,9 @@
 
 import {
 	DISTANCE_SCALE, TARGET_TRAIL_LENGTH_AU, HISTORY_LENGTH,
-	OBJECT_STATE, METERS_PER_AU
+	OBJECT_STATE, METERS_PER_AU,
+	SPARKLE_ANIM_SPEED, SPARKLE_ROTATE_SPEED,
+	SPARKLE_STAR_SIZE_RATIO, SPARKLE_STAR_INNER_SIZE_RATIO,
 } from './gravsim_const.js';
 
 /*******************************************************************
@@ -218,18 +220,18 @@ export class GravSimObject {
 
 	_drawSparkle(ctx, x, y, drawRadius) {
 		const now = Date.now();
-		const blink = Math.abs(Math.sin(now / 80 + this.id)); 
-		
+		const blink = Math.abs(Math.sin(now / SPARKLE_ANIM_SPEED + this.id)); 
+
 		ctx.save();
 		ctx.translate(x, y);
-		ctx.rotate(now / 500); 
-		
+		ctx.rotate(now / SPARKLE_ROTATE_SPEED); 
+
 		ctx.globalAlpha = blink;
 		ctx.fillStyle = "#FFFFFF"; 
-		
-		const starSize = drawRadius * 3.0; 
-		const innerSize = drawRadius * 0.4; 
-		
+
+		const starSize = drawRadius * SPARKLE_STAR_SIZE_RATIO; 
+		const innerSize = drawRadius * SPARKLE_STAR_INNER_SIZE_RATIO; 
+
 		ctx.beginPath();
 		ctx.moveTo(0, -starSize);
 		ctx.lineTo(innerSize, -innerSize);
@@ -240,7 +242,7 @@ export class GravSimObject {
 		ctx.lineTo(-starSize, 0);
 		ctx.lineTo(-innerSize, -innerSize);
 		ctx.fill();
-		
+
 		ctx.restore();
 	}
 

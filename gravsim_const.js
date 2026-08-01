@@ -34,11 +34,27 @@ export const DEBRIS_SHOCKWAVE_RADIUS = 100;			// Max radius of shock-wave
 export const DEBRIS_MAX_GENERATION = 3;				// Max generation of shattering
 export const DEBRIS_MIN_MASS_TO_SHATTER = 1e21;		// minimum mass to shatter (kg) (Earth / 6)
 export const DEBRIS_FRAG_DECAY_RATE = 4;			// Decrease ratio per generation
+export const DEBRIS_IMPACT_SCATTER_BASE = 2000;		// Impact scatter base (m/s)
+export const DEBRIS_IMPACT_SCATTER_VAR = 3000;		// Impact scatter variation (m/s)
+export const DEBRIS_SHATTER_SCATTER_BASE = 1000;	// Shatter scatter base (m/s)
+export const DEBRIS_SHATTER_SCATTER_VAR = 2000;		// Shatter scatter variation (m/s)
+export const DEBRIS_MASS_VAR_BASE = 0.8;			// Debris's mass variation base
+export const DEBRIS_MASS_VAR_RANGE = 0.4;			// Debris's mass variation range
 
 export const SCALE_BAR_WIDTH = 150;					// scale bar width (px)
 export const SCALE_BAR_LINE_WIDTH = 2;				// scale bar line width (px)
 export const SCALE_BAR_RIGHT = 20;					// position from right-side (px)
 export const SCALE_BAR_BOTTOM = 20;					// position from bottom (px)
+
+export const CALC_EXPAND_DIV_NUM = 20;				// The number of division for expanding collision detection
+export const CALC_SUB_STEPS_BASE = 600;				// Base sub-step
+export const CALC_SUB_STEPS_MAX = 480;				// Max sub-step
+
+export const SPARKLE_ANIM_SPEED = 80;				// Sparkle blinking speed
+export const SPARKLE_ROTATE_SPEED = 500;			// Sparkle rotate speed
+export const SPARKLE_STAR_SIZE_RATIO = 3.0;			// Sparkle star size ration (based on object's radius)
+export const SPARKLE_STAR_INNER_SIZE_RATIO = 0.4;	// Sparkle star inner-size ration (based on object's radius)
+
 
 // constant definition
 export const OBJECT_STATE = {
