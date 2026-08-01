@@ -28,6 +28,9 @@ export const DEBRIS_MIN_FRAG = 3;					// The min number of fragment
 export const DEBRIS_GRAY_MIX_RATIO = 0.6;			// gray blending ratio of becoming debris (0.0=original, 1.0=gray)
 export const DEBRIS_SHOCKWAVE_TIME = 800;			// Duaration of shock-wave when debris generated
 export const DEBRIS_SHOCKWAVE_RADIUS = 100;			// Max radius of shock-wave
+export const DEBRIS_MAX_GENERATION = 3;				// Max generation of shattering
+export const DEBRIS_MIN_MASS_TO_SHATTER = 1e21;		// minimum mass to shatter (kg) (Earth / 6)
+export const DEBRIS_FRAG_DECAY_RATE = 4;			// Decrease ratio per generation
 
 export const SCALE_BAR_WIDTH = 150;					// scale bar width (px)
 export const SCALE_BAR_LINE_WIDTH = 2;				// scale bar line width (px)

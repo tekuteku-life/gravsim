@@ -6,7 +6,9 @@ import {
 	ROCHE_MIN_MASS_TO_DESTROY,
 	ROCHE_UNBREAKABLE_DENSITY,
 	ROCHE_RIGID_BODY_RADIUS,
-	ROCHE_RIGID_DESTROYER_MASS
+	ROCHE_RIGID_DESTROYER_MASS,
+	DEBRIS_MAX_GENERATION,
+	DEBRIS_MIN_MASS_TO_SHATTER,
 } from './gravsim_const.js'
 
 const CALC_INTERVAL = 60;
@@ -15,7 +17,7 @@ const CALC_INTERVAL = 60;
  * Entity Class
 *******************************************************************/
 class GravSimCalcObject {
-	constructor(id, x, y, vx, vy, ax, ay, mass, radius, isDebris) {
+	constructor(id, x, y, vx, vy, ax, ay, mass, radius, generation) {
 		this.id = id;
 		this.x = x;
 		this.y = y;
@@ -27,7 +29,15 @@ class GravSimCalcObject {
 		this.radius = radius;
 		this.collided = false;
 		this.shattered = false;
-		this.isDebris = isDebris || false;
+		this.generation = generation || 0;
+		this.isDebris = this.generation > 0;
+		this.isImpact = false;
+		this.debrisMass = 0;
+		this.impactVx = 0;
+		this.impactVy = 0;
+		this.impactWinnerX = 0;
+		this.impactWinnerY = 0;
+		this.impactWinnerRadius = 0;
 	}
 	
 	getXt(dt) { return this.x + this.vx * dt + 1/2 * this.ax * dt * dt; }
@@ -94,7 +104,7 @@ class PhysicsEngine {
 			data.vx || 0, data.vy || 0,
 			data.ax || 0, data.ay || 0,
 			data.mass || 1, data.radius || 1,
-			data.isDebris || false
+			data.generation || 0
 		));
 	}
 
@@ -136,8 +146,66 @@ class PhysicsEngine {
 				if (other.collided || other.shattered) continue;
 
 				if (obj.isColliding(other, dt)) {
-					if (obj.mass < other.mass) obj.collided = true;
-					else other.collided = true;
+					// Winner is bigger one, loser is smaller one
+					let winner, loser;
+					if (obj.mass >= other.mass) { winner = obj; loser = other; }
+					else { winner = other; loser = obj; }
+
+					// Calculate velocity according to the law of conservation of momentum
+					const totalMass = winner.mass + loser.mass;
+					const newVx = (winner.mass * winner.vx + loser.mass * loser.vx) / totalMass;
+					const newVy = (winner.mass * winner.vy + loser.mass * loser.vy) / totalMass;
+					
+					// 相対速度の2乗
+					const dvx = winner.vx - loser.vx;
+					const dvy = winner.vy - loser.vy;
+					const vRelSq = dvx * dvx + dvy * dvy;
+
+					// 衝突時の合成天体の脱出速度の2乗 (v_esc^2 = 2GM / R)
+					const escapeVSq = (2 * G * totalMass) / (winner.radius + loser.radius);
+
+					// Energy ratio (higher value generates more debris)
+					const energyRatio = vRelSq / escapeVSq;
+
+					// Mass ration (the most debris if =1.0)
+					const massRatio = loser.mass / winner.mass;
+
+					let debrisRatio = 0;
+					const winnerDensity = winner.mass / Math.pow(winner.radius, 3);
+					
+					// Debris isn't disrupted
+					if (winnerDensity <= ROCHE_UNBREAKABLE_DENSITY && !loser.isDebris) {
+						debrisRatio = massRatio * (energyRatio * 0.5);
+						debrisRatio = Math.max(0.0, Math.min(debrisRatio, 0.9));
+						
+						// Ignore tiny debris
+						if (debrisRatio < 1e-4) {
+							debrisRatio = 0;
+						}
+					}
+
+					const debrisMass = loser.mass * debrisRatio;
+					const absorbedMass = loser.mass - debrisMass;
+
+					const oldWinnerMass = winner.mass;
+					winner.mass += absorbedMass;
+					winner.radius = winner.radius * Math.cbrt(winner.mass / oldWinnerMass);
+					
+					winner.vx = newVx;
+					winner.vy = newVy;
+
+					loser.collided = true;
+					// 修正: デブリ質量がゼロの場合でも、元がデブリでなければ衝撃波は発生させる[cite: 11]
+					if (debrisMass > 0 || !loser.isDebris) {
+						loser.isImpact = true;
+					}
+					loser.debrisMass = debrisMass;
+					loser.impactVx = newVx;
+					loser.impactVy = newVy;
+					// 追加: 勝者の情報を記録[cite: 11]
+					loser.impactWinnerX = winner.x;
+					loser.impactWinnerY = winner.y;
+					loser.impactWinnerRadius = winner.radius;
 				}
 			}
 		}
@@ -158,8 +226,8 @@ class PhysicsEngine {
 				if (i === j) { continue; }
 				const fragileObj = this.objects[j];
 
-				if (fragileObj.collided || fragileObj.shattered || fragileObj.isDebris) { continue; }
-				
+				if (fragileObj.collided || fragileObj.shattered) { continue; }
+
 				// Destructee must be smaller than destructor
 				if (massiveObj.mass <= fragileObj.mass) { continue; }
 
@@ -167,8 +235,14 @@ class PhysicsEngine {
 				const fragileDensity = fragileObj.mass / Math.pow(fragileObj.radius, 3);
 				if (fragileDensity > ROCHE_UNBREAKABLE_DENSITY) { continue; }
 
-				// Destructee must be smaller than radius-threthold
+				// Destructee must be smaller than radius-threshold
 				if (fragileObj.radius < ROCHE_RIGID_BODY_RADIUS) { continue; }
+
+				// Limit the generation of debris
+				if (fragileObj.generation >= DEBRIS_MAX_GENERATION) { continue; }
+
+				// Destructee debris must be larger than threshold
+				if (fragileObj.isDebris && fragileObj.mass < DEBRIS_MIN_MASS_TO_SHATTER) { continue; }
 
 				// Calculate roche-limit
 				const rocheLimitM = 2.44 * massiveObj.radius * Math.cbrt(massiveDensity / fragileDensity);
@@ -301,6 +375,13 @@ class SimulationController {
 			radius: obj.radius || 1,
 			collided: obj.collided || false,
 			shattered: obj.shattered || false,
+			isImpact: obj.isImpact || false,
+			debrisMass: obj.debrisMass || 0,
+			impactVx: obj.impactVx || 0,
+			impactVy: obj.impactVy || 0,
+			impactWinnerX: obj.impactWinnerX || 0,
+			impactWinnerY: obj.impactWinnerY || 0,
+			impactWinnerRadius: obj.impactWinnerRadius || 0,
 		}));
 	}
 }

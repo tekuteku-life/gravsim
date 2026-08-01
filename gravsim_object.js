@@ -23,7 +23,7 @@ import {
 *******************************************************************/
 export class GravSimObject {
 	constructor(name, x, y, vx, vy, mass, color, size, radius,
-		isDebris = false, borderColor = null, borderWidth = 0) {
+		generation = 0, borderColor = null, borderWidth = 0) {
 		GravSimObject._idCounter = (GravSimObject._idCounter || 0);
 
 		this.name = name;
@@ -43,7 +43,8 @@ export class GravSimObject {
 
 		this.state = OBJECT_STATE.ACTIVE;
 		this.history = [];
-		this.isDebris = isDebris;
+		this.generation = generation;
+		this.isDebris = this.generation > 0;
 
 		GravSimObject._idCounter++;
 	}
