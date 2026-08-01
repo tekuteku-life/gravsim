@@ -4,7 +4,7 @@
 import {
 	METERS_PER_AU, YEARS_PER_SECOND, G,
 	TIME_SCALE, THROW_SCALE, REMOVE_DISTANCE_AU, 
-	UI_DOUBLE_TAP_DUARATION,
+	UI_DOUBLE_TAP_DURATION,
 	HISTORY_LENGTH, DEBRIS_MIN_FRAG,
 	DEBRIS_MAX_GENERATION, DEBRIS_FRAG_DECAY_RATE,
 	OBJECT_STATE, DEFAULT_OBJECT_PARAMS
@@ -288,7 +288,7 @@ export class Universe {
 			if (e.touches && e.touches.length === 2) {
 				const now = Date.now();
 
-				if (now - lastTwoFingerTapTime < UI_DOUBLE_TAP_DUARATION) {
+				if (now - lastTwoFingerTapTime < UI_DOUBLE_TAP_DURATION) {
 					e.preventDefault();
 					this.reset();
 					lastTwoFingerTapTime = 0; 

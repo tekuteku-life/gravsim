@@ -167,7 +167,7 @@ class PhysicsEngine {
 					// Energy ratio (higher value generates more debris)
 					const energyRatio = vRelSq / escapeVSq;
 
-					// Mass ration (the most debris if =1.0)
+					// Mass ratio (the most debris if =1.0)
 					const massRatio = loser.mass / winner.mass;
 
 					let debrisRatio = 0;

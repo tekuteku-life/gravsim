@@ -15,7 +15,7 @@ export const ROCHE_RIGID_BODY_RADIUS = 10000;		// m: Objects smaller than this r
 export const ROCHE_RIGID_DESTROYER_MASS = 1e25;		// ton: Minimum mass required to tear apart rigid bodies (e.g., Stars, Black holes)
 
 // UI setting
-export const UI_DOUBLE_TAP_DUARATION = 400;			// Duaration which double tap detected
+export const UI_DOUBLE_TAP_DURATION = 400;			// Duration which double tap detected
 
 // Program setting
 export const TIME_SCALE = 1e3;
@@ -29,7 +29,7 @@ export const DISTANCE_SCALE = 180;					// AU/px
 
 export const DEBRIS_MIN_FRAG = 3;					// The min number of fragment
 export const DEBRIS_GRAY_MIX_RATIO = 0.6;			// gray blending ratio of becoming debris (0.0=original, 1.0=gray)
-export const DEBRIS_SHOCKWAVE_TIME = 800;			// Duaration of shock-wave when debris generated
+export const DEBRIS_SHOCKWAVE_TIME = 800;			// Duration of shock-wave when debris generated
 export const DEBRIS_SHOCKWAVE_RADIUS = 100;			// Max radius of shock-wave
 export const DEBRIS_MAX_GENERATION = 3;				// Max generation of shattering
 export const DEBRIS_MIN_MASS_TO_SHATTER = 1e21;		// minimum mass to shatter (kg) (Earth / 6)
