@@ -43,6 +43,7 @@ export class GravSimObject {
 
 		this.state = OBJECT_STATE.ACTIVE;
 		this.history = [];
+		this.deadFrames = 0;
 		this.generation = generation;
 		this.isDebris = this.generation > 0;
 
@@ -69,6 +70,8 @@ export class GravSimObject {
 			return;
 		}
 
+		this.deadFrames = this.deadFrames + 1;
+
 		if (this.history.length > 0) {
 			this.history.shift();
 		}
@@ -89,6 +92,7 @@ export class GravSimObject {
 
 	setCollided() {
 		this.state = OBJECT_STATE.REMOVED;
+		this.deadFrames = 0;
 	}
 
 	setPosition(x, y) {
@@ -123,7 +127,8 @@ export class GravSimObject {
 
 	getRelativeHistoryX(i, basis) {
 		if( basis ) {
-			const basisIdx = basis.history.length - (this.history.length - i);
+			const deadOffset = this.deadFrames;
+			const basisIdx = basis.history.length - (this.history.length - i) - deadOffset;
 			if (basisIdx >= 0 && basisIdx < basis.history.length) {
 				return this.history[i].x - basis.history[basisIdx].x;
 			}
@@ -136,7 +141,8 @@ export class GravSimObject {
 	}
 	getRelativeHistoryY(i, basis) {
 		if( basis ) {
-			const basisIdx = basis.history.length - (this.history.length - i);
+			const deadOffset = this.deadFrames;
+			const basisIdx = basis.history.length - (this.history.length - i) - deadOffset;
 			if (basisIdx >= 0 && basisIdx < basis.history.length) {
 				return this.history[i].y - basis.history[basisIdx].y;
 			}
