@@ -20,11 +20,21 @@ export class ObjectPlacer {
 		this.universe = universe;
 		this.isDragging = false;
 		this.wasMultiTouch = false;
-	
-		universe.canvas.addEventListener('mousedown', this.setReadyForLaunch.bind(this));
-		universe.canvas.addEventListener('touchstart', this.setReadyForLaunch.bind(this));
-		universe.canvas.addEventListener('mouseup', this.goLaunch.bind(this));
-		universe.canvas.addEventListener('touchend', this.goLaunch.bind(this));
+
+		this.boundSetReady = this.setReadyForLaunch.bind(this);
+		this.boundGoLaunch = this.goLaunch.bind(this);
+
+		universe.canvas.addEventListener('mousedown', this.boundSetReady);
+		universe.canvas.addEventListener('touchstart', this.boundSetReady);
+		universe.canvas.addEventListener('mouseup', this.boundGoLaunch);
+		universe.canvas.addEventListener('touchend', this.boundGoLaunch);
+	}
+
+	destroy() {
+		this.universe.canvas.removeEventListener('mousedown', this.boundSetReady);
+		this.universe.canvas.removeEventListener('touchstart', this.boundSetReady);
+		this.universe.canvas.removeEventListener('mouseup', this.boundGoLaunch);
+		this.universe.canvas.removeEventListener('touchend', this.boundGoLaunch);
 	}
 
 	placeObject(objName, x, y, vx = 0, vy = 0) {
