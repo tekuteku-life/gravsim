@@ -40,13 +40,18 @@ export class ObjectPlacer {
 
 	placeObject(objName, x, y, vx = 0, vy = 0, options = {}) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
+
+		const minDrawSize = param.MIN_DRAW_SIZE !== undefined 
+			? param.MIN_DRAW_SIZE 
+			: Math.log10((param.RADIUS || 1) * 8) / 2.5;
+
 		const obj = new GravSimObject(
 			param.NAME,
 			x, y,
 			vx, vy,
 			param.MASS,
 			param.COLOR,
-			Math.log10((param.RADIUS || 1)*8)/2.5,
+			minDrawSize,
 			param.RADIUS || 1,
 			0,
 			param.BORDER_COLOR || null,

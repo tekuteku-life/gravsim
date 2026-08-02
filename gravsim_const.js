@@ -184,5 +184,6 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"MASS" : 5.75e4 / 1e3,
 		"COLOR": "#32CD32",
 		"RADIUS": 63,
+		"MIN_DRAW_SIZE": 2,
 	},
 };
