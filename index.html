@@ -21,24 +21,28 @@
 		<label for="center-select">Center Object (Camera):</label>
 		<select id="center-select" name="center"></select>
 
-		<label for="mass-select">Object Mass:</label>
-		<select id="mass-select" name="mass"></select><br>
-
-		<span>Orbital deploy:</span>
-		<button type="button" id="put-neptune-btn" class="deploy-btn">Neptune</button>
-		<button type="button" id="put-uranus-btn" class="deploy-btn">Uranus</button>
-		<button type="button" id="put-saturn-btn" class="deploy-btn">Saturn</button>
-		<button type="button" id="put-jupiter-btn" class="deploy-btn">Jupiter</button>
-		<button type="button" id="put-mars-btn" class="deploy-btn">Mars</button>
-		<button type="button" id="put-earth-btn" class="deploy-btn">Earth</button>
-		<button type="button" id="put-venus-btn" class="deploy-btn">Venus</button>
-		<button type="button" id="put-mercury-btn" class="deploy-btn">Mercury</button>
-		<button type="button" id="put-moon-btn" class="deploy-btn">Moon (around Earth)</button>
-
 		<hr class="panel-divider">
 
-		<span>Rocket Launch Menu:</span>
-		<button type="button" id="rl-toggle-btn">Open</button>
+		<div class="menu-mode-container">
+			<label><input type="radio" name="menu-mode" value="easy" checked> Easy Deploy</label>
+			<label><input type="radio" name="menu-mode" value="rocket"> Rocket Launch</label>
+		</div>
+
+		<div id="easy-settings">
+			<label for="mass-select">Object Mass:</label>
+			<select id="mass-select" name="mass"></select><br>
+
+			<span>Orbital deploy:</span>
+			<button type="button" id="put-neptune-btn" class="deploy-btn">Neptune</button>
+			<button type="button" id="put-uranus-btn" class="deploy-btn">Uranus</button>
+			<button type="button" id="put-saturn-btn" class="deploy-btn">Saturn</button>
+			<button type="button" id="put-jupiter-btn" class="deploy-btn">Jupiter</button>
+			<button type="button" id="put-mars-btn" class="deploy-btn">Mars</button>
+			<button type="button" id="put-earth-btn" class="deploy-btn">Earth</button>
+			<button type="button" id="put-venus-btn" class="deploy-btn">Venus</button>
+			<button type="button" id="put-mercury-btn" class="deploy-btn">Mercury</button>
+			<button type="button" id="put-moon-btn" class="deploy-btn">Moon (around Earth)</button>
+		</div>
 
 		<div id="rl-settings">
 			<label>Placement Mode:</label>

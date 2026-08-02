@@ -33,8 +33,10 @@ export class ControlPanel {
 			centerSelect: document.getElementById('center-select'),
 			moonBtn: document.getElementById('put-moon-btn'),
 
-			rlToggleBtn: document.getElementById('rl-toggle-btn'),
+			menuModeRadios: document.querySelectorAll('input[name="menu-mode"]'),
+			easySettings: document.getElementById('easy-settings'),
 			rlSettings: document.getElementById('rl-settings'),
+
 			rlModeSelect: document.getElementById('rl-mode-select'),
 			rlHostOptions: document.getElementById('rl-host-options'),
 			rlHostSelect: document.getElementById('rl-host-select'),
@@ -107,17 +109,31 @@ export class ControlPanel {
 		canvas.addEventListener('touchend', (e) => this._resetTouchDist(e));
 		canvas.addEventListener('touchcancel', () => this._resetTouchDist(null));
 
-		// --- Rocket Launcher Events ---
-		if (this.ui.rlToggleBtn) {
-			this.ui.rlToggleBtn.addEventListener('click', () => {
-				const rl = this.universe.RocketLauncher;
-				rl.togglePreview();
-				this.ui.rlSettings.style.display = rl.isActive ? 'block' : 'none';
-				this.ui.rlToggleBtn.textContent = rl.isActive ? 'Disable Preview' : 'Enable Preview';
-				if (rl.isActive) {
-					this._updateRocketHostOptions();
-					this._updateRocketStats();
-				}
+		if (this.ui.menuModeRadios) {
+			this.ui.menuModeRadios.forEach(radio => {
+				radio.addEventListener('change', (e) => {
+					const mode = e.target.value;
+					
+					if (mode === 'easy') {
+						// Open Easy Deploy Menu
+						this.ui.easySettings.style.display = 'block';
+						
+						// Close Rocket Launch Menu
+						this.universe.RocketLauncher.togglePreview(false);
+						this.ui.rlSettings.style.display = 'none';
+					} else if (mode === 'rocket') {
+						// Close Easy Deploy Menu
+						this.ui.easySettings.style.display = 'none';
+
+						// Open Rocket Launch Menu
+						this.universe.RocketLauncher.togglePreview(true);
+						this.ui.rlSettings.style.display = 'block';
+						
+						// Update stats when opened
+						this._updateRocketHostOptions();
+						this._updateRocketStats();
+					}
+				});
 			});
 		}
 
@@ -175,8 +191,10 @@ export class ControlPanel {
 		if (this.ui.rlExecuteBtn) {
 			this.ui.rlExecuteBtn.addEventListener('click', () => {
 				this.universe.RocketLauncher.executeLaunch();
-				this.ui.rlSettings.style.display = 'none';
-				this.ui.rlToggleBtn.textContent = 'Enable Preview';
+				
+				// Re-enable preview automatically for the next launch
+				this.universe.RocketLauncher.togglePreview(true);
+				this._updateRocketStats();
 			});
 		}
 	}

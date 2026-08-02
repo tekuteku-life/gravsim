@@ -30,6 +30,7 @@ canvas {
 	padding: 10px;
 	border-radius: 5px;
 	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+	width: 90%;
 
 	user-select: none;
 	-webkit-user-select: none;
@@ -46,6 +47,18 @@ canvas {
 }
 #ctrl-panel label:first-of-type::before {
   content: none;
+}
+#ctrl-panel #rl-settings label::before {
+	content: none;
+}
+#rl-settings label {
+	display: inline-block;
+	margin-top: 8px;
+}
+#rl-settings > label:first-of-type,
+#rl-host-options > label:first-of-type,
+.launch-params > label:first-of-type {
+	margin-top: 0;
 }
 
 #info-panel {
@@ -69,6 +82,26 @@ canvas {
 	line-height: 0.5;
 }
 
+/* Menu Mode Selection */
+.menu-mode-container {
+	margin-bottom: 10px;
+	font-weight: bold;
+}
+.menu-mode-container label {
+	margin-right: 10px;
+	cursor: pointer;
+	font-weight: normal;
+}
+.menu-mode-container label::before {
+	content: none !important;
+}
+
+/* Easy Settings Container */
+#easy-settings {
+	display: block; /* Default is open */
+	margin-top: 8px;
+}
+
 /* Range Slider Widths */
 .slider-main {
 	width: 60%;
@@ -86,11 +119,6 @@ canvas {
 /* Divider */
 .panel-divider {
 	margin: 15px 0;
-}
-
-/* Preview Toggle Button */
-#rl-toggle-btn {
-	margin-bottom: 8px;
 }
 
 /* Settings Container */
