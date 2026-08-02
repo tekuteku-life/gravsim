@@ -10,6 +10,7 @@ import { InfoPanel } from './gravsim_info_panel.js';
 import { ControlPanel } from './gravsim_control_panel.js';
 import { ObjectManager } from './gravsim_object_manager.js';
 import { ObjectPlacer } from './gravsim_object_placer.js';
+import { RocketLauncher } from './gravsim_rocket_launcher.js';
 
 const GRAVSIM_CALC_JS_FILE = './gravsim_calc.js';
 
@@ -65,6 +66,7 @@ export class Universe {
 		this.InfoPanel = new InfoPanel();
 		this.ControlPanel = new ControlPanel(this);
 		this.ObjectPlacer = new ObjectPlacer(this);
+		this.RocketLauncher = new RocketLauncher(this);
 
 		this.timeScale = this.ControlPanel.getTimeScale();
 		
@@ -162,5 +164,12 @@ export class Universe {
 
 	draw() {
 		this.Renderer.draw(this.objects, this.centerObject);
+
+		this.ctx = this.canvas.getContext('2d');
+		this.ctx.save();
+		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+		this.ctx.scale(this.zoomScale, this.zoomScale);
+		this.RocketLauncher.drawPreview(this.ctx, this.centerObject, 1 / this.zoomScale);
+		this.ctx.restore();
 	}
 }

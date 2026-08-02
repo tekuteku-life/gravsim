@@ -11,11 +11,11 @@
 	<canvas id="gravsim-canvas"></canvas>
 	<form id="ctrl-panel">
 		<label for="time-scale">Time scale:</label>
-			<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-6" max="1" style="width:70%;">
+			<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-6.5" max="1" style="width:70%;">
 		<span id="time-scale-indicator"></span>
 		
 		<label for="zoom-scale">Zoom level:</label>
-			<input type="range" id="zoom-scale" name="zoom-scale" value="0" step="0.05" min="-2" max="4" style="width:70%;">
+			<input type="range" id="zoom-scale" name="zoom-scale" value="0" step="0.05" min="-2" max="6" style="width:70%;">
 		<span id="zoom-scale-indicator"></span>
 		
 		<label for="center-select">Center Object (Camera):</label>
@@ -34,7 +34,51 @@
 		<button type="button" id="put-venus-btn" style="margin-top:8px;">Venus</button>
 		<button type="button" id="put-mercury-btn" style="margin-top:8px;">Mercury</button>
 		<button type="button" id="put-moon-btn" style="margin-top:8px;">Moon (around Earth)</button>
-		
+
+		<hr style="margin: 15px 0;">
+
+		<span>Rocket Launch Preview:</span>
+		<button type="button" id="rl-toggle-btn" style="margin-bottom: 8px;">Enable Preview</button>
+
+		<div id="rl-settings" style="display: none; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 5px;">
+			<label>Placement Mode:</label>
+			<select id="rl-mode-select">
+				<option value="free">Free (Click Canvas)</option>
+				<option value="host">Relative to Host</option>
+			</select>
+
+			<div id="rl-host-options" style="display: none; margin-top: 8px;">
+				<label>Target Host:</label>
+				<select id="rl-host-select"></select>
+
+				<label>Host Angle (deg): <span id="rl-host-angle-val">0</span></label>
+				<input type="range" id="rl-host-angle" min="0" max="360" value="0" style="width:100%;">
+
+				<label>Altitude (m): <span id="rl-host-alt-val">5</span></label>
+				<input type="range" id="rl-host-alt" min="5" max="10000" step="1" value="5" style="width:100%;">
+			</div>
+
+			<div style="margin-top: 8px;">
+				<label>Launch Angle (deg): <span id="rl-launch-angle-val">90</span></label>
+				<input type="range" id="rl-launch-angle" min="0" max="360" value="90" style="width:100%;">
+
+				<label>Thrust Force (kN): <span id="rl-launch-thrust-val">1000</span></label>
+				<input type="range" id="rl-launch-thrust" min="600" max="10000" step="50" value="1000" style="width:100%;">
+
+				<label>Burn Time (s): <span id="rl-launch-burn-val">300</span></label>
+				<input type="range" id="rl-launch-burn" min="1" max="1500" step="1" value="300" style="width:100%;">
+
+				<label>Payload Ratio (%): <span id="rl-launch-payload-val">20</span></label>
+				<input type="range" id="rl-launch-payload" min="1" max="100" step="1" value="20" style="width:100%;">
+
+				<div style="margin-top: 10px; padding: 5px; background: rgba(0,255,100,0.1); border-radius: 3px; font-size: 0.85em; color: #00ffcc; text-align: center;">
+					Total Delta-v: <span id="rl-stat-dv">0.00</span> km/s<br>
+					TWR (<span id="rl-stat-host-name">Earth</span>): Y(Vert) <span id="rl-stat-twr-y">0.00</span> / X(Horz) <span id="rl-stat-twr-x">0.00</span>
+				</div>
+			</div>
+			
+			<button type="button" id="rl-execute-btn" style="margin-top: 15px; width: 100%; font-weight: bold; color: #ff5555;">LAUNCH ROCKET</button>
+		</div>
 	</form>
 	<div id="info-panel">
 		<p>Elapsed time: <span id="elapsed-time">0.00</span> years</p>

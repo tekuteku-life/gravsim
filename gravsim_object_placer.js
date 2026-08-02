@@ -6,6 +6,7 @@ import {
 	TIME_SCALE, THROW_SCALE, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
 import { GravSimObject } from './gravsim_object.js';
+import { RocketLauncher } from './gravsim_rocket_launcher.js';
 
 function AU2M(au) {
 	return au * METERS_PER_AU;
@@ -37,7 +38,7 @@ export class ObjectPlacer {
 		this.universe.canvas.removeEventListener('touchend', this.boundGoLaunch);
 	}
 
-	placeObject(objName, x, y, vx = 0, vy = 0) {
+	placeObject(objName, x, y, vx = 0, vy = 0, options = {}) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
 		const obj = new GravSimObject(
 			param.NAME,
@@ -51,6 +52,15 @@ export class ObjectPlacer {
 			param.BORDER_COLOR || null,
 			param.BORDER_WIDTH || 0
 		);
+
+		// Apply active rocket engine parameters if specified
+		if (options.time > 0) {
+			obj.thrustForce = options.force || 0;
+			obj.burnTime = options.time || 0;
+			obj.thrustAngle = options.angle || 0;
+			obj.massLossRate = options.lossRate || 0;
+		}
+
 		this.universe.addObject(obj);
 		return obj;
 	}
@@ -151,6 +161,14 @@ export class ObjectPlacer {
 			if (e.touches.length === 1) {
 				this.wasMultiTouch = false;
 			}
+		}
+
+		if (this.universe.RocketLauncher && this.universe.RocketLauncher.isActive && this.universe.RocketLauncher.mode === 'free') {
+			const pos = this.getLaunchPosition(e);
+			this.universe.RocketLauncher.setFreePosition(pos.x, pos.y);
+			
+			document.dispatchEvent(new Event('rocket-preview-updated'));
+			return; 
 		}
 
 		const pos = this.getLaunchPosition(e);

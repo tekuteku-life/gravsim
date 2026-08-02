@@ -36,10 +36,17 @@ export class GravSimObject {
 		this.vy = vy;
 		this.ax = 0;
 		this.ay = 0;
-		this.mass = mass;       // ton
+		this.mass = mass;		// ton
 		this.color = color;
 		this.size = size;
 		this.radius = radius;	// meters
+
+		this.thrustForce = 0;
+		this.burnTime = 0;
+		this.thrustAngle = 0;
+		this.emptyMass = 0;
+		this.massLossRate = 0;
+
 		this.borderColor = borderColor;
 		this.borderWidth = borderWidth;
 
@@ -169,6 +176,10 @@ export class GravSimObject {
 
 			this._drawBody(ctx, relX, relY, drawRadius, scale);
 
+			if (this.burnTime > 0) {
+				this._drawFlame(ctx, relX, relY, drawRadius, scale);
+			}
+
 			if (this.isEscaping) {
 				this._drawSparkle(ctx, relX, relY, drawRadius);
 			}
@@ -216,6 +227,34 @@ export class GravSimObject {
 
 			ctx.lineWidth = 1;
 		}
+	}
+
+	_drawFlame(ctx, x, y, drawRadius, scale) {
+		const flicker = 0.8 + Math.random() * 0.4; // 0.8 ~ 1.2
+		const flameLen = drawRadius * 3 * flicker;
+		
+		ctx.save();
+		ctx.translate(x, y);
+		ctx.rotate(this.thrustAngle); // Pointing forward
+
+		// Flame is drawn backward (negative x direction)
+		ctx.fillStyle = "rgba(255, 100, 0, 0.8)"; // Outer orange
+		ctx.beginPath();
+		ctx.moveTo(-drawRadius, 0); // Base center
+		ctx.lineTo(-drawRadius * 0.8, drawRadius * 0.8);
+		ctx.lineTo(-drawRadius - flameLen, 0); // Tip
+		ctx.lineTo(-drawRadius * 0.8, -drawRadius * 0.8);
+		ctx.fill();
+
+		ctx.fillStyle = "rgba(255, 200, 0, 0.9)"; // Inner yellow
+		ctx.beginPath();
+		ctx.moveTo(-drawRadius, 0);
+		ctx.lineTo(-drawRadius * 0.9, drawRadius * 0.4);
+		ctx.lineTo(-drawRadius - flameLen * 0.6, 0);
+		ctx.lineTo(-drawRadius * 0.9, -drawRadius * 0.4);
+		ctx.fill();
+		
+		ctx.restore();
 	}
 
 	_drawSparkle(ctx, x, y, drawRadius) {

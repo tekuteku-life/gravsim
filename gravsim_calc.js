@@ -15,7 +15,7 @@ const CALC_INTERVAL = 60;
  * Entity Class
 *******************************************************************/
 class GravSimCalcObject {
-	constructor(id, x, y, vx, vy, ax, ay, mass, radius, generation) {
+	constructor(id, x, y, vx, vy, ax, ay, mass, radius, generation, thrustData) {
 		this.id = id;
 		this.x = x;
 		this.y = y;
@@ -25,6 +25,11 @@ class GravSimCalcObject {
 		this.ay = ay;
 		this.mass = mass;
 		this.radius = radius;
+		this.thrustForce = thrustData?.thrustForce || 0;
+		this.burnTime = thrustData?.burnTime || 0;
+		this.thrustAngle = thrustData?.thrustAngle || 0;
+		this.emptyMass = thrustData?.emptyMass || 0;
+		this.massLossRate = thrustData?.massLossRate || 0;
 		this.collided = false;
 		this.shattered = false;
 		this.generation = generation || 0;
@@ -102,7 +107,14 @@ class PhysicsEngine {
 			data.vx || 0, data.vy || 0,
 			data.ax || 0, data.ay || 0,
 			data.mass || 1, data.radius || 1,
-			data.generation || 0
+			data.generation || 0,
+			{
+				thrustForce: data.thrustForce,
+				burnTime: data.burnTime,
+				thrustAngle: data.thrustAngle,
+				emptyMass: data.emptyMass,
+				massLossRate: data.massLossRate
+			},
 		));
 	}
 
@@ -258,14 +270,26 @@ class PhysicsEngine {
 
 	_moveObjects(dt) {
 		for (const obj of this.objects) {
-			if (obj.collided || obj.shattered) continue;
+			if (obj.collided || obj.shattered) { continue; }
 
+			let actualDt = 0;
+			if (obj.burnTime > 0) {
+				actualDt = Math.min(dt, obj.burnTime);
+				obj.mass -= obj.massLossRate * actualDt;
+				if (obj.mass < 1) { obj.mass = 1; } // Safeguard (Min 1kg)
+				obj.burnTime -= actualDt;
+			}
+
+			obj._thrustRatio = dt > 0 ? (actualDt / dt) : 0;
+
+			// Apply gravity and thrust (Velocity Verlet integration Step 1)
 			this._updateGravityFor(obj);
 			const half_vx = obj.vx + obj.ax * dt / 2;
 			const half_vy = obj.vy + obj.ay * dt / 2;
 			obj.x += half_vx * dt;
 			obj.y += half_vy * dt;
 
+			// Apply gravity and thrust (Velocity Verlet integration Step 2)
 			this._updateGravityFor(obj);
 			obj.vx = half_vx + obj.ax * dt / 2;
 			obj.vy = half_vy + obj.ay * dt / 2;
@@ -286,6 +310,14 @@ class PhysicsEngine {
 			if (obj.id !== other.id && !other.collided && !other.shattered) {
 				obj.applyGravity(other);
 			}
+		}
+
+		if (obj._thrustRatio > 0 && obj.mass > 0) {
+			const thrustAx = (obj.thrustForce * Math.cos(obj.thrustAngle)) / obj.mass;
+			const thrustAy = (obj.thrustForce * Math.sin(obj.thrustAngle)) / obj.mass;
+
+			obj.ax += thrustAx * obj._thrustRatio;
+			obj.ay += thrustAy * obj._thrustRatio;
 		}
 	}
 }
@@ -362,7 +394,7 @@ class SimulationController {
 	}
 
 	formatForMessage() {
-		const OBJ_ATTR_COUNT = 18;
+		const OBJ_ATTR_COUNT = 19;
 		const buffer = new Float64Array(this.engine.objects.length * OBJ_ATTR_COUNT);
 
 		for (let i = 0; i < this.engine.objects.length; i++) {
@@ -378,13 +410,14 @@ class SimulationController {
 			buffer[offset + 6] = obj.ay || 0;
 			buffer[offset + 7] = obj.mass || 1;
 			buffer[offset + 8] = obj.radius || 1;
-			buffer[offset + 9] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0);
-			buffer[offset + 10] = obj.debrisMass || 0;
-			buffer[offset + 11] = obj.impactVx || 0;
-			buffer[offset + 12] = obj.impactVy || 0;
-			buffer[offset + 13] = obj.impactWinnerX || 0;
-			buffer[offset + 14] = obj.impactWinnerY || 0;
-			buffer[offset + 15] = obj.impactWinnerRadius || 0;
+			buffer[offset + 9] = obj.burnTime > 0 ? obj.burnTime : 0;
+			buffer[offset + 10] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0);
+			buffer[offset + 11] = obj.debrisMass || 0;
+			buffer[offset + 12] = obj.impactVx || 0;
+			buffer[offset + 13] = obj.impactVy || 0;
+			buffer[offset + 14] = obj.impactWinnerX || 0;
+			buffer[offset + 15] = obj.impactWinnerY || 0;
+			buffer[offset + 16] = obj.impactWinnerRadius || 0;
 		}
 		return buffer;
 	}

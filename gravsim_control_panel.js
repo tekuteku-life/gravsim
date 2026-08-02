@@ -1,7 +1,10 @@
 
 // gravsim_control_panel.js
 
-import { DEFAULT_OBJECT_PARAMS, DISTANCE_SCALE, METERS_PER_AU, TIME_SCALE } from './gravsim_const.js';
+import {
+	DEFAULT_OBJECT_PARAMS, DISTANCE_SCALE,
+	METERS_PER_AU, TIME_SCALE, G,
+} from './gravsim_const.js';
 
 /*******************************************************************
  * ControlPanel class that manages the simulation control panel UI.
@@ -28,7 +31,34 @@ export class ControlPanel {
 			zoomIndicator: document.getElementById('zoom-scale-indicator'),
 			massSelect: document.getElementById('mass-select'),
 			centerSelect: document.getElementById('center-select'),
-			moonBtn: document.getElementById('put-moon-btn')
+			moonBtn: document.getElementById('put-moon-btn'),
+
+			rlToggleBtn: document.getElementById('rl-toggle-btn'),
+			rlSettings: document.getElementById('rl-settings'),
+			rlModeSelect: document.getElementById('rl-mode-select'),
+			rlHostOptions: document.getElementById('rl-host-options'),
+			rlHostSelect: document.getElementById('rl-host-select'),
+
+			rlHostAngle: document.getElementById('rl-host-angle'),
+			rlHostAngleVal: document.getElementById('rl-host-angle-val'),
+			rlHostAlt: document.getElementById('rl-host-alt'),
+			rlHostAltVal: document.getElementById('rl-host-alt-val'),
+
+			rlLaunchAngle: document.getElementById('rl-launch-angle'),
+			rlLaunchAngleVal: document.getElementById('rl-launch-angle-val'),
+			rlLaunchThrust: document.getElementById('rl-launch-thrust'),
+			rlLaunchThrustVal: document.getElementById('rl-launch-thrust-val'),
+			rlLaunchBurn: document.getElementById('rl-launch-burn'),
+			rlLaunchBurnVal: document.getElementById('rl-launch-burn-val'),
+			rlLaunchPayload: document.getElementById('rl-launch-payload'),
+			rlLaunchPayloadVal: document.getElementById('rl-launch-payload-val'),
+
+			rlStatDv: document.getElementById('rl-stat-dv'),
+			rlStatHostName: document.getElementById('rl-stat-host-name'),
+			rlStatTwrY: document.getElementById('rl-stat-twr-y'),
+			rlStatTwrX: document.getElementById('rl-stat-twr-x'),
+
+			rlExecuteBtn: document.getElementById('rl-execute-btn'),
 		};
 
 		// Map for dynamic button bindings
@@ -59,7 +89,7 @@ export class ControlPanel {
 			setTimeout(() => this.updateCenterOptions(), 100);
 		}
 
-		// Orbital deploy buttons (Loop instead of repeating code)
+		// Orbital deploy buttons
 		for (const [btnId, objName] of Object.entries(this.deployButtons)) {
 			const btn = document.getElementById(btnId);
 			if (btn) {
@@ -76,6 +106,79 @@ export class ControlPanel {
 		canvas.addEventListener('touchmove', (e) => this._handleTouchZoom(e));
 		canvas.addEventListener('touchend', (e) => this._resetTouchDist(e));
 		canvas.addEventListener('touchcancel', () => this._resetTouchDist(null));
+
+		// --- Rocket Launcher Events ---
+		if (this.ui.rlToggleBtn) {
+			this.ui.rlToggleBtn.addEventListener('click', () => {
+				const rl = this.universe.RocketLauncher;
+				rl.togglePreview();
+				this.ui.rlSettings.style.display = rl.isActive ? 'block' : 'none';
+				this.ui.rlToggleBtn.textContent = rl.isActive ? 'Disable Preview' : 'Enable Preview';
+				if (rl.isActive) {
+					this._updateRocketHostOptions();
+					this._updateRocketStats();
+				}
+			});
+		}
+
+		if (this.ui.rlModeSelect) {
+			this.ui.rlModeSelect.addEventListener('change', (e) => {
+				this.universe.RocketLauncher.mode = e.target.value;
+				this.ui.rlHostOptions.style.display = e.target.value === 'host' ? 'block' : 'none';
+				if (e.target.value === 'host') { this._updateRocketHostOptions(); }
+				this._updateRocketStats();
+			});
+		}
+
+		// Helper to bind range inputs to RocketLauncher properties
+		const bindSlider = (sliderId, valId, propName, isFloat = false) => {
+			if (this.ui[sliderId]) {
+				this.ui[sliderId].addEventListener('input', (e) => {
+					const val = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
+					this.universe.RocketLauncher[propName] = val;
+					if (this.ui[valId]) {
+						this.ui[valId].textContent = val;
+					}
+					this._updateRocketStats();
+				});
+			}
+		};
+
+		// Bind all Rocket Launcher sliders
+		bindSlider('rlHostAngle', 'rlHostAngleVal', 'hostAngleDeg');
+		bindSlider('rlHostAlt', 'rlHostAltVal', 'hostAltitudeM', true);
+		bindSlider('rlLaunchAngle', 'rlLaunchAngleVal', 'launchAngleDeg');
+		bindSlider('rlLaunchThrust', 'rlLaunchThrustVal', 'thrustKN');
+		bindSlider('rlLaunchBurn', 'rlLaunchBurnVal', 'burnTime');
+		bindSlider('rlLaunchPayload', 'rlLaunchPayloadVal', 'payloadRatio');
+
+		if (this.ui.rlHostSelect) {
+			this.ui.rlHostSelect.addEventListener('change', (e) => {
+				this.universe.RocketLauncher.hostId = parseInt(e.target.value, 10);
+				this._updateRocketStats();
+			});
+			this.ui.rlHostSelect.addEventListener('focus', () => {
+				this._updateRocketHostOptions();
+				this._updateRocketStats();
+			});
+		}
+
+		const massSelect = document.getElementById('mass-select');
+		if (massSelect) {
+			massSelect.addEventListener('change', () => this._updateRocketStats());
+		}
+
+		document.addEventListener('rocket-preview-updated', () => {
+			this._updateRocketStats();
+		});
+
+		if (this.ui.rlExecuteBtn) {
+			this.ui.rlExecuteBtn.addEventListener('click', () => {
+				this.universe.RocketLauncher.executeLaunch();
+				this.ui.rlSettings.style.display = 'none';
+				this.ui.rlToggleBtn.textContent = 'Enable Preview';
+			});
+		}
 	}
 
 
@@ -130,6 +233,98 @@ export class ControlPanel {
 		}
 	}
 
+	_updateRocketHostOptions() {
+		if (!this.ui.rlHostSelect) return;
+
+		const currentHostId = this.universe.RocketLauncher.hostId;
+		this.ui.rlHostSelect.innerHTML = '';
+
+		for (const obj of this.universe.objects) {
+			const option = document.createElement('option');
+			option.value = obj.id;
+			option.textContent = `${obj.name} (ID: ${obj.id})`;
+
+			if (obj.id === currentHostId || (currentHostId === null && obj.id === this.universe.centerObject.id)) {
+				option.selected = true;
+				this.universe.RocketLauncher.hostId = obj.id;
+			}
+			this.ui.rlHostSelect.appendChild(option);
+		}
+	}
+
+	_updateRocketStats() {
+		if (!this.ui.rlStatDv || !this.ui.rlStatTwrY) { return; }
+
+		const rl = this.universe.RocketLauncher;
+		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
+		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
+		
+		const m0 = param.MASS * 1e3; // Initial mass in kg
+		const mf = m0 * (rl.payloadRatio / 100);
+		
+		// Calculate Delta-v using Tsiolkovsky rocket equation
+		let dvKmS = 0;
+		if (rl.burnTime > 0 && rl.payloadRatio < 100 && rl.thrustKN > 0) {
+			const mDot = (m0 - mf) / rl.burnTime;
+			const F = rl.thrustKN * 1e3;
+			dvKmS = ((F / mDot) * Math.log(m0 / mf)) / 1000;
+		} else if (rl.thrustKN > 0 && rl.payloadRatio === 100) {
+			dvKmS = ((rl.thrustKN * 1e3 / m0) * rl.burnTime) / 1000;
+		}
+
+		// Calculate Local Gravity and Direction
+		let host;
+		let upAngleRad = 0;
+		let rMeters = 0;
+
+		if (rl.mode === 'host') {
+			host = this.universe.objects.find(o => o.id === rl.hostId) || this.universe.centerObject;
+			if (host) {
+				upAngleRad = rl.hostAngleDeg * (Math.PI / 180);
+				rMeters = host.radius + (param.RADIUS || 1) + rl.hostAltitudeM;
+			}
+		} else {
+			// Center Object is regarded as host
+			host = this.universe.centerObject;
+			if (host) {
+				const dx = rl.freeX - host.x;
+				const dy = rl.freeY - host.y;
+				upAngleRad = Math.atan2(dy, dx);
+				const distPx = Math.sqrt(dx * dx + dy * dy);
+				rMeters = this.universe.pix2m(distPx);
+			}
+		}
+
+		let twrY = 0;
+		let twrX = 0;
+		let hostName = "Unknown";
+
+		// Calculate Vector TWR
+		if (host && rMeters > 0) {
+			hostName = host.name;
+			const hostMassKg = host.mass * 1e3;
+			
+			// Calculate local gravity (g = GM / r^2)
+			const localG = (G * hostMassKg) / (rMeters * rMeters);
+			const weightN = m0 * localG;
+			const thrustN = rl.thrustKN * 1e3;
+
+			// Transform thrust vector to relative degree
+			const thrustAngleRad = rl.launchAngleDeg * (Math.PI / 180);
+			const relAngleRad = thrustAngleRad - upAngleRad;
+
+			const thrustY = thrustN * Math.cos(relAngleRad);
+			const thrustX = thrustN * Math.sin(relAngleRad);
+
+			twrY = thrustY / weightN;
+			twrX = thrustX / weightN;
+		}
+
+		this.ui.rlStatDv.textContent = dvKmS.toFixed(2);
+		this.ui.rlStatHostName.textContent = hostName;
+		this.ui.rlStatTwrY.textContent = twrY.toFixed(2);
+		this.ui.rlStatTwrX.textContent = twrX.toFixed(2);
+	}
 
 	// ==========================================
 	// Public UI Update Methods

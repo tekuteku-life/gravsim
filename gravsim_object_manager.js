@@ -39,6 +39,11 @@ export class ObjectManager {
 			mass: obj.mass * 1e3,
 			radius: obj.radius,
 			generation: obj.generation,
+			thrustForce: obj.thrustForce || 0,
+			burnTime: obj.burnTime || 0,
+			thrustAngle: obj.thrustAngle || 0,
+			emptyMass: (obj.emptyMass || 0) * 1e3,
+			massLossRate: (obj.massLossRate || 0) * 1e3,
 		});
 	}
 
@@ -64,7 +69,7 @@ export class ObjectManager {
 
 	updateObjectParams(data) {
 		const buffer = new Float64Array(data.objectsData);
-		const OBJ_ATTR_COUNT = 18;
+		const OBJ_ATTR_COUNT = 19;
 		const objCount = buffer.length / OBJ_ATTR_COUNT;
 
 		for (let i = 0; i < objCount; i++) {
@@ -81,9 +86,10 @@ export class ObjectManager {
 				target.ay = this.renderer.m2pix(buffer[offset + 6]);
 				target.mass = buffer[offset + 7] / 1e3;
 				target.radius = buffer[offset + 8];
+				target.burnTime = buffer[offset + 9];
 				target.addHistory();
 
-				const flags = buffer[offset + 9];
+				const flags = buffer[offset + 10];
 				const isCollided = (flags & 1) !== 0;
 				const isShattered = (flags & 2) !== 0;
 				const isImpact = (flags & 4) !== 0;
@@ -92,12 +98,12 @@ export class ObjectManager {
 					if (isImpact && target.state === OBJECT_STATE.ACTIVE) {
 						this._generateImpactDebris(
 							target, 
-							buffer[offset + 10] / 1e3,
-							this.renderer.m2pix(buffer[offset + 11]), 
-							this.renderer.m2pix(buffer[offset + 12]),
+							buffer[offset + 11] / 1e3,
+							this.renderer.m2pix(buffer[offset + 12]), 
 							this.renderer.m2pix(buffer[offset + 13]),
 							this.renderer.m2pix(buffer[offset + 14]),
-							this.renderer.m2pix(buffer[offset + 15])
+							this.renderer.m2pix(buffer[offset + 15]),
+							this.renderer.m2pix(buffer[offset + 16])
 						);
 					}
 
