@@ -1,3 +1,4 @@
+
 html, body {
 	height: 100%;
 	margin: 0;
@@ -8,7 +9,7 @@ html, body {
 body {
 	width: 100vw;
 	height: 100vh;
-	
+
 	background-color: #000000;
 }
 
@@ -16,7 +17,7 @@ canvas {
 	display: block;
 	width: 100vw;
 	height: 100vh;
-	
+
 	background-color: #000000;
 }
 
@@ -66,4 +67,66 @@ canvas {
 }
 #info-panel > p {
 	line-height: 0.5;
+}
+
+/* Range Slider Widths */
+.slider-main {
+	width: 60%;
+}
+
+.slider-full {
+	width: 100%;
+}
+
+/* Orbital Deploy Buttons */
+.deploy-btn {
+	margin-top: 8px;
+}
+
+/* Divider */
+.panel-divider {
+	margin: 15px 0;
+}
+
+/* Preview Toggle Button */
+#rl-toggle-btn {
+	margin-bottom: 8px;
+}
+
+/* Settings Container */
+#rl-settings {
+	display: none; /* Managed by JS inline override */
+	padding: 10px;
+	background: rgba(0, 0, 0, 0.3);
+	border-radius: 5px;
+}
+
+/* Host Options Wrapper */
+#rl-host-options {
+	display: none; /* Managed by JS inline override */
+	margin-top: 8px;
+}
+
+/* Launch Parameters Wrapper */
+.launch-params {
+	margin-top: 8px;
+}
+
+/* Stats Panel (Delta-v & TWR) */
+#rl-stats-panel {
+	margin-top: 10px;
+	padding: 5px;
+	background: rgba(0, 255, 100, 0.1);
+	border-radius: 3px;
+	font-size: 0.85em;
+	color: #00ffcc;
+	text-align: center;
+}
+
+/* Execute Launch Button */
+#rl-execute-btn {
+	margin-top: 15px;
+	width: 100%;
+	font-weight: bold;
+	color: #ff5555;
 }
