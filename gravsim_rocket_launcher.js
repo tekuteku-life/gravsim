@@ -12,7 +12,7 @@ export class RocketLauncher {
 		this.isActive = false;
 		
 		// Setup parameters
-		this.mode = 'free'; // 'free' or 'host'
+		this.mode = 'host'; // 'free' or 'host'
 		this.hostId = null;
 		
 		// Free mode coords
@@ -25,8 +25,8 @@ export class RocketLauncher {
 
 		// Continuous thrust parameters
 		this.launchAngleDeg = 90;
-		this.thrustKN = 10000;	// (kN)
-		this.burnTime = 120;	// (seconds)
+		this.thrustKN = 1000;	// (kN)
+		this.burnTime = 300;	// (seconds)
 		this.payloadRatio = 20;	// %
 	}
 

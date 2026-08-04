@@ -113,11 +113,11 @@ export class ControlPanel {
 			this.ui.menuModeRadios.forEach(radio => {
 				radio.addEventListener('change', (e) => {
 					const mode = e.target.value;
-					
+
 					if (mode === 'easy') {
 						// Open Easy Deploy Menu
 						this.ui.easySettings.style.display = 'block';
-						
+
 						// Close Rocket Launch Menu
 						this.universe.RocketLauncher.togglePreview(false);
 						this.ui.rlSettings.style.display = 'none';
@@ -128,9 +128,23 @@ export class ControlPanel {
 						// Open Rocket Launch Menu
 						this.universe.RocketLauncher.togglePreview(true);
 						this.ui.rlSettings.style.display = 'block';
-						
+
+						// Auto target host selection
+						let targetHostId = this.universe.RocketLauncher.hostId;
+						if (targetHostId === null || targetHostId === 0) {
+							const nonSunObjects = this.universe.objects.filter(o => o.id !== 0);
+							if (nonSunObjects.length > 0) {
+								targetHostId = Math.max(...nonSunObjects.map(o => o.id));
+							} else {
+								targetHostId = 0;
+							}
+							this.universe.RocketLauncher.hostId = targetHostId;
+						}
+
 						// Update stats when opened
 						this._updateRocketHostOptions();
+
+						this._setupLaunchEnvironment(targetHostId);
 						this._updateRocketStats();
 					}
 				});
@@ -142,6 +156,19 @@ export class ControlPanel {
 				this.universe.RocketLauncher.mode = e.target.value;
 				this.ui.rlHostOptions.style.display = e.target.value === 'host' ? 'block' : 'none';
 				if (e.target.value === 'host') { this._updateRocketHostOptions(); }
+				this._updateRocketStats();
+			});
+		}
+
+		if (this.ui.rlHostSelect) {
+			this.ui.rlHostSelect.addEventListener('change', (e) => {
+				const newHostId = parseInt(e.target.value, 10);
+				this.universe.RocketLauncher.hostId = newHostId;
+				this._setupLaunchEnvironment(newHostId);
+				this._updateRocketStats();
+			});
+			this.ui.rlHostSelect.addEventListener('focus', () => {
+				this._updateRocketHostOptions();
 				this._updateRocketStats();
 			});
 		}
@@ -342,6 +369,34 @@ export class ControlPanel {
 		this.ui.rlStatHostName.textContent = hostName;
 		this.ui.rlStatTwrY.textContent = twrY.toFixed(2);
 		this.ui.rlStatTwrX.textContent = twrX.toFixed(2);
+	}
+
+	_setupLaunchEnvironment(hostId) {
+		const host = this.universe.objects.find(o => o.id === hostId);
+		if (!host) return;
+
+		this.universe.centerObject = host;
+		this.updateCenterOptions();
+
+		if (this.ui.timeScale) {
+			this.ui.timeScale.value = this.ui.timeScale.min;
+			this.updateTimeScaleIndicator(this.getTimeScale());
+		}
+
+		if (this.ui.zoomScale) {
+			// Adjust zoom-level which the radius of the host is specific value
+			const realRadiusPx = (host.radius / METERS_PER_AU) * DISTANCE_SCALE;
+			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 2.2;
+			let idealExp = Math.log10(targetSize / realRadiusPx);
+
+			const maxZoom = parseFloat(this.ui.zoomScale.max);
+			const minZoom = parseFloat(this.ui.zoomScale.min);
+			idealExp = Math.max(minZoom, Math.min(maxZoom, idealExp));
+
+			this.ui.zoomScale.value = idealExp.toFixed(2);
+			this.updateZoomScaleIndicator(this.getZoomScale());
+			this.universe.updateZoomScale();
+		}
 	}
 
 	// ==========================================
