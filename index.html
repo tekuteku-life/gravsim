@@ -89,5 +89,21 @@
 		<p>Object count: <span id="object-count">0</span></p>
 		<p>FPS: <span id="fps">0</span></p>
 	</div>
+
+	<button type="button" id="telemetry-toggle-btn">TELEMETRY: OFF</button>
+	<div id="telemetry-panel" style="display: none;">
+		<div class="telemetry-header">TELEMETRY DATA</div>
+		<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
+		<div class="telemetry-line">REF BODY : <span id="tm-refbody">---</span></div>
+		<div class="telemetry-line">ALTITUDE : <span id="tm-alt">---</span> km</div>
+		<div class="telemetry-line">VELOCITY : <span id="tm-vel">---</span> km/s</div>
+		<div class="telemetry-line">G-FORCE  : <span id="tm-gforce">---</span> G</div>
+		<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
+
+		<div id="tm-rocket-data" style="display: none;">
+			<div class="telemetry-line">PROPELLANT:<span id="tm-prop">---</span> t</div>
+			<div class="telemetry-line">BURN REM : <span id="tm-burn">---</span> s</div>
+		</div>
+	</div>
 </body>
 </html>

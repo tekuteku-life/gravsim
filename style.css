@@ -158,3 +158,73 @@ canvas {
 	font-weight: bold;
 	color: #ff5555;
 }
+
+/*=========================================
+ * Telemetry HUD Styles
+ *=========================================*/
+#telemetry-toggle-btn {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	font-family: 'Courier New', Courier, monospace;
+	font-size: 14px;
+	font-weight: bold;
+	background-color: rgba(0, 20, 0, 0.5);
+	color: #00ffcc;
+	border: 1px solid #00ffcc;
+	border-radius: 3px;
+	padding: 5px 10px;
+	cursor: pointer;
+	z-index: 100;
+	transition: all 0.2s;
+}
+#telemetry-toggle-btn:hover {
+	background-color: rgba(0, 255, 204, 0.2);
+}
+
+#telemetry-panel {
+	position: absolute;
+	top: 45px;
+	right: 10px;
+	width: 250px;
+	background-color: rgba(0, 20, 0, 0.7);
+	border: 1px solid #00ffcc;
+	border-radius: 5px;
+	padding: 10px;
+	color: #00ffcc;
+	font-family: 'Courier New', Courier, monospace;
+	font-size: 13px;
+	text-shadow: 0 0 5px rgba(0, 255, 204, 0.5);
+	box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+	pointer-events: none;
+	z-index: 99;
+}
+
+.telemetry-header {
+	font-size: 15px;
+	font-weight: bold;
+	text-align: center;
+	border-bottom: 1px dashed #00ffcc;
+	margin-bottom: 8px;
+	padding-bottom: 4px;
+	letter-spacing: 2px;
+}
+
+.telemetry-line {
+	margin-bottom: 4px;
+	white-space: pre;
+}
+#tm-target-select {
+	background: transparent;
+	color: #00ffcc;
+	border: 1px solid #00ffcc;
+	font-family: 'Courier New', Courier, monospace;
+	font-size: 12px;
+	width: 140px;
+	pointer-events: auto; /* HUD全体のクリック貫通を上書きして操作可能にする */
+	cursor: pointer;
+}
+#tm-target-select option {
+	background: rgba(0, 20, 0, 0.9);
+	color: #00ffcc;
+}

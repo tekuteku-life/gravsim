@@ -7,6 +7,7 @@ import {
 } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
 import { InfoPanel } from './gravsim_info_panel.js';
+import { TelemetryPanel } from './gravsim_telemetry_panel.js';
 import { ControlPanel } from './gravsim_control_panel.js';
 import { ObjectManager } from './gravsim_object_manager.js';
 import { ObjectPlacer } from './gravsim_object_placer.js';
@@ -64,6 +65,7 @@ export class Universe {
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
 		
 		this.InfoPanel = new InfoPanel();
+		this.TelemetryPanel = new TelemetryPanel(this);
 		this.ControlPanel = new ControlPanel(this);
 		this.ObjectPlacer = new ObjectPlacer(this);
 		this.RocketLauncher = new RocketLauncher(this);
@@ -155,11 +157,13 @@ export class Universe {
 		this.InfoPanel.updateObjectCount(this.objects.length);
 		this.InfoPanel.updateFPS();
 
-		// 4. Object Update
+		// Object Update
 		this.objects.forEach(obj => obj.updateHistory());
 		
 		this.updateZoomScale();
 		this.ObjectManager.cleanupObjects();
+
+		this.TelemetryPanel.update();
 	}
 
 	draw() {
