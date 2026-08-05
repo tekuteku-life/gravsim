@@ -9,7 +9,7 @@ html, body {
 	background-color: #000000;
 	font-family: sans-serif;
 }
-canvas {
+#gravsim-canvas {
 	display: block;
 	width: 100vw;
 	height: 100vh;
@@ -285,4 +285,15 @@ button:hover { background: #444; }
 #tm-target-select option {
 	background: rgba(0, 20, 0, 0.9);
 	color: #00ffcc;
+}
+
+/* Sub-canvas */
+#sub-canvas {
+	width: 228px;
+	height: 180px;
+	background: #000;
+	border: 1px solid #005544;
+	border-radius: 3px;
+	display: block;
+	margin: 0 auto;
 }

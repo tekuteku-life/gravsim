@@ -1,20 +1,26 @@
 // gravsim_telemetry_panel.js
 
+import { Renderer } from './gravsim_renderer.js';
+import {
+	TELEMETRY_UPDATE_INTERVAL_MS,
+	TELEMETRY_SUB_VIEW_TARGET_RADIUS,
+	TELEMETRY_SUB_VIEW_MAX_ZOOM
+} from './gravsim_const.js';
+
 export class TelemetryPanel {
 	constructor(universe) {
 		this.universe = universe;
 		this.isOpen = false;
 		this.lastUpdate = 0;
-		this.intervalMs = 100;
-		
-		// 追加: テレメトリ固有のターゲットIDと、追加検知用のカウント
+		this.intervalMs = TELEMETRY_UPDATE_INTERVAL_MS;
+
 		this.targetId = null;
 		this.lastObjCount = -1;
 
 		this.ui = {
 			toggleBtn: document.getElementById('telemetry-toggle-btn'),
 			panel: document.getElementById('telemetry-panel'),
-			targetSelect: document.getElementById('tm-target-select'), // 変更
+			targetSelect: document.getElementById('tm-target-select'),
 			refBody: document.getElementById('tm-refbody'),
 			alt: document.getElementById('tm-alt'),
 			vel: document.getElementById('tm-vel'),
@@ -23,7 +29,12 @@ export class TelemetryPanel {
 			rocketData: document.getElementById('tm-rocket-data'),
 			prop: document.getElementById('tm-prop'),
 			burn: document.getElementById('tm-burn'),
+			subCanvas: document.getElementById('sub-canvas'),
 		};
+		
+		if (this.ui.subCanvas) {
+			this.subRenderer = new Renderer(this.ui.subCanvas);
+		}
 
 		this._bindEvents();
 	}
@@ -44,16 +55,14 @@ export class TelemetryPanel {
 			});
 		}
 
-		// 追加: 手動でテレメトリ対象を切り替えた時の処理
 		if (this.ui.targetSelect) {
 			this.ui.targetSelect.addEventListener('change', (e) => {
 				this.targetId = parseInt(e.target.value, 10);
-				this.lastUpdate = 0; // 即時反映
+				this.lastUpdate = 0;
 			});
 		}
 	}
 
-	// 追加: プルダウンの中身を最新のオブジェクトリストで再構築する
 	_updateTargetOptions() {
 		if (!this.ui.targetSelect) return;
 		
@@ -77,9 +86,8 @@ export class TelemetryPanel {
 		if (now - this.lastUpdate < this.intervalMs) return;
 		this.lastUpdate = now;
 
-		// オブジェクト数が増減した場合の処理
 		if (this.lastObjCount !== this.universe.objects.length) {
-			// 新しいオブジェクトが追加された場合（発射時）、自動的にそれをターゲットに切り替える
+			// Change target when the new object added
 			if (this.lastObjCount !== -1 && this.universe.objects.length > this.lastObjCount) {
 				const newestObj = this.universe.objects[this.universe.objects.length - 1];
 				this.targetId = newestObj.id;
@@ -88,7 +96,6 @@ export class TelemetryPanel {
 			this.lastObjCount = this.universe.objects.length;
 		}
 
-		// ターゲットの決定（未設定・対象消滅時はCenter Objectにフォールバック）
 		let target = this.universe.objects.find(o => o.id === this.targetId);
 		if (!target) {
 			target = this.universe.centerObject;
@@ -158,6 +165,41 @@ export class TelemetryPanel {
 			this.ui.burn.innerText = target.burnTime.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(8, ' ');
 		} else {
 			this.ui.rocketData.style.display = 'none';
+		}
+	}
+
+	draw() {
+		if (!this.isOpen || !this.subRenderer) return;
+
+		const canvas = this.subRenderer.canvas;
+		if (canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+			canvas.width = canvas.clientWidth;
+			canvas.height = canvas.clientHeight;
+		}
+
+		let targetObj = this.universe.objects.find(o => o.id === this.targetId);
+		if (!targetObj) targetObj = this.universe.centerObject;
+
+		if (targetObj) {
+			const realRadiusPx = this.universe.m2pix(targetObj.radius);
+			
+			// Keep the radius of the object 20px on Sub screen
+			let subZoom = TELEMETRY_SUB_VIEW_TARGET_RADIUS / Math.max(realRadiusPx, 1e-10);
+			
+			// Limit zoom
+			subZoom = Math.min(subZoom, TELEMETRY_SUB_VIEW_MAX_ZOOM);
+
+			this.subRenderer.setZoomScale(subZoom);
+			this.subRenderer.draw(this.universe.objects, targetObj);
+			
+			// Draw rocket preview
+			if (this.universe.RocketLauncher) {
+				const subCtx = this.subRenderer.canvas.getContext('2d');
+				subCtx.save();
+				subCtx.translate(this.subRenderer.canvas.width / 2, this.subRenderer.canvas.height / 2);
+				this.universe.RocketLauncher.drawPreview(subCtx, targetObj, subZoom);
+				subCtx.restore();
+			}
 		}
 	}
 }

@@ -177,6 +177,8 @@ export class Universe {
 		this.ctx.scale(this.zoomScale, this.zoomScale);
 		this.RocketLauncher.drawPreview(this.ctx, this.centerObject, 1 / this.zoomScale);
 		this.ctx.restore();
+
+		this.TelemetryPanel.draw();
 	}
 
 	getState() {
