@@ -23,7 +23,8 @@ export class RocketLauncher {
 		this.hostAngleDeg = 0;
 		this.hostAltitudeM = 10; // (m)
 
-		// Continuous thrust parameters
+		// Rocket parameters
+		this.initialMassT = 60;	// (t)
 		this.launchAngleDeg = 90;
 		this.thrustKN = 1000;	// (kN)
 		this.burnTime = 300;	// (seconds)
@@ -152,18 +153,19 @@ export class RocketLauncher {
 		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 
-		const initialMassTon = param.MASS;
+		const initialMassTon = this.initialMassT;
 		const finalMassTon = initialMassTon * (this.payloadRatio / 100);
 		const massLossRateTon = this.burnTime > 0 ? (initialMassTon - finalMassTon) / this.burnTime : 0;
 
-		const thrustParams = {
+		const optParams = {
 			force: this.thrustKN * 1e3,
+			mass: initialMassTon,
 			angle: this.launchAngleDeg * (Math.PI / 180),
 			time: this.burnTime,
 			lossRate: massLossRateTon
 		};
 
-		this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, thrustParams);
+		this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
 		this.togglePreview(false);
 	}
 
@@ -174,6 +176,7 @@ export class RocketLauncher {
 			hostAngleDeg: this.hostAngleDeg,
 			hostAltitudeM: this.hostAltitudeM,
 			launchAngleDeg: this.launchAngleDeg,
+			initialMassT: this.initialMassT,
 			thrustKN: this.thrustKN,
 			burnTime: this.burnTime,
 			payloadRatio: this.payloadRatio
@@ -187,6 +190,7 @@ export class RocketLauncher {
 		if (state.hostAngleDeg !== undefined) this.hostAngleDeg = state.hostAngleDeg;
 		if (state.hostAltitudeM !== undefined) this.hostAltitudeM = state.hostAltitudeM;
 		if (state.launchAngleDeg !== undefined) this.launchAngleDeg = state.launchAngleDeg;
+		if (state.initialMassT !== undefined) this.initialMassT = state.initialMassT;
 		if (state.thrustKN !== undefined) this.thrustKN = state.thrustKN;
 		if (state.burnTime !== undefined) this.burnTime = state.burnTime;
 		if (state.payloadRatio !== undefined) this.payloadRatio = state.payloadRatio;

@@ -49,6 +49,8 @@ export class ControlPanel {
 
 			rlLaunchAngle: document.getElementById('rl-launch-angle'),
 			rlLaunchAngleVal: document.getElementById('rl-launch-angle-val'),
+			rlLaunchMass: document.getElementById('rl-launch-mass'),
+			rlLaunchMassVal: document.getElementById('rl-launch-mass-val'),
 			rlLaunchThrust: document.getElementById('rl-launch-thrust'),
 			rlLaunchThrustVal: document.getElementById('rl-launch-thrust-val'),
 			rlLaunchBurn: document.getElementById('rl-launch-burn'),
@@ -195,6 +197,7 @@ export class ControlPanel {
 		bindSlider('rlHostAngle', 'rlHostAngleVal', 'hostAngleDeg');
 		bindSlider('rlHostAlt', 'rlHostAltVal', 'hostAltitudeM', true);
 		bindSlider('rlLaunchAngle', 'rlLaunchAngleVal', 'launchAngleDeg');
+		bindSlider('rlLaunchMass', 'rlLaunchMassVal', 'initialMassT');
 		bindSlider('rlLaunchThrust', 'rlLaunchThrustVal', 'thrustKN');
 		bindSlider('rlLaunchBurn', 'rlLaunchBurnVal', 'burnTime');
 		bindSlider('rlLaunchPayload', 'rlLaunchPayloadVal', 'payloadRatio');
@@ -305,10 +308,10 @@ export class ControlPanel {
 		if (!this.ui.rlStatDv || !this.ui.rlStatTwrY) { return; }
 
 		const rl = this.universe.RocketLauncher;
-		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
-		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
+		const objName = this.universe.ObjectPlacer.getLaunchObjectName();
+		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		
-		const m0 = param.MASS * 1e3; // Initial mass in kg
+		const m0 = rl.initialMassT * 1e3; // Initial mass in kg
 		const mf = m0 * (rl.payloadRatio / 100);
 		
 		// Calculate Delta-v using Tsiolkovsky rocket equation
@@ -558,6 +561,7 @@ export class ControlPanel {
 			updateSlider('rlHostAngle', 'rlHostAngleVal', rlState.hostAngleDeg);
 			updateSlider('rlHostAlt', 'rlHostAltVal', rlState.hostAltitudeM);
 			updateSlider('rlLaunchAngle', 'rlLaunchAngleVal', rlState.launchAngleDeg);
+			updateSlider('rlLaunchMass', 'rlLaunchMassVal', rlState.initialMassT);
 			updateSlider('rlLaunchThrust', 'rlLaunchThrustVal', rlState.thrustKN);
 			updateSlider('rlLaunchBurn', 'rlLaunchBurnVal', rlState.burnTime);
 			updateSlider('rlLaunchPayload', 'rlLaunchPayloadVal', rlState.payloadRatio);
