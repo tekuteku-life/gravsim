@@ -225,10 +225,11 @@ export class ControlPanel {
 		if (this.ui.rlExecuteBtn) {
 			this.ui.rlExecuteBtn.addEventListener('click', () => {
 				this.universe.RocketLauncher.executeLaunch();
-				
-				// Re-enable preview automatically for the next launch
-				this.universe.RocketLauncher.togglePreview(true);
-				this._updateRocketStats();
+
+				const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
+				if (sysTabBtn) {
+					sysTabBtn.click();
+				}
 			});
 		}
 	}
