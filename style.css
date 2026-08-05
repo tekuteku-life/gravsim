@@ -1,162 +1,108 @@
-
+/* =========================================
+   Base Layout
+   ========================================= */
 html, body {
-	height: 100%;
-	margin: 0;
-	padding: 0;
-	overflow: hidden;
+	height: 100%; margin: 0; padding: 0; overflow: hidden;
+	background-color: #000000; font-family: sans-serif;
 }
-
-body {
-	width: 100vw;
-	height: 100vh;
-
-	background-color: #000000;
-}
-
 canvas {
-	display: block;
-	width: 100vw;
-	height: 100vh;
-
-	background-color: #000000;
+	display: block; width: 100vw; height: 100vh; background-color: #000000;
 }
 
-#ctrl-panel {
-	font-size: 12px;
-	position: absolute;
-	top: 10px;
-	left: 10px;
-	background-color: rgba(255, 255, 255, 0.8);
-	padding: 10px;
-	border-radius: 5px;
-	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-	width: 90%;
-
-	user-select: none;
-	-webkit-user-select: none;
-	touch-action: none;
-}
-#ctrl-panel input,
-#ctrl-panel button,
-#ctrl-panel select {
-	font-size: 12px;
-}
-#ctrl-panel label::before {
-	content: "\A";
-	white-space: pre;
-}
-#ctrl-panel label:first-of-type::before {
-  content: none;
-}
-#ctrl-panel #rl-settings label::before {
-	content: none;
-}
-#rl-settings label {
-	display: inline-block;
-	margin-top: 8px;
-}
-#rl-settings > label:first-of-type,
-#rl-host-options > label:first-of-type,
-.launch-params > label:first-of-type {
-	margin-top: 0;
+/* =========================================
+   Mobile Toggle Button
+   ========================================= */
+#mobile-menu-toggle {
+	display: none; /* PCでは非表示 */
+	position: absolute; top: 10px; left: 10px; z-index: 1000;
+	background: rgba(0, 0, 0, 0.7); color: #fff;
+	border: 1px solid #444; padding: 8px 12px; border-radius: 4px;
+	cursor: pointer; font-weight: bold;
 }
 
-#info-panel {
-	position: absolute;
-	bottom: 10px;
-	left: 10px;
-
-	color: #ffffff;
-	font-size: 12px;
-
-	background-color: rgba(0, 0, 0, 0.5);
-	padding: 5px 10px;
-	border-radius: 5px;
-	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-
-	user-select: none;
-	-webkit-user-select: none;
-	touch-action: none;
-}
-#info-panel > p {
-	line-height: 0.5;
+/* =========================================
+   Sidebar Control Panel
+   ========================================= */
+.sidebar {
+	position: absolute; top: 0; left: 0;
+	width: 320px; height: 100vh;
+	background-color: rgba(15, 15, 20, 0.9);
+	color: #e0e0e0; font-size: 13px;
+	box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+	overflow-y: auto; z-index: 900;
+	transition: transform 0.3s ease;
+	display: flex; flex-direction: column;
+	user-select: none; touch-action: none;
 }
 
-/* Menu Mode Selection */
-.menu-mode-container {
-	margin-bottom: 10px;
-	font-weight: bold;
+/* Tabs Navigation */
+.tabs {
+	display: flex; background: rgba(0, 0, 0, 0.5);
+	border-bottom: 1px solid #333; flex-shrink: 0;
 }
-.menu-mode-container label {
-	margin-right: 10px;
-	cursor: pointer;
-	font-weight: normal;
+.tab-btn {
+	flex: 1; padding: 12px 5px; background: transparent;
+	color: #888; border: none; cursor: pointer; font-weight: bold;
+	border-bottom: 2px solid transparent; transition: 0.2s;
 }
-.menu-mode-container label::before {
-	content: none !important;
-}
+.tab-btn:hover { color: #fff; }
+.tab-btn.active { color: #00ffcc; border-bottom: 2px solid #00ffcc; }
 
-/* Easy Settings Container */
-#easy-settings {
-	display: block; /* Default is open */
-	margin-top: 8px;
-}
+/* Tab Content Areas */
+.tab-content { display: none; padding: 15px; flex-grow: 1; }
+.tab-content.active { display: block; }
 
-/* Range Slider Widths */
-.slider-main {
-	width: 60%;
-}
+/* Form Elements */
+.panel-section { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #333; }
+.panel-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 
-.slider-full {
-	width: 100%;
-}
+label { display: block; margin-top: 10px; margin-bottom: 3px; color: #aaa; font-size: 12px; }
+.panel-section > label:first-of-type { margin-top: 0; }
 
-/* Orbital Deploy Buttons */
-.deploy-btn {
-	margin-top: 8px;
-}
+.slider-full { width: 100%; margin: 5px 0; }
+.full-width { width: 100%; padding: 4px; box-sizing: border-box; background: #222; color: #fff; border: 1px solid #444; }
+.indicator { text-align: right; color: #00ffcc; font-size: 11px; margin-bottom: 8px; }
 
-/* Divider */
-.panel-divider {
-	margin: 15px 0;
-}
+button { background: #333; color: #fff; border: 1px solid #555; padding: 6px 10px; border-radius: 3px; cursor: pointer; }
+button:hover { background: #444; }
 
-/* Settings Container */
-#rl-settings {
-	display: none; /* Managed by JS inline override */
-	padding: 10px;
-	background: rgba(0, 0, 0, 0.3);
-	border-radius: 5px;
-}
+/* Grid for Deploy Buttons */
+.deploy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.deploy-grid button { margin: 0; padding: 8px 4px; font-size: 12px; }
 
-/* Host Options Wrapper */
-#rl-host-options {
-	display: block; /* Managed by JS inline override */
-	margin-top: 8px;
-}
-
-/* Launch Parameters Wrapper */
-.launch-params {
-	margin-top: 8px;
-}
-
-/* Stats Panel (Delta-v & TWR) */
+/* Rocket Stats & Launch */
 #rl-stats-panel {
-	margin-top: 10px;
-	padding: 5px;
-	background: rgba(0, 255, 100, 0.1);
-	border-radius: 3px;
-	font-size: 0.85em;
-	color: #00ffcc;
-	text-align: center;
+	margin-top: 15px; padding: 10px; background: rgba(0, 255, 100, 0.1);
+	border: 1px solid rgba(0, 255, 100, 0.3); border-radius: 4px;
+	font-family: monospace; color: #00ffcc; text-align: left; line-height: 1.5;
 }
+.launch-btn { margin-top: 15px; width: 100%; padding: 12px; font-weight: bold; font-size: 14px; background: #5a1a1a; color: #ff5555; border: 1px solid #ff5555; }
+.launch-btn:hover { background: #7a2020; }
 
-/* Execute Launch Button */
-#rl-execute-btn {
-	margin-top: 15px;
-	width: 100%;
-	font-weight: bold;
-	color: #ff5555;
+/* Info Panel (Bottom Left) */
+#info-panel {
+	position: absolute; bottom: 10px; left: 330px; /* PCではサイドバーの右側へ */
+	color: #ffffff; font-size: 12px; background-color: rgba(0, 0, 0, 0.6);
+	padding: 5px 10px; border-radius: 5px; pointer-events: none;
+	transition: left 0.3s ease;
+}
+#info-panel > p { line-height: 0.5; }
+
+/* =========================================
+   Responsive (Mobile) Overrides
+   ========================================= */
+@media (max-width: 768px) {
+	#mobile-menu-toggle { display: block; }
+	
+	/* スマホ時は画面外に隠し、.open クラス付与でスライドイン */
+	.sidebar { transform: translateX(-100%); width: 85vw; max-width: 350px; }
+	.sidebar.open { transform: translateX(0); }
+
+	/* Infoパネルの位置調整 */
+	#info-panel { left: 10px; }
+	
+	/* テレメトリパネルの縮小・位置調整 */
+	#telemetry-panel { top: 50px; right: 5px; width: auto; min-width: 200px; font-size: 11px; padding: 8px; }
 }
 
 /*=========================================

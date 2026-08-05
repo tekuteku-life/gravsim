@@ -33,9 +33,10 @@ export class ControlPanel {
 			centerSelect: document.getElementById('center-select'),
 			moonBtn: document.getElementById('put-moon-btn'),
 
-			menuModeRadios: document.querySelectorAll('input[name="menu-mode"]'),
-			easySettings: document.getElementById('easy-settings'),
-			rlSettings: document.getElementById('rl-settings'),
+			mobileMenuToggle: document.getElementById('mobile-menu-toggle'),
+			ctrlPanel: document.getElementById('ctrl-panel'),
+			tabBtns: document.querySelectorAll('.tab-btn'),
+			tabContents: document.querySelectorAll('.tab-content'),
 
 			rlModeSelect: document.getElementById('rl-mode-select'),
 			rlHostOptions: document.getElementById('rl-host-options'),
@@ -109,29 +110,32 @@ export class ControlPanel {
 		canvas.addEventListener('touchend', (e) => this._resetTouchDist(e));
 		canvas.addEventListener('touchcancel', () => this._resetTouchDist(null));
 
-		if (this.ui.menuModeRadios) {
-			this.ui.menuModeRadios.forEach(radio => {
-				radio.addEventListener('change', (e) => {
-					const mode = e.target.value;
+		// --- Mobile Menu Toggle ---
+		if (this.ui.mobileMenuToggle) {
+			this.ui.mobileMenuToggle.addEventListener('click', () => {
+				this.ui.ctrlPanel.classList.toggle('open');
+			});
+		}
 
-					if (mode === 'easy') {
-						// Open Easy Deploy Menu
-						this.ui.easySettings.style.display = 'block';
+		// --- Tab Navigation Events ---
+		if (this.ui.tabBtns) {
+			this.ui.tabBtns.forEach(btn => {
+				btn.addEventListener('click', (e) => {
+					// Remove active class from all tabs
+					this.ui.tabBtns.forEach(b => b.classList.remove('active'));
+					this.ui.tabContents.forEach(c => c.classList.remove('active'));
 
-						// Close Rocket Launch Menu
-						this.universe.RocketLauncher.togglePreview(false);
-						this.ui.rlSettings.style.display = 'none';
-					} else if (mode === 'rocket') {
-						// Close Easy Deploy Menu
-						this.ui.easySettings.style.display = 'none';
+					// Add active class to clicked tab
+					const targetId = e.target.getAttribute('data-target');
+					e.target.classList.add('active');
+					document.getElementById(targetId).classList.add('active');
 
-						// Open Rocket Launch Menu
+					// Special process for Rocket Launch tab opend
+					if (targetId === 'tab-rocket') {
 						this.universe.RocketLauncher.togglePreview(true);
-						this.ui.rlSettings.style.display = 'block';
-
-						// Auto target host selection
+						
 						let targetHostId = this.universe.RocketLauncher.hostId;
-						if (targetHostId === null || targetHostId === 0) {
+						if (targetHostId === null || targetHostId === 0) { 
 							const nonSunObjects = this.universe.objects.filter(o => o.id !== 0);
 							if (nonSunObjects.length > 0) {
 								targetHostId = Math.max(...nonSunObjects.map(o => o.id));
@@ -140,12 +144,12 @@ export class ControlPanel {
 							}
 							this.universe.RocketLauncher.hostId = targetHostId;
 						}
-
-						// Update stats when opened
 						this._updateRocketHostOptions();
-
 						this._setupLaunchEnvironment(targetHostId);
 						this._updateRocketStats();
+					} else {
+						// Close tab except for Rocket tab
+						this.universe.RocketLauncher.togglePreview(false);
 					}
 				});
 			});

@@ -9,51 +9,82 @@
 </head>
 <body>
 	<canvas id="gravsim-canvas"></canvas>
-	<form id="ctrl-panel">
-		<label for="time-scale">Time scale:</label>
-			<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-6.5" max="1" class="slider-main">
-		<span id="time-scale-indicator"></span>
-		
-		<label for="zoom-scale">Zoom level:</label>
-			<input type="range" id="zoom-scale" name="zoom-scale" value="0" step="0.05" min="-2" max="6" class="slider-main">
-		<span id="zoom-scale-indicator"></span>
-		
-		<label for="center-select">Center Object (Camera):</label>
-		<select id="center-select" name="center"></select>
 
-		<hr class="panel-divider">
+	<!-- Open/Close button for Smart Phone -->
+	<button type="button" id="mobile-menu-toggle">☰ MENU</button>
 
-		<div class="menu-mode-container">
-			<label><input type="radio" name="menu-mode" value="easy" checked> Easy Deploy</label>
-			<label><input type="radio" name="menu-mode" value="rocket"> Rocket Launch</label>
+	<!-- Control pannel (side-bar) -->
+	<form id="ctrl-panel" class="sidebar">
+		<!-- Tab navigation -->
+		<div class="tabs">
+			<button type="button" class="tab-btn active" data-target="tab-sys">System</button>
+			<button type="button" class="tab-btn" data-target="tab-deploy">Deploy</button>
+			<button type="button" class="tab-btn" data-target="tab-rocket">Rocket</button>
 		</div>
 
-		<div id="easy-settings">
-			<label for="mass-select">Object Mass:</label>
-			<select id="mass-select" name="mass"></select><br>
+		<!-- =====================================
+			 TAB 1: System & View
+		====================================== -->
+		<div id="tab-sys" class="tab-content active">
+			<div class="panel-section">
+				<div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+					<button type="button" id="save-state-btn" style="width: 48%;">Save State</button>
+					<button type="button" id="load-state-btn" style="width: 48%;">Load State</button>
+					<input type="file" id="load-file-input" accept=".json" style="display: none;">
+				</div>
+			</div>
 
-			<span>Orbital deploy:</span>
-			<button type="button" id="put-neptune-btn" class="deploy-btn">Neptune</button>
-			<button type="button" id="put-uranus-btn" class="deploy-btn">Uranus</button>
-			<button type="button" id="put-saturn-btn" class="deploy-btn">Saturn</button>
-			<button type="button" id="put-jupiter-btn" class="deploy-btn">Jupiter</button>
-			<button type="button" id="put-mars-btn" class="deploy-btn">Mars</button>
-			<button type="button" id="put-earth-btn" class="deploy-btn">Earth</button>
-			<button type="button" id="put-venus-btn" class="deploy-btn">Venus</button>
-			<button type="button" id="put-mercury-btn" class="deploy-btn">Mercury</button>
-			<button type="button" id="put-moon-btn" class="deploy-btn">Moon (around Earth)</button>
+			<div class="panel-section">
+				<label for="time-scale">Time scale:</label>
+				<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-6.5" max="1" class="slider-full">
+				<div class="indicator"><span id="time-scale-indicator"></span></div>
+				
+				<label for="zoom-scale">Zoom level:</label>
+				<input type="range" id="zoom-scale" name="zoom-scale" value="0" step="0.05" min="-2" max="6" class="slider-full">
+				<div class="indicator"><span id="zoom-scale-indicator"></span></div>
+				
+				<label for="center-select">Center Object (Camera):</label>
+				<select id="center-select" name="center" class="full-width"></select>
+			</div>
 		</div>
 
-		<div id="rl-settings">
-			<label>Placement Mode:</label>
-			<select id="rl-mode-select">
-				<option value="host">Relative to Host</option>
-				<option value="free">Free (Click Canvas)</option>
-			</select>
+		<!-- =====================================
+			 TAB 2: Easy Deploy
+		====================================== -->
+		<div id="tab-deploy" class="tab-content">
+			<div class="panel-section">
+				<label for="mass-select">Object Mass:</label>
+				<select id="mass-select" name="mass" class="full-width"></select>
+			</div>
 
-			<div id="rl-host-options">
+			<div class="panel-section deploy-grid">
+				<button type="button" id="put-neptune-btn">Neptune</button>
+				<button type="button" id="put-uranus-btn">Uranus</button>
+				<button type="button" id="put-saturn-btn">Saturn</button>
+				<button type="button" id="put-jupiter-btn">Jupiter</button>
+				<button type="button" id="put-mars-btn">Mars</button>
+				<button type="button" id="put-earth-btn">Earth</button>
+				<button type="button" id="put-venus-btn">Venus</button>
+				<button type="button" id="put-mercury-btn">Mercury</button>
+				<button type="button" id="put-moon-btn" style="grid-column: span 2;">Moon (around Earth)</button>
+			</div>
+		</div>
+
+		<!-- =====================================
+			 TAB 3: Rocket Launch
+		====================================== -->
+		<div id="tab-rocket" class="tab-content">
+			<div class="panel-section">
+				<label>Placement Mode:</label>
+				<select id="rl-mode-select" class="full-width">
+					<option value="free">Free (Click Canvas)</option>
+					<option value="host" selected>Relative to Host</option>
+				</select>
+			</div>
+
+			<div id="rl-host-options" class="panel-section">
 				<label>Target Host:</label>
-				<select id="rl-host-select"></select>
+				<select id="rl-host-select" class="full-width"></select>
 
 				<label>Host Angle (deg): <span id="rl-host-angle-val">0</span></label>
 				<input type="range" id="rl-host-angle" min="0" max="360" value="0" class="slider-full">
@@ -62,7 +93,7 @@
 				<input type="range" id="rl-host-alt" min="5" max="10000" step="1" value="5" class="slider-full">
 			</div>
 
-			<div class="launch-params">
+			<div class="panel-section launch-params">
 				<label>Launch Angle (deg): <span id="rl-launch-angle-val">90</span></label>
 				<input type="range" id="rl-launch-angle" min="0" max="360" value="90" class="slider-full">
 
@@ -74,16 +105,18 @@
 
 				<label>Payload Ratio (%): <span id="rl-launch-payload-val">20</span></label>
 				<input type="range" id="rl-launch-payload" min="1" max="100" step="1" value="20" class="slider-full">
+			</div>
 
-				<div id="rl-stats-panel">
-					Total Delta-v: <span id="rl-stat-dv">0.00</span> km/s<br>
-					TWR (<span id="rl-stat-host-name">Earth</span>): Y(Vert) <span id="rl-stat-twr-y">0.00</span> / X(Horz) <span id="rl-stat-twr-x">0.00</span>
-				</div>
+			<div id="rl-stats-panel">
+				Total Delta-v: <span id="rl-stat-dv">0.00</span> km/s<br>
+				TWR (<span id="rl-stat-host-name">Earth</span>):<br>
+				Y(Vert) <span id="rl-stat-twr-y">0.00</span> / X(Horz) <span id="rl-stat-twr-x">0.00</span>
 			</div>
 			
-			<button type="button" id="rl-execute-btn">LAUNCH ROCKET</button>
+			<button type="button" id="rl-execute-btn" class="launch-btn">LAUNCH ROCKET</button>
 		</div>
 	</form>
+
 	<div id="info-panel">
 		<p>Elapsed time: <span id="elapsed-time">0.00</span> years</p>
 		<p>Object count: <span id="object-count">0</span></p>
