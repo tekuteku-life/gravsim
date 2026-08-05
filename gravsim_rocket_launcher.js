@@ -166,4 +166,29 @@ export class RocketLauncher {
 		this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, thrustParams);
 		this.togglePreview(false);
 	}
+
+	getState() {
+		return {
+			mode: this.mode,
+			hostId: this.hostId,
+			hostAngleDeg: this.hostAngleDeg,
+			hostAltitudeM: this.hostAltitudeM,
+			launchAngleDeg: this.launchAngleDeg,
+			thrustKN: this.thrustKN,
+			burnTime: this.burnTime,
+			payloadRatio: this.payloadRatio
+		};
+	}
+
+	loadState(state) {
+		if (!state) return;
+		if (state.mode !== undefined) this.mode = state.mode;
+		if (state.hostId !== undefined) this.hostId = state.hostId;
+		if (state.hostAngleDeg !== undefined) this.hostAngleDeg = state.hostAngleDeg;
+		if (state.hostAltitudeM !== undefined) this.hostAltitudeM = state.hostAltitudeM;
+		if (state.launchAngleDeg !== undefined) this.launchAngleDeg = state.launchAngleDeg;
+		if (state.thrustKN !== undefined) this.thrustKN = state.thrustKN;
+		if (state.burnTime !== undefined) this.burnTime = state.burnTime;
+		if (state.payloadRatio !== undefined) this.payloadRatio = state.payloadRatio;
+	}
 }

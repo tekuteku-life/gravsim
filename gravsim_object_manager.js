@@ -271,6 +271,45 @@ export class ObjectManager {
 		}
 	}
 
+	getState() {
+		return this.objects.map(obj => ({
+			id: obj.id,
+			name: obj.name,
+			x: obj.x, y: obj.y,
+			vx: obj.vx, vy: obj.vy,
+			mass: obj.mass, color: obj.color,
+			size: obj.size, radius: obj.radius,
+			generation: obj.generation,
+			borderColor: obj.borderColor, borderWidth: obj.borderWidth,
+			thrustForce: obj.thrustForce, burnTime: obj.burnTime,
+			thrustAngle: obj.thrustAngle, emptyMass: obj.emptyMass, massLossRate: obj.massLossRate
+		}));
+	}
+
+	loadState(stateArray) {
+		this.destroy();
+		let maxId = -1;
+
+		if (Array.isArray(stateArray)) {
+			stateArray.forEach(o => {
+				const obj = new GravSimObject(
+					o.name, o.x, o.y, o.vx, o.vy, o.mass, o.color, o.size, o.radius,
+					o.generation, o.borderColor, o.borderWidth
+				);
+				obj.id = o.id; 
+				obj.thrustForce = o.thrustForce || 0;
+				obj.burnTime = o.burnTime || 0;
+				obj.thrustAngle = o.thrustAngle || 0;
+				obj.emptyMass = o.emptyMass || 0;
+				obj.massLossRate = o.massLossRate || 0;
+				
+				this.addObject(obj);
+				if (o.id > maxId) maxId = o.id;
+			});
+			GravSimObject._idCounter = maxId + 1;
+		}
+	}
+
 	destroy() {
 		this.objects.forEach(obj => this.removeObject(obj));
 		this.objects = [];

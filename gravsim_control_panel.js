@@ -518,4 +518,51 @@ export class ControlPanel {
 	getZoomStep() {
 		return parseFloat(this.ui.zoomScale.step) || 0.1;
 	}
+
+	getState() {
+		return {
+			timeScaleVal: this.ui.timeScale ? parseFloat(this.ui.timeScale.value) : -1,
+			zoomScaleVal: this.ui.zoomScale ? parseFloat(this.ui.zoomScale.value) : 0,
+		};
+	}
+
+	loadState(cpState, rlState) {
+		if (!cpState) return;
+
+		if (cpState.timeScaleVal !== undefined && this.ui.timeScale) {
+			this.ui.timeScale.value = cpState.timeScaleVal;
+			this.updateTimeScaleIndicator(this.getTimeScale());
+		}
+		if (cpState.zoomScaleVal !== undefined && this.ui.zoomScale) {
+			this.ui.zoomScale.value = cpState.zoomScaleVal;
+			this.updateZoomScaleIndicator(this.getZoomScale());
+			this.universe.updateZoomScale();
+		}
+
+		this.updateCenterOptions(); 
+
+		if (rlState) {
+			if (rlState.mode && this.ui.rlModeSelect) {
+				this.ui.rlModeSelect.value = rlState.mode;
+				this.ui.rlHostOptions.style.display = rlState.mode === 'host' ? 'block' : 'none';
+			}
+			
+			this._updateRocketHostOptions(); 
+
+			const updateSlider = (sliderId, valId, val) => {
+				if (val === undefined || val === null) return;
+				if (this.ui[sliderId]) this.ui[sliderId].value = val;
+				if (this.ui[valId]) this.ui[valId].textContent = val;
+			};
+
+			updateSlider('rlHostAngle', 'rlHostAngleVal', rlState.hostAngleDeg);
+			updateSlider('rlHostAlt', 'rlHostAltVal', rlState.hostAltitudeM);
+			updateSlider('rlLaunchAngle', 'rlLaunchAngleVal', rlState.launchAngleDeg);
+			updateSlider('rlLaunchThrust', 'rlLaunchThrustVal', rlState.thrustKN);
+			updateSlider('rlLaunchBurn', 'rlLaunchBurnVal', rlState.burnTime);
+			updateSlider('rlLaunchPayload', 'rlLaunchPayloadVal', rlState.payloadRatio);
+
+			this._updateRocketStats();
+		}
+	}
 }

@@ -12,6 +12,7 @@ import { ControlPanel } from './gravsim_control_panel.js';
 import { ObjectManager } from './gravsim_object_manager.js';
 import { ObjectPlacer } from './gravsim_object_placer.js';
 import { RocketLauncher } from './gravsim_rocket_launcher.js';
+import { SaveManager } from './gravsim_save_manager.js';
 
 const GRAVSIM_CALC_JS_FILE = './gravsim_calc.js';
 
@@ -69,6 +70,7 @@ export class Universe {
 		this.ControlPanel = new ControlPanel(this);
 		this.ObjectPlacer = new ObjectPlacer(this);
 		this.RocketLauncher = new RocketLauncher(this);
+		this.SaveManager = new SaveManager(this);
 
 		this.timeScale = this.ControlPanel.getTimeScale();
 		
@@ -175,5 +177,35 @@ export class Universe {
 		this.ctx.scale(this.zoomScale, this.zoomScale);
 		this.RocketLauncher.drawPreview(this.ctx, this.centerObject, 1 / this.zoomScale);
 		this.ctx.restore();
+	}
+
+	getState() {
+		return {
+			centerObjectId: this.centerObject ? this.centerObject.id : null,
+			objectManager: this.ObjectManager.getState(),
+			rocketLauncher: this.RocketLauncher.getState(),
+			controlPanel: this.ControlPanel.getState()
+		};
+	}
+
+	loadState(state) {
+		if (!state) return;
+
+		if (state.objectManager) {
+			this.ObjectManager.loadState(state.objectManager);
+		}
+
+		if (state.centerObjectId !== undefined && state.centerObjectId !== null) {
+			const target = this.objects.find(o => o.id === state.centerObjectId);
+			this.centerObject = target || (this.objects.length > 0 ? this.objects[0] : null);
+		}
+
+		if (state.rocketLauncher) {
+			this.RocketLauncher.loadState(state.rocketLauncher);
+		}
+
+		if (state.controlPanel) {
+			this.ControlPanel.loadState(state.controlPanel, state.rocketLauncher);
+		}
 	}
 }
