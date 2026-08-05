@@ -142,7 +142,6 @@ export class ControlPanel {
 						}
 
 						// Update stats when opened
-						this.ui.rlHostOptions.style.display = 'block';
 						this._updateRocketHostOptions();
 
 						this._setupLaunchEnvironment(targetHostId);

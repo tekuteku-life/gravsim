@@ -131,7 +131,7 @@ canvas {
 
 /* Host Options Wrapper */
 #rl-host-options {
-	display: none; /* Managed by JS inline override */
+	display: block; /* Managed by JS inline override */
 	margin-top: 8px;
 }
 
