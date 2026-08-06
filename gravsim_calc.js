@@ -7,6 +7,7 @@ import {
 	ROCHE_RIGID_BODY_RADIUS, ROCHE_RIGID_DESTROYER_MASS,
 	DEBRIS_MAX_GENERATION, DEBRIS_MIN_MASS_TO_SHATTER,
 	CALC_EXPAND_DIV_NUM, CALC_SUB_STEPS_BASE, CALC_SUB_STEPS_MAX,
+	DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js'
 
 const CALC_INTERVAL = 60;
@@ -15,8 +16,9 @@ const CALC_INTERVAL = 60;
  * Entity Class
 *******************************************************************/
 class GravSimCalcObject {
-	constructor(id, x, y, vx, vy, ax, ay, mass, radius, generation, thrustData) {
+	constructor(id, name, x, y, vx, vy, ax, ay, mass, radius, generation, thrustData) {
 		this.id = id;
+		this.name = name;
 		this.x = x;
 		this.y = y;
 		this.vx = vx;
@@ -103,7 +105,7 @@ class PhysicsEngine {
 
 	addObject(data) {
 		this.objects.push(new GravSimCalcObject(
-			data.id, data.x, data.y,
+			data.id, data.name, data.x, data.y,
 			data.vx || 0, data.vy || 0,
 			data.ax || 0, data.ay || 0,
 			data.mass || 1, data.radius || 1,
@@ -181,12 +183,12 @@ class PhysicsEngine {
 
 					let debrisRatio = 0;
 					const winnerDensity = winner.mass / Math.pow(winner.radius, 3);
-					
+
 					// Debris isn't disrupted
 					if (winnerDensity <= ROCHE_UNBREAKABLE_DENSITY && !loser.isDebris) {
 						debrisRatio = massRatio * (energyRatio * 0.5);
 						debrisRatio = Math.max(0.0, Math.min(debrisRatio, 0.9));
-						
+
 						// Ignore tiny debris
 						if (debrisRatio < 1e-4) {
 							debrisRatio = 0;
@@ -199,7 +201,7 @@ class PhysicsEngine {
 					const oldWinnerMass = winner.mass;
 					winner.mass += absorbedMass;
 					winner.radius = winner.radius * Math.cbrt(winner.mass / oldWinnerMass);
-					
+
 					winner.vx = newVx;
 					winner.vy = newVy;
 
@@ -255,6 +257,94 @@ class PhysicsEngine {
 		}
 	}
 
+	_updateAerodynamicsFor(obj) {
+		if (obj.collided || obj.shattered) { return; }
+
+		let refBody = null;
+		let minDistSq = Infinity;
+
+		// Select the most near object
+		for (const p of this.objects) {
+			if (p.id === obj.id || p.collided || p.shattered) { continue; }
+			const param = DEFAULT_OBJECT_PARAMS[p.name];
+			if (!param || !param.ATM_LIMIT_ALT) { continue; }
+			
+			const dx = obj.x - p.x;
+			const dy = obj.y - p.y;
+			const distSq = dx * dx + dy * dy;
+			if (distSq < minDistSq) {
+				minDistSq = distSq;
+				refBody = p;
+			}
+		}
+
+		if (!refBody) { return; }
+
+		// Ignore if don't reach for the object's atmosphere
+		const distM = Math.sqrt(minDistSq);
+		const refParam = DEFAULT_OBJECT_PARAMS[refBody.name];
+		const altM = distM - refBody.radius;
+
+		if (altM > refParam.ATM_LIMIT_ALT) { return; }
+		
+		// Calculate Atmospheric Density
+		const rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / refParam.ATM_SCALE_HEIGHT);
+		
+		// Calculate local atmosphere velocity
+		let vAtmM_x = refBody.vx;
+		let vAtmM_y = refBody.vy;
+		
+		if (refParam.ROTATION_PERIOD) {
+			const omega = (2 * Math.PI) / refParam.ROTATION_PERIOD;
+			const dxRef = obj.x - refBody.x;
+			const dyRef = obj.y - refBody.y;
+			vAtmM_x += -omega * dyRef;
+			vAtmM_y += omega * dxRef;
+		}
+		
+		// Relative Velocity
+		const vRelX = obj.vx - vAtmM_x;
+		const vRelY = obj.vy - vAtmM_y;
+		const vRelSq = vRelX * vRelX + vRelY * vRelY;
+		
+		if (vRelSq === 0) return;
+		const vRel = Math.sqrt(vRelSq);
+		
+		// Determine Area and Cd
+		let area = Math.PI * obj.radius * obj.radius;
+		let cd = 0.47;
+		
+		const objParam = DEFAULT_OBJECT_PARAMS[obj.name];
+		if (objParam && objParam.AERO_AREA_FRONT) {
+			cd = objParam.DRAG_COEF || 0.2;
+			const velAngle = Math.atan2(vRelY, vRelX);
+			let angleDiff = Math.abs(obj.thrustAngle - velAngle);
+			while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+			while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+			angleDiff = Math.abs(angleDiff);
+			
+			const aoa = Math.min(angleDiff, Math.PI - angleDiff);
+			const sinAoA = Math.sin(aoa);
+			area = objParam.AERO_AREA_FRONT * (1 - sinAoA) + objParam.AERO_AREA_SIDE * sinAoA;
+		}
+		
+		// Dynamic Pressure & Drag Force
+		const q = 0.5 * rho * vRelSq;
+		
+		// Max-Q structural check
+		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
+		if (q > maxQ) {
+			obj.shattered = true;
+			return;
+		}
+		
+		const dragForce = q * cd * area;
+		const accelDrag = dragForce / (obj.mass * 1000); // mass is in tons
+		
+		obj.ax -= (vRelX / vRel) * accelDrag;
+		obj.ay -= (vRelY / vRel) * accelDrag;
+	}
+
 	_moveObjects(dt) {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
@@ -269,15 +359,21 @@ class PhysicsEngine {
 
 			obj._thrustRatio = dt > 0 ? (actualDt / dt) : 0;
 
-			// Apply gravity and thrust (Velocity Verlet integration Step 1)
+			// Apply gravity, aerodynamics and thrust (Velocity Verlet integration Step 1)
 			this._updateGravityFor(obj);
+			this._updateAerodynamicsFor(obj);
+			if (obj.shattered) { continue; }
+
 			const half_vx = obj.vx + obj.ax * dt / 2;
 			const half_vy = obj.vy + obj.ay * dt / 2;
 			obj.x += half_vx * dt;
 			obj.y += half_vy * dt;
 
-			// Apply gravity and thrust (Velocity Verlet integration Step 2)
+			// Apply gravity, aerodynamics and thrust (Velocity Verlet integration Step 2)
 			this._updateGravityFor(obj);
+			this._updateAerodynamicsFor(obj);
+			if (obj.shattered) { continue; }
+
 			obj.vx = half_vx + obj.ax * dt / 2;
 			obj.vy = half_vy + obj.ay * dt / 2;
 
@@ -368,7 +464,7 @@ class SimulationController {
 		for (let i = 0; i < SUB_STEPS; i++) {
 			this.engine.step(dt);
 		}
-			
+
 		// Return result to main thread (Includes newly shattered objects before removal)
 		const buffer = this.formatForMessage();
 		self.postMessage({

@@ -214,6 +214,31 @@ export class GravSimObject {
 			ctx.lineWidth = 1;
 		}
 	}
+	
+	_drawAtmosphere(ctx, x, y, screenRadius, zoomScale) {
+		const param = DEFAULT_OBJECT_PARAMS[this.name];
+		if (!param || !param.ATM_COLOR || !param.ATM_LIMIT_ALT) return;
+
+		const atmThicknessPx = (param.ATM_LIMIT_ALT / METERS_PER_AU) * DISTANCE_SCALE;
+		const screenThicknessPx = atmThicknessPx * zoomScale;
+
+		if (screenThicknessPx < 1) return;
+
+		const outerScreenRadius = screenRadius + screenThicknessPx;
+
+		ctx.save();
+		
+		const gradient = ctx.createRadialGradient(x, y, screenRadius, x, y, outerScreenRadius);
+		gradient.addColorStop(0, param.ATM_COLOR);
+		gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+		ctx.fillStyle = gradient;
+		ctx.beginPath();
+		ctx.arc(x, y, outerScreenRadius, 0, Math.PI * 2);
+		ctx.fill();
+		
+		ctx.restore();
+	}
 
 	_drawFlame(ctx, x, y, screenRadius) {
 		const flicker = 0.8 + Math.random() * 0.4;

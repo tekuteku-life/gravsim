@@ -112,6 +112,11 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"A": 0.723,
 		"E": 0.0067,
 		"PERIHELION_DEG": 131.53,
+		"ATM_COLOR": "rgba(255, 200, 100, 0.6)",
+		"ATM_LIMIT_ALT": 250000,
+		"ATM_DENSITY_0": 65,
+		"ATM_SCALE_HEIGHT": 15900,
+		"ROTATION_PERIOD": 20996800
 	},
 	"Earth": {
 		"NAME" : "Earth",
@@ -121,6 +126,11 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"A": 1.000,
 		"E": 0.0167,
 		"PERIHELION_DEG": 102.95,
+		"ATM_COLOR": "rgba(100, 150, 255, 0.5)",
+		"ATM_LIMIT_ALT": 100000,
+		"ATM_DENSITY_0": 1.225,
+		"ATM_SCALE_HEIGHT": 8500,
+		"ROTATION_PERIOD": 86164
 	},
 	"Mars": {
 		"NAME" : "Mars",
@@ -130,6 +140,11 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"A": 1.524,
 		"E": 0.0934,
 		"PERIHELION_DEG": 336.04,
+		"ATM_COLOR": "rgba(255, 140, 0, 0.4)",
+		"ATM_LIMIT_ALT": 50000,
+		"ATM_DENSITY_0": 0.02,
+		"ATM_SCALE_HEIGHT": 11100,
+		"ROTATION_PERIOD": 88642
 	},
 	"Jupiter": {
 		"NAME" : "Jupiter",
@@ -139,6 +154,11 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"A": 5.204,
 		"E": 0.0489,
 		"PERIHELION_DEG": 14.75,
+		"ATM_COLOR": "rgba(200, 180, 150, 0.4)",
+		"ATM_LIMIT_ALT": 3000000,
+		"ATM_DENSITY_0": 0.16,
+		"ATM_SCALE_HEIGHT": 27000,
+		"ROTATION_PERIOD": 35730
 	},
 	"Saturn": {
 		"NAME" : "Saturn",
@@ -188,5 +208,9 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"COLOR": "#32CD32",
 		"RADIUS": 63,
 		"MIN_DRAW_SIZE": 2,
+		"AERO_AREA_FRONT": 10,
+		"AERO_AREA_SIDE": 126,
+		"DRAG_COEF": 0.2,
+		"MAX_DYNAMIC_PRESSURE": 50000
 	},
 };

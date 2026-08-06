@@ -33,6 +33,7 @@ export class ObjectManager {
 		this.workerManager.postMessage({
 			cmd: 'add',
 			id: obj.id,
+			name: obj.name,
 			x: this.renderer.pix2m(obj.x), y: this.renderer.pix2m(obj.y),
 			vx: this.renderer.pix2m(obj.vx), vy: this.renderer.pix2m(obj.vy),
 			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
@@ -110,7 +111,7 @@ export class ObjectManager {
 					target.setCollided();
 				}
 
-				// Handle object shattered by tidal force in the worker
+				// Handle object shattered by tidal force or Max-Q in the worker
 				if (isShattered && target.state === OBJECT_STATE.ACTIVE) {
 					this._shatterObject(target);
 				}
@@ -187,7 +188,7 @@ export class ObjectManager {
 
 	// Vanish target object and create debris
 	_shatterObject(obj) {
-		console.debug(`${obj.name} (id:${obj.id}) shattered by tidal force.`);
+		console.debug(`${obj.name} (id:${obj.id}) shattered.`);
 
 		this.removeObject(obj);
 		this.renderer.addShockwave(obj.x, obj.y, obj.color);
@@ -208,7 +209,7 @@ export class ObjectManager {
 		);
 	}
 
-	// Mix with gray (#808080)
+	// Mix with gray
 	_mixWithGray(hexColor, grayRatio) {
 		let c = hexColor.replace('#', '');
 		if (c.length === 3) c = c.split('').map(x => x + x).join('');

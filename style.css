@@ -287,6 +287,15 @@ button:hover { background: #444; }
 	color: #00ffcc;
 }
 
+.tm-section-header {
+	color: #00ffcc;
+	margin-top: 10px;
+	margin-bottom: 5px;
+	border-bottom: 1px dashed #005544;
+	padding-bottom: 2px;
+	font-weight: bold;
+}
+
 /* Sub-canvas */
 #sub-canvas {
 	width: 228px;

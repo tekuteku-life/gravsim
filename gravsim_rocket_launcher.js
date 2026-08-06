@@ -55,7 +55,7 @@ export class RocketLauncher {
 		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		const m0 = param.MASS * 1e3;
-		
+
 		// Calculate final mass (mf) based on payload ratio
 		const mf = m0 * (this.payloadRatio / 100);
 		
@@ -74,11 +74,22 @@ export class RocketLauncher {
 				const distance = host.radius + (param.RADIUS || 1) + this.hostAltitudeM;
 				
 				const distPx = this.universe.m2pix(distance);
-				posX = host.x + Math.cos(angleRad) * distPx;
-				posY = host.y + Math.sin(angleRad) * distPx;
+				const dxPx = Math.cos(angleRad) * distPx;
+				const dyPx = Math.sin(angleRad) * distPx;
 				
+				posX = host.x + dxPx;
+				posY = host.y + dyPx;
+
 				baseVx = host.vx;
 				baseVy = host.vy;
+
+				// Add host's rotation speed to rocket initial speed
+				const hostParam = DEFAULT_OBJECT_PARAMS[host.name];
+				if (hostParam && hostParam.ROTATION_PERIOD) {
+					const omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
+					baseVx += -omega * dyPx;
+					baseVy += omega * dxPx;
+				}
 			}
 		}
 

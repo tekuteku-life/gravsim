@@ -131,12 +131,22 @@
 		<div class="telemetry-header">TELEMETRY DATA</div>
 		<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
 		<div class="telemetry-line">REF BODY : <span id="tm-refbody">---</span></div>
+		<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
+		
+		<div class="tm-section-header">[ ORBIT DYNAMICS ]</div>
 		<div class="telemetry-line">ALTITUDE : <span id="tm-alt">---</span> km</div>
 		<div class="telemetry-line">VELOCITY : <span id="tm-vel">---</span> km/s</div>
 		<div class="telemetry-line">G-FORCE  : <span id="tm-gforce">---</span> G</div>
-		<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
+
+		<div class="tm-section-header">[ AERODYNAMICS ]</div>
+		<div class="telemetry-line">ATM DENS : <span id="tm-atm">---</span> kg/m³</div>
+		<div class="telemetry-line">A. o. A. : <span id="tm-aoa">---</span> deg</div>
+		<div class="telemetry-line">DYN PRES : <span id="tm-dyn">---</span> kPa</div>
+		<div class="telemetry-line">STRUCT   : <span id="tm-struct">---</span> %</div>
+		<div class="telemetry-line">DRAG     : <span id="tm-drag">---</span> kN</div>
 
 		<div id="tm-rocket-data" style="display: none;">
+			<div class="tm-section-header">[ PROPULSION ]</div>
 			<div class="telemetry-line">PROPELLANT:<span id="tm-prop">---</span> t</div>
 			<div class="telemetry-line">BURN REM : <span id="tm-burn">---</span> s</div>
 		</div>

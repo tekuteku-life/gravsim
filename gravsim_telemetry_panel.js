@@ -4,7 +4,8 @@ import { Renderer } from './gravsim_renderer.js';
 import {
 	TELEMETRY_UPDATE_INTERVAL_MS,
 	TELEMETRY_SUB_VIEW_TARGET_RADIUS,
-	TELEMETRY_SUB_VIEW_MAX_ZOOM
+	TELEMETRY_SUB_VIEW_MAX_ZOOM,
+	DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
 
 export class TelemetryPanel {
@@ -22,13 +23,22 @@ export class TelemetryPanel {
 			panel: document.getElementById('telemetry-panel'),
 			targetSelect: document.getElementById('tm-target-select'),
 			refBody: document.getElementById('tm-refbody'),
+			mass: document.getElementById('tm-mass'),
+
 			alt: document.getElementById('tm-alt'),
 			vel: document.getElementById('tm-vel'),
 			gforce: document.getElementById('tm-gforce'),
-			mass: document.getElementById('tm-mass'),
+
+			atm: document.getElementById('tm-atm'),
+			aoa: document.getElementById('tm-aoa'),
+			dyn: document.getElementById('tm-dyn'),
+			struct: document.getElementById('tm-struct'),
+			drag: document.getElementById('tm-drag'),
+
 			rocketData: document.getElementById('tm-rocket-data'),
 			prop: document.getElementById('tm-prop'),
 			burn: document.getElementById('tm-burn'),
+
 			subCanvas: document.getElementById('sub-canvas'),
 		};
 		
@@ -132,7 +142,7 @@ export class TelemetryPanel {
 			this.ui.refBody.innerText = refBody.name.substring(0, 14);
 			
 			const distM = this.universe.pix2m(distToRefPx);
-			const altM = distM - target.radius - refBody.radius;
+			const altM = distM - refBody.radius;
 			this.ui.alt.innerText = (altM / 1000).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' ');
 
 			const dvx = this.universe.pix2m(target.vx - refBody.vx);
@@ -155,6 +165,81 @@ export class TelemetryPanel {
 			gForce = (thrustN / massKg) / 9.80665;
 		}
 		this.ui.gforce.innerText = gForce.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(7, ' ');
+
+		// Update Aerodynamics Info
+		let rho = 0, aoaDeg = 0, q = 0, dragKN = 0, structRatio = 0;
+		if (refBody) {
+			const refParam = DEFAULT_OBJECT_PARAMS[refBody.name];
+			const distM = this.universe.pix2m(distToRefPx);
+			const altM = distM - refBody.radius;
+			
+			if (refParam && refParam.ATM_LIMIT_ALT && altM < refParam.ATM_LIMIT_ALT && altM > 0) {
+				rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / refParam.ATM_SCALE_HEIGHT);
+				
+				let vAtmM_x = this.universe.pix2m(refBody.vx);
+				let vAtmM_y = this.universe.pix2m(refBody.vy);
+				
+				if (refParam.ROTATION_PERIOD) {
+					const omega = (2 * Math.PI) / refParam.ROTATION_PERIOD;
+					const dxRef = this.universe.pix2m(target.x - refBody.x);
+					const dyRef = this.universe.pix2m(target.y - refBody.y);
+					vAtmM_x += -omega * dyRef;
+					vAtmM_y += omega * dxRef;
+				}
+				
+				const vRelX = this.universe.pix2m(target.vx) - vAtmM_x;
+				const vRelY = this.universe.pix2m(target.vy) - vAtmM_y;
+				const vRelSq = vRelX * vRelX + vRelY * vRelY;
+				
+				q = 0.5 * rho * vRelSq;
+				
+				let area = Math.PI * target.radius * target.radius;
+				let cd = 0.47;
+				const objParam = DEFAULT_OBJECT_PARAMS[target.name];
+				
+				if (objParam && objParam.AERO_AREA_FRONT) {
+					cd = objParam.DRAG_COEF || 0.2;
+					const velAngle = Math.atan2(vRelY, vRelX);
+					let angleDiff = Math.abs(target.thrustAngle - velAngle);
+					while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+					while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+					angleDiff = Math.abs(angleDiff);
+					
+					const aoa = Math.min(angleDiff, Math.PI - angleDiff);
+					aoaDeg = aoa * (180 / Math.PI);
+					const sinAoA = Math.sin(aoa);
+					
+					area = objParam.AERO_AREA_FRONT * (1 - sinAoA) + objParam.AERO_AREA_SIDE * sinAoA;
+				}
+				
+				dragKN = (q * cd * area) / 1000;
+				
+				const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
+				if (maxQ !== Infinity) {
+					structRatio = (q / maxQ) * 100;
+				}
+			}
+		}
+
+		if (this.ui.atm) {
+			this.ui.atm.innerText = rho.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4}).padStart(8, ' ');
+			this.ui.aoa.innerText = rho > 0 ? aoaDeg.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(6, ' ') : "---".padStart(6, ' ');
+			this.ui.dyn.innerText = (q / 1000).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(8, ' ');
+			
+			if (structRatio > 0) {
+				this.ui.struct.innerText = structRatio.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(6, ' ');
+				if (structRatio > 80) {
+					this.ui.struct.style.color = '#ffaa00';
+				} else {
+					this.ui.struct.style.color = '#00ffcc';
+				}
+			} else {
+				this.ui.struct.innerText = "---".padStart(6, ' ');
+				this.ui.struct.style.color = '#00ffcc';
+			}
+			
+			this.ui.drag.innerText = dragKN.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(8, ' ');
+		}
 
 		// Rocket Specific Data
 		if (target.emptyMass > 0 && target.massLossRate > 0) {
@@ -181,14 +266,14 @@ export class TelemetryPanel {
 
 		if (targetObj) {
 			const realRadiusPx = this.universe.m2pix(targetObj.radius);
-			
+
 			// Keep the radius of the object 20px on Sub screen
 			let subZoom = TELEMETRY_SUB_VIEW_TARGET_RADIUS / Math.max(realRadiusPx, 1e-10);
 			subZoom = Math.min(subZoom, TELEMETRY_SUB_VIEW_MAX_ZOOM);
 
 			this.subRenderer.setZoomScale(subZoom);
 			this.subRenderer.draw(this.universe.objects, targetObj);
-			
+
 			// Draw rocket preview
 			if (this.universe.RocketLauncher) {
 				const subCtx = this.subRenderer.canvas.getContext('2d');
