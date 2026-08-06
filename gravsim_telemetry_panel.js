@@ -87,7 +87,6 @@ export class TelemetryPanel {
 		this.lastUpdate = now;
 
 		if (this.lastObjCount !== this.universe.objects.length) {
-			// Change target when the new object added
 			if (this.lastObjCount !== -1 && this.universe.objects.length > this.lastObjCount) {
 				const newestObj = this.universe.objects[this.universe.objects.length - 1];
 				this.targetId = newestObj.id;
@@ -107,7 +106,7 @@ export class TelemetryPanel {
 			}
 		}
 
-		// 1. Find Reference Body
+		// Find Reference Body
 		let refBody = null;
 		let maxG = -1;
 		let distToRefPx = 0;
@@ -128,7 +127,7 @@ export class TelemetryPanel {
 			}
 		}
 
-		// 2. Update Basic Info
+		// Update Orbit Info
 		if (refBody) {
 			this.ui.refBody.innerText = refBody.name.substring(0, 14);
 			
@@ -148,7 +147,7 @@ export class TelemetryPanel {
 
 		this.ui.mass.innerText = target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' ');
 
-		// 3. G-Force Calculation
+		// G-Force Calculation
 		let gForce = 0;
 		if (target.burnTime > 0 && target.thrustForce > 0) {
 			const thrustN = target.thrustForce;
@@ -157,7 +156,7 @@ export class TelemetryPanel {
 		}
 		this.ui.gforce.innerText = gForce.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(7, ' ');
 
-		// 4. Rocket Specific Data
+		// Rocket Specific Data
 		if (target.emptyMass > 0 && target.massLossRate > 0) {
 			this.ui.rocketData.style.display = 'block';
 			const currentProp = Math.max(0, target.mass - target.emptyMass);
@@ -185,8 +184,6 @@ export class TelemetryPanel {
 			
 			// Keep the radius of the object 20px on Sub screen
 			let subZoom = TELEMETRY_SUB_VIEW_TARGET_RADIUS / Math.max(realRadiusPx, 1e-10);
-			
-			// Limit zoom
 			subZoom = Math.min(subZoom, TELEMETRY_SUB_VIEW_MAX_ZOOM);
 
 			this.subRenderer.setZoomScale(subZoom);

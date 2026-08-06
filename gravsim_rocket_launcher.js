@@ -34,7 +34,6 @@ export class RocketLauncher {
 	togglePreview(forceState = null) {
 		this.isActive = forceState !== null ? forceState : !this.isActive;
 		if (this.isActive && this.mode === 'free') {
-			// Set initial free position to current center
 			this.freeX = this.universe.centerObject.x;
 			this.freeY = this.universe.centerObject.y;
 		}

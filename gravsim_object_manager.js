@@ -189,24 +189,14 @@ export class ObjectManager {
 	_shatterObject(obj) {
 		console.debug(`${obj.name} (id:${obj.id}) shattered by tidal force.`);
 
-		// Vanish object & add shock-wave
 		this.removeObject(obj);
 		this.renderer.addShockwave(obj.x, obj.y, obj.color);
 
 		const nextGen = obj.generation + 1;
-
-		// Calculate the base number of debris by its mass
 		const baseCount = Math.floor(Math.log10(obj.mass));
-
-		// Apply decrease ratio according to generation
 		const decay = Math.pow(DEBRIS_FRAG_DECAY_RATE, nextGen - 1);
-
-		// Calculate the number of fragment according to the base count & decrease ratio
 		const fragmentCount = Math.max(DEBRIS_MIN_FRAG, Math.floor(baseCount / decay));
-
 		const baseMass = obj.mass / fragmentCount;
-
-		// Generate the color of debris
 		const debrisColor = this._mixWithGray(obj.color, 0.6);
 
 		// Generate debris
@@ -254,7 +244,6 @@ export class ObjectManager {
 			const dvx = this.renderer.pix2m(obj.vx - this.centerObject.vx);
 			const dvy = this.renderer.pix2m(obj.vy - this.centerObject.vy);
 
-			// Relative velocity squared
 			const v2 = dvx * dvx + dvy * dvy;
 
 			const totalMass = (this.centerObject.mass + obj.mass) * 1e3;

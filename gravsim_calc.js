@@ -166,12 +166,11 @@ class PhysicsEngine {
 					const newVx = (winner.mass * winner.vx + loser.mass * loser.vx) / totalMass;
 					const newVy = (winner.mass * winner.vy + loser.mass * loser.vy) / totalMass;
 					
-					// 相対速度の2乗
 					const dvx = winner.vx - loser.vx;
 					const dvy = winner.vy - loser.vy;
 					const vRelSq = dvx * dvx + dvy * dvy;
 
-					// 衝突時の合成天体の脱出速度の2乗 (v_esc^2 = 2GM / R)
+					// The square of escape speed (v_esc^2 = 2GM / R)
 					const escapeVSq = (2 * G * totalMass) / (winner.radius + loser.radius);
 
 					// Energy ratio (higher value generates more debris)
@@ -205,14 +204,14 @@ class PhysicsEngine {
 					winner.vy = newVy;
 
 					loser.collided = true;
-					// 修正: デブリ質量がゼロの場合でも、元がデブリでなければ衝撃波は発生させる[cite: 11]
 					if (debrisMass > 0 || !loser.isDebris) {
 						loser.isImpact = true;
 					}
 					loser.debrisMass = debrisMass;
 					loser.impactVx = newVx;
 					loser.impactVy = newVy;
-					// 追加: 勝者の情報を記録[cite: 11]
+
+					// Keep winner position to generate impact debris
 					loser.impactWinnerX = winner.x;
 					loser.impactWinnerY = winner.y;
 					loser.impactWinnerRadius = winner.radius;
@@ -226,8 +225,6 @@ class PhysicsEngine {
 			const massiveObj = this.objects[i];
 
 			if (massiveObj.collided || massiveObj.shattered) { continue; }
-
-			// Destructor must be bigger than min-threshold
 			if (massiveObj.mass < ROCHE_MIN_MASS_TO_DESTROY) { continue; }
 
 			const massiveDensity = massiveObj.mass / Math.pow(massiveObj.radius, 3);
@@ -237,24 +234,14 @@ class PhysicsEngine {
 				const fragileObj = this.objects[j];
 
 				if (fragileObj.collided || fragileObj.shattered) { continue; }
-
-				// Destructee must be smaller than destructor
 				if (massiveObj.mass <= fragileObj.mass) { continue; }
 
-				// Density of destructee must not be too high
 				const fragileDensity = fragileObj.mass / Math.pow(fragileObj.radius, 3);
 				if (fragileDensity > ROCHE_UNBREAKABLE_DENSITY) { continue; }
-
-				// Destructee must be smaller than radius-threshold
 				if (fragileObj.radius < ROCHE_RIGID_BODY_RADIUS) { continue; }
-
-				// Limit the generation of debris
 				if (fragileObj.generation >= DEBRIS_MAX_GENERATION) { continue; }
-
-				// Destructee debris must be larger than threshold
 				if (fragileObj.isDebris && fragileObj.mass < DEBRIS_MIN_MASS_TO_SHATTER) { continue; }
 
-				// Calculate roche-limit
 				const rocheLimitM = 2.44 * massiveObj.radius * Math.cbrt(massiveDensity / fragileDensity);
 
 				const dx = fragileObj.x - massiveObj.x;
