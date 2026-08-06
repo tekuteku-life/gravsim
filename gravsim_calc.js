@@ -32,6 +32,9 @@ class GravSimCalcObject {
 		this.thrustAngle = thrustData?.thrustAngle || 0;
 		this.emptyMass = thrustData?.emptyMass || 0;
 		this.massLossRate = thrustData?.massLossRate || 0;
+		this.maxGLimit = thrustData?.maxGLimit || 0;
+		this._thrustRatio = 0;
+		this._currentQ = 0;
 		this.collided = false;
 		this.shattered = false;
 		this.generation = generation || 0;
@@ -115,6 +118,7 @@ class PhysicsEngine {
 				burnTime: data.burnTime,
 				thrustAngle: data.thrustAngle,
 				emptyMass: data.emptyMass,
+				maxGLimit: data.maxGLimit,
 				massLossRate: data.massLossRate
 			},
 		));
@@ -201,7 +205,7 @@ class PhysicsEngine {
 					const oldWinnerMass = winner.mass;
 					winner.mass += absorbedMass;
 					winner.radius = winner.radius * Math.cbrt(winner.mass / oldWinnerMass);
-
+					
 					winner.vx = newVx;
 					winner.vy = newVy;
 
@@ -330,6 +334,7 @@ class PhysicsEngine {
 		
 		// Dynamic Pressure & Drag Force
 		const q = 0.5 * rho * vRelSq;
+		obj._currentQ = q;
 		
 		// Max-Q structural check
 		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
@@ -350,9 +355,37 @@ class PhysicsEngine {
 			if (obj.collided || obj.shattered) { continue; }
 
 			let actualDt = 0;
+			let throttle = 1.0;
+
 			if (obj.burnTime > 0) {
-				actualDt = Math.min(dt, obj.burnTime);
+				// Max-G Limiter (Throttle down)
+				if (obj.maxGLimit > 0) {
+					const F_max = obj.thrustForce; // Newtons
+					const currentMassKg = obj.mass * 1000;
+					const maxAllowedThrust = obj.maxGLimit * G * currentMassKg;
+					if (F_max > maxAllowedThrust) {
+						throttle = maxAllowedThrust / F_max;
+					}
+				}
+
+				// Max-Q Auto-Throttle (Flight Computer Feedback)
+				const maxQ = DEFAULT_OBJECT_PARAMS[obj.name]?.MAX_DYNAMIC_PRESSURE || Infinity;
+				if (maxQ !== Infinity && obj._currentQ > 0) {
+					const qRatio = obj._currentQ / maxQ;
+					if (qRatio > 0.7) {
+						// Throttle down linearly
+						let qThrottle = 1.0 - (qRatio - 0.7) * 5;
+						qThrottle = Math.max(0.1, Math.min(1.0, qThrottle));
+						throttle = Math.min(throttle, qThrottle);
+					}
+				}
+
+				// The time consumed is proportional to the throttle
+				const consumedTime = dt * throttle;
+				actualDt = Math.min(consumedTime, obj.burnTime);
+
 				obj.mass -= obj.massLossRate * actualDt;
+				if (obj.emptyMass > 0 && obj.mass < obj.emptyMass) { obj.mass = obj.emptyMass; }
 				if (obj.mass < 1) { obj.mass = 1; } // Safeguard (Min 1kg)
 				obj.burnTime -= actualDt;
 			}
@@ -501,6 +534,7 @@ class SimulationController {
 			buffer[offset + 14] = obj.impactWinnerX || 0;
 			buffer[offset + 15] = obj.impactWinnerY || 0;
 			buffer[offset + 16] = obj.impactWinnerRadius || 0;
+			buffer[offset + 17] = obj._thrustRatio || 0;
 		}
 		return buffer;
 	}

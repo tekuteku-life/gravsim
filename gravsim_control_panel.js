@@ -57,6 +57,8 @@ export class ControlPanel {
 			rlLaunchBurnVal: document.getElementById('rl-launch-burn-val'),
 			rlLaunchPayload: document.getElementById('rl-launch-payload'),
 			rlLaunchPayloadVal: document.getElementById('rl-launch-payload-val'),
+			rlLaunchMaxG: document.getElementById('rl-launch-maxg'),
+			rlLaunchMaxGVal: document.getElementById('rl-launch-maxg-val'),
 
 			rlStatDv: document.getElementById('rl-stat-dv'),
 			rlStatHostName: document.getElementById('rl-stat-host-name'),
@@ -201,6 +203,7 @@ export class ControlPanel {
 		bindSlider('rlLaunchThrust', 'rlLaunchThrustVal', 'thrustKN');
 		bindSlider('rlLaunchBurn', 'rlLaunchBurnVal', 'burnTime');
 		bindSlider('rlLaunchPayload', 'rlLaunchPayloadVal', 'payloadRatio');
+		bindSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', 'maxGLimit', true);
 
 		if (this.ui.rlHostSelect) {
 			this.ui.rlHostSelect.addEventListener('change', (e) => {
@@ -566,6 +569,7 @@ export class ControlPanel {
 			updateSlider('rlLaunchThrust', 'rlLaunchThrustVal', rlState.thrustKN);
 			updateSlider('rlLaunchBurn', 'rlLaunchBurnVal', rlState.burnTime);
 			updateSlider('rlLaunchPayload', 'rlLaunchPayloadVal', rlState.payloadRatio);
+			updateSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', rlState.maxGLimit);
 
 			this._updateRocketStats();
 		}

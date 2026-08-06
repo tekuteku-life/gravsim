@@ -35,6 +35,8 @@ export class GravSimObject {
 		this.thrustAngle = 0;
 		this.emptyMass = 0;
 		this.massLossRate = 0;
+		this.maxGLimit = 0;
+		this.thrustRatio = 0;
 
 		this.borderColor = borderColor;
 		this.borderWidth = borderWidth;

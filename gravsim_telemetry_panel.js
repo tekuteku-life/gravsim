@@ -24,21 +24,22 @@ export class TelemetryPanel {
 			targetSelect: document.getElementById('tm-target-select'),
 			refBody: document.getElementById('tm-refbody'),
 			mass: document.getElementById('tm-mass'),
-
+			
 			alt: document.getElementById('tm-alt'),
 			vel: document.getElementById('tm-vel'),
 			gforce: document.getElementById('tm-gforce'),
-
+			
 			atm: document.getElementById('tm-atm'),
 			aoa: document.getElementById('tm-aoa'),
 			dyn: document.getElementById('tm-dyn'),
 			struct: document.getElementById('tm-struct'),
 			drag: document.getElementById('tm-drag'),
-
+			
 			rocketData: document.getElementById('tm-rocket-data'),
 			prop: document.getElementById('tm-prop'),
+			thrtl: document.getElementById('tm-thrtl'),
 			burn: document.getElementById('tm-burn'),
-
+			
 			subCanvas: document.getElementById('sub-canvas'),
 		};
 		
@@ -160,7 +161,7 @@ export class TelemetryPanel {
 		// G-Force Calculation
 		let gForce = 0;
 		if (target.burnTime > 0 && target.thrustForce > 0) {
-			const thrustN = target.thrustForce;
+			const thrustN = target.thrustForce * (target.thrustRatio || 0);
 			const massKg = target.mass * 1000;
 			gForce = (thrustN / massKg) / 9.80665;
 		}
@@ -246,6 +247,10 @@ export class TelemetryPanel {
 			this.ui.rocketData.style.display = 'block';
 			const currentProp = Math.max(0, target.mass - target.emptyMass);
 			this.ui.prop.innerText = currentProp.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(8, ' ');
+
+			const thrtlPercent = (target.thrustRatio || 0) * 100;
+			if (this.ui.thrtl) this.ui.thrtl.innerText = thrtlPercent.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(6, ' ');
+
 			this.ui.burn.innerText = target.burnTime.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(8, ' ');
 		} else {
 			this.ui.rocketData.style.display = 'none';

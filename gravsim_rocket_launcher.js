@@ -29,6 +29,7 @@ export class RocketLauncher {
 		this.thrustKN = 1000;	// (kN)
 		this.burnTime = 300;	// (seconds)
 		this.payloadRatio = 20;	// %
+		this.maxGLimit = 5.0;	// G
 	}
 
 	togglePreview(forceState = null) {
@@ -79,7 +80,7 @@ export class RocketLauncher {
 				
 				posX = host.x + dxPx;
 				posY = host.y + dyPx;
-
+				
 				baseVx = host.vx;
 				baseVy = host.vy;
 
@@ -173,7 +174,8 @@ export class RocketLauncher {
 			mass: initialMassTon,
 			angle: this.launchAngleDeg * (Math.PI / 180),
 			time: this.burnTime,
-			lossRate: massLossRateTon
+			lossRate: massLossRateTon,
+			maxGLimit: this.maxGLimit
 		};
 
 		this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
@@ -190,7 +192,8 @@ export class RocketLauncher {
 			initialMassT: this.initialMassT,
 			thrustKN: this.thrustKN,
 			burnTime: this.burnTime,
-			payloadRatio: this.payloadRatio
+			payloadRatio: this.payloadRatio,
+			maxGLimit: this.maxGLimit
 		};
 	}
 
@@ -205,5 +208,6 @@ export class RocketLauncher {
 		if (state.thrustKN !== undefined) this.thrustKN = state.thrustKN;
 		if (state.burnTime !== undefined) this.burnTime = state.burnTime;
 		if (state.payloadRatio !== undefined) this.payloadRatio = state.payloadRatio;
+		if (state.maxGLimit !== undefined) this.maxGLimit = state.maxGLimit;
 	}
 }

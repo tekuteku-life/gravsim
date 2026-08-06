@@ -45,6 +45,7 @@ export class ObjectManager {
 			thrustAngle: obj.thrustAngle || 0,
 			emptyMass: (obj.emptyMass || 0) * 1e3,
 			massLossRate: (obj.massLossRate || 0) * 1e3,
+			maxGLimit: obj.maxGLimit || 0,
 		});
 	}
 
@@ -88,6 +89,7 @@ export class ObjectManager {
 				target.mass = buffer[offset + 7] / 1e3;
 				target.radius = buffer[offset + 8];
 				target.burnTime = buffer[offset + 9];
+				target.thrustRatio = buffer[offset + 17];
 				target.addHistory();
 
 				const flags = buffer[offset + 10];
@@ -272,7 +274,7 @@ export class ObjectManager {
 			generation: obj.generation,
 			borderColor: obj.borderColor, borderWidth: obj.borderWidth,
 			thrustForce: obj.thrustForce, burnTime: obj.burnTime,
-			thrustAngle: obj.thrustAngle, emptyMass: obj.emptyMass, massLossRate: obj.massLossRate
+			thrustAngle: obj.thrustAngle, emptyMass: obj.emptyMass, massLossRate: obj.massLossRate, maxGLimit: obj.maxGLimit
 		}));
 	}
 
@@ -292,6 +294,7 @@ export class ObjectManager {
 				obj.thrustAngle = o.thrustAngle || 0;
 				obj.emptyMass = o.emptyMass || 0;
 				obj.massLossRate = o.massLossRate || 0;
+				obj.maxGLimit = o.maxGLimit || 0;
 				
 				this.addObject(obj);
 				if (o.id > maxId) maxId = o.id;

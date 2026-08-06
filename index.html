@@ -106,6 +106,9 @@
 				<label>Burn Time (s): <span id="rl-launch-burn-val">300</span></label>
 				<input type="range" id="rl-launch-burn" min="1" max="1500" step="1" value="300" class="slider-full">
 
+				<label>Max G Limit: <span id="rl-launch-maxg-val">5.0</span></label>
+				<input type="range" id="rl-launch-maxg" min="1.5" max="15.0" step="0.1" value="5.0" class="slider-full">
+
 				<label>Payload Ratio (%): <span id="rl-launch-payload-val">20</span></label>
 				<input type="range" id="rl-launch-payload" min="1" max="100" step="1" value="20" class="slider-full">
 			</div>
@@ -148,6 +151,7 @@
 		<div id="tm-rocket-data" style="display: none;">
 			<div class="tm-section-header">[ PROPULSION ]</div>
 			<div class="telemetry-line">PROPELLANT:<span id="tm-prop">---</span> t</div>
+			<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>
 			<div class="telemetry-line">BURN REM : <span id="tm-burn">---</span> s</div>
 		</div>
 
