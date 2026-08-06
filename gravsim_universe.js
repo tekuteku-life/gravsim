@@ -174,8 +174,7 @@ export class Universe {
 		this.ctx = this.canvas.getContext('2d');
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
-		this.ctx.scale(this.zoomScale, this.zoomScale);
-		this.RocketLauncher.drawPreview(this.ctx, this.centerObject, 1 / this.zoomScale);
+		this.RocketLauncher.drawPreview(this.ctx, this.centerObject, this.zoomScale);
 		this.ctx.restore();
 
 		this.TelemetryPanel.draw();

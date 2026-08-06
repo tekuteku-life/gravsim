@@ -88,28 +88,29 @@ export class RocketLauncher {
 		};
 	}
 
-	drawPreview(ctx, centerObject, scale) {
+	drawPreview(ctx, centerObject, zoomScale) {
 		if (!this.isActive) return;
 
 		const transform = this._calculateTransform();
 		if (!transform) return;
 
-		const relX = transform.x - centerObject.x;
-		const relY = transform.y - centerObject.y;
+		// Convert to screen space
+		const relX = (transform.x - centerObject.x) * zoomScale;
+		const relY = (transform.y - centerObject.y) * zoomScale;
 
 		ctx.save();
 		
 		// Draw Ghost Rocket
 		ctx.fillStyle = "rgba(50, 205, 50, 0.6)";
 		ctx.beginPath();
-		ctx.arc(relX, relY, 5 * scale, 0, Math.PI * 2);
+		ctx.arc(relX, relY, 5, 0, Math.PI * 2); // screen pixels
 		ctx.fill();
 
 		// Estimate total Delta-v visually for the arrow length
 		// dV = (Thrust * BurnTime) / avgMass
 		const baseMassTon = DEFAULT_OBJECT_PARAMS['Rocket'].MASS;
 		const estDv = (this.thrustKN * this.burnTime) / baseMassTon;
-		const arrowLen = Math.max(20, Math.min(300, (estDv / 1000) * 2)) * scale;
+		const arrowLen = Math.max(20, Math.min(300, (estDv / 1000) * 2)); // screen pixels
 		
 		const launchRad = this.launchAngleDeg * (Math.PI / 180);
 		const endX = relX + Math.cos(launchRad) * arrowLen;
@@ -117,13 +118,13 @@ export class RocketLauncher {
 
 		// Draw Vector Arrow
 		ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
-		ctx.lineWidth = 2 * scale;
+		ctx.lineWidth = 2; // screen pixels
 		ctx.beginPath();
 		ctx.moveTo(relX, relY);
 		ctx.lineTo(endX, endY);
 		
 		// Arrow head
-		const headlen = 10 * scale;
+		const headlen = 10;
 		ctx.lineTo(endX - headlen * Math.cos(launchRad - Math.PI / 6), endY - headlen * Math.sin(launchRad - Math.PI / 6));
 		ctx.moveTo(endX, endY);
 		ctx.lineTo(endX - headlen * Math.cos(launchRad + Math.PI / 6), endY - headlen * Math.sin(launchRad + Math.PI / 6));
@@ -133,13 +134,13 @@ export class RocketLauncher {
 		// Draw Target Reticle for Free Mode
 		if (this.mode === 'free') {
 			ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
-			ctx.lineWidth = 1 * scale;
+			ctx.lineWidth = 1;
 			ctx.beginPath();
-			ctx.arc(relX, relY, 15 * scale, 0, Math.PI * 2);
-			ctx.moveTo(relX - 20 * scale, relY);
-			ctx.lineTo(relX + 20 * scale, relY);
-			ctx.moveTo(relX, relY - 20 * scale);
-			ctx.lineTo(relX, relY + 20 * scale);
+			ctx.arc(relX, relY, 15, 0, Math.PI * 2);
+			ctx.moveTo(relX - 20, relY);
+			ctx.lineTo(relX + 20, relY);
+			ctx.moveTo(relX, relY - 20);
+			ctx.lineTo(relX, relY + 20);
 			ctx.stroke();
 		}
 

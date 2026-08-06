@@ -6,23 +6,12 @@ import {
 	OBJECT_STATE, METERS_PER_AU,
 	SPARKLE_ANIM_SPEED, SPARKLE_ROTATE_SPEED,
 	SPARKLE_STAR_SIZE_RATIO, SPARKLE_STAR_INNER_SIZE_RATIO,
+	DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
 
 /*******************************************************************
  * GravSimObject class that represents a celestial object in the universe.
- * @property {string} name - The name of the object.
- * @property {number} x - The x-coordinate of the object in pixels.
- * @property {number} y - The y-coordinate of the object in pixels.
- * @property {number} vx - The x-component of the object's velocity in pix/sec.
- * @property {number} vy - The y-component of the object's velocity in pix/sec.
- * @property {number} ax - The x-component of the object's acceleration in pix/sec^2.
- * @property {number} ay - The y-component of the object's acceleration in pix/sec^2.
- * @property {number} mass - The mass of the object in tons.
- * @property {string} color - The color of the object in hex format.
- * @property {number} size - The size of the object in pixels.
- * @property {number} state - The state of the object (active, removed, etc.).
- * @property {Array} history - The history of the object's positions, stored as an array of objects with x and y properties.
-*******************************************************************/
+ *******************************************************************/
 export class GravSimObject {
 	constructor(name, x, y, vx, vy, mass, color, size, radius,
 		generation = 0, borderColor = null, borderWidth = 0) {
@@ -163,62 +152,59 @@ export class GravSimObject {
 		}
 	}
 
-	draw(ctx, basis, scale) {
+	draw(ctx, basis, zoomScale) {
 		if (!basis) { return; }
 
-		// Draw main body and effects
+		// Draw main body and effects (Screen-space calculation)
 		if (this.state === OBJECT_STATE.ACTIVE) {
-			const relX = this.getRelativeX(basis);
-			const relY = this.getRelativeY(basis);
+			const relX = this.getRelativeX(basis) * zoomScale;
+			const relY = this.getRelativeY(basis) * zoomScale;
 			
-			// Calculate the optimal drawing radius
-			const drawRadius = this._getDrawRadius(scale);
+			const screenRadius = this._getDrawRadius(zoomScale);
 
-			this._drawBody(ctx, relX, relY, drawRadius, scale);
+			this._drawBody(ctx, relX, relY, screenRadius);
+			this._drawAtmosphere(ctx, relX, relY, screenRadius, zoomScale);
 
 			if (this.burnTime > 0) {
-				this._drawFlame(ctx, relX, relY, drawRadius, scale);
+				this._drawFlame(ctx, relX, relY, screenRadius);
 			}
 
 			if (this.isEscaping) {
-				this._drawSparkle(ctx, relX, relY, drawRadius);
+				this._drawSparkle(ctx, relX, relY, screenRadius);
 			}
 		}
 
 		// Draw trail (Skip for center object)
 		if (this.id !== basis.id) {
-			this._drawTrail(ctx, basis, scale);
+			this._drawTrail(ctx, basis, zoomScale);
 		}
 	}
 
 	// Calculate switching between fixed size and real physical size
-	_getDrawRadius(scale) {
-		const zoomScale = 1 / scale;
-		// Convert real physical radius (meters) to canvas pixels
+	_getDrawRadius(zoomScale) {
 		const realRadiusPx = (this.radius / METERS_PER_AU) * DISTANCE_SCALE;
-		// Calculate how many pixels it takes on the screen right now
 		const screenRadiusPx = realRadiusPx * zoomScale;
 
 		// this.size acts as the minimum visual radius on the screen
 		if (screenRadiusPx < this.size) {
-			return this.size * scale;	// Keep fixed visible size
+			return this.size;
 		} else {
-			return realRadiusPx;		// Use real physical size
+			return screenRadiusPx;
 		}
 	}
 
-	_drawBody(ctx, x, y, drawRadius, scale) {
+	_drawBody(ctx, x, y, screenRadius) {
 		ctx.fillStyle = this.color;
 		ctx.beginPath();
-		ctx.arc(x, y, drawRadius, 0, Math.PI * 2);
+		ctx.arc(x, y, screenRadius, 0, Math.PI * 2);
 		ctx.fill();
 
 		// Stroke border (if configured)
 		if (this.borderColor && this.borderWidth > 0) {
 			const screenLineWidthPx = Math.max(1, this.size * this.borderWidth);
-			ctx.lineWidth = screenLineWidthPx * scale;
+			ctx.lineWidth = screenLineWidthPx;
 
-			const innerRadius = Math.max(1e-5, drawRadius - (ctx.lineWidth / 2));
+			const innerRadius = Math.max(1e-5, screenRadius - (ctx.lineWidth / 2));
 
 			ctx.strokeStyle = this.borderColor;
 			ctx.beginPath();
@@ -229,35 +215,34 @@ export class GravSimObject {
 		}
 	}
 
-	_drawFlame(ctx, x, y, drawRadius, scale) {
-		const flicker = 0.8 + Math.random() * 0.4; // 0.8 ~ 1.2
-		const flameLen = drawRadius * 3 * flicker;
+	_drawFlame(ctx, x, y, screenRadius) {
+		const flicker = 0.8 + Math.random() * 0.4;
+		const flameLen = screenRadius * 3 * flicker;
 		
 		ctx.save();
 		ctx.translate(x, y);
 		ctx.rotate(this.thrustAngle); // Pointing forward
 
-		// Flame is drawn backward (negative x direction)
-		ctx.fillStyle = "rgba(255, 100, 0, 0.8)"; // Outer orange
+		ctx.fillStyle = "rgba(255, 100, 0, 0.8)";
 		ctx.beginPath();
-		ctx.moveTo(-drawRadius, 0); // Base center
-		ctx.lineTo(-drawRadius * 0.8, drawRadius * 0.8);
-		ctx.lineTo(-drawRadius - flameLen, 0); // Tip
-		ctx.lineTo(-drawRadius * 0.8, -drawRadius * 0.8);
+		ctx.moveTo(-screenRadius, 0);
+		ctx.lineTo(-screenRadius * 0.8, screenRadius * 0.8);
+		ctx.lineTo(-screenRadius - flameLen, 0);
+		ctx.lineTo(-screenRadius * 0.8, -screenRadius * 0.8);
 		ctx.fill();
 
-		ctx.fillStyle = "rgba(255, 200, 0, 0.9)"; // Inner yellow
+		ctx.fillStyle = "rgba(255, 200, 0, 0.9)";
 		ctx.beginPath();
-		ctx.moveTo(-drawRadius, 0);
-		ctx.lineTo(-drawRadius * 0.9, drawRadius * 0.4);
-		ctx.lineTo(-drawRadius - flameLen * 0.6, 0);
-		ctx.lineTo(-drawRadius * 0.9, -drawRadius * 0.4);
+		ctx.moveTo(-screenRadius, 0);
+		ctx.lineTo(-screenRadius * 0.9, screenRadius * 0.4);
+		ctx.lineTo(-screenRadius - flameLen * 0.6, 0);
+		ctx.lineTo(-screenRadius * 0.9, -screenRadius * 0.4);
 		ctx.fill();
 		
 		ctx.restore();
 	}
 
-	_drawSparkle(ctx, x, y, drawRadius) {
+	_drawSparkle(ctx, x, y, screenRadius) {
 		const now = Date.now();
 		const blink = Math.abs(Math.sin(now / SPARKLE_ANIM_SPEED + this.id)); 
 
@@ -268,8 +253,8 @@ export class GravSimObject {
 		ctx.globalAlpha = blink;
 		ctx.fillStyle = "#FFFFFF"; 
 
-		const starSize = drawRadius * SPARKLE_STAR_SIZE_RATIO; 
-		const innerSize = drawRadius * SPARKLE_STAR_INNER_SIZE_RATIO; 
+		const starSize = screenRadius * SPARKLE_STAR_SIZE_RATIO; 
+		const innerSize = screenRadius * SPARKLE_STAR_INNER_SIZE_RATIO; 
 
 		ctx.beginPath();
 		ctx.moveTo(0, -starSize);
@@ -285,7 +270,7 @@ export class GravSimObject {
 		ctx.restore();
 	}
 
-	_drawTrail(ctx, basis, scale) {
+	_drawTrail(ctx, basis, zoomScale) {
 		const targetLength = TARGET_TRAIL_LENGTH_AU * DISTANCE_SCALE;
 		let drawTrailCount = this.history.length;
 
@@ -308,15 +293,15 @@ export class GravSimObject {
 
 		// Draw history with fading color and thinning line
 		for (let i = trailStaIdx + 1; i < this.history.length; i++) {
-			const t = (i - trailStaIdx) / drawTrailCount; // 0 (oldest) to 1 (newest)
-			const alpha = t * 0.4 + 0.2; // fade in (0.2~1.0)
-			const width = this.size * (0.2 + 0.8 * t) * scale; 
+			const t = (i - trailStaIdx) / drawTrailCount;
+			const alpha = t * 0.4 + 0.2;
+			const width = this.size * (0.2 + 0.8 * t); // screen pixels
 
 			ctx.strokeStyle = this._hexToRgba(this.color, alpha);
 			ctx.lineWidth = width;
 			ctx.beginPath();
-			ctx.moveTo(this.getRelativeHistoryX(i - 1, basis), this.getRelativeHistoryY(i - 1, basis));
-			ctx.lineTo(this.getRelativeHistoryX(i, basis), this.getRelativeHistoryY(i, basis));
+			ctx.moveTo(this.getRelativeHistoryX(i - 1, basis) * zoomScale, this.getRelativeHistoryY(i - 1, basis) * zoomScale);
+			ctx.lineTo(this.getRelativeHistoryX(i, basis) * zoomScale, this.getRelativeHistoryY(i, basis) * zoomScale);
 			ctx.stroke();
 		}
 		ctx.lineWidth = 1;
