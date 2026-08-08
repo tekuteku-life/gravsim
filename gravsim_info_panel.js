@@ -25,10 +25,11 @@ export class InfoPanel {
 
 	updateElapsedTime(dt) {
 		const elapsedTimeSpan = document.getElementById('elapsed-time');
-		this.elapsedTime += dt /YEARS_PER_SECOND;
+		this.elapsedTime += dt / YEARS_PER_SECOND;
 		if (elapsedTimeSpan) {
-			const years = (this.elapsedTime).toFixed(2);
-			elapsedTimeSpan.textContent = `${years}`;
+			const y = Math.floor(this.elapsedTime);
+			const d = Math.floor((this.elapsedTime - y) * 365.25);
+			elapsedTimeSpan.textContent = `${y} yr, ${String(d).padStart(3, '0')} d`;
 		}
 	}
 
