@@ -61,11 +61,15 @@ export class ObjectPlacer {
 				param.BORDER_WIDTH || 0
 			);
 
+			// Apply initial angle if specified
+			if (options.angle !== undefined) {
+				obj.thrustAngle = options.angle;
+			}
+
 			// Apply active rocket engine parameters if specified
 			if (options.time > 0) {
 				obj.thrustForce = options.force || 0;
 				obj.burnTime = options.time || 0;
-				obj.thrustAngle = options.angle || 0;
 				obj.massLossRate = options.lossRate || 0;
 				obj.maxGLimit = options.maxGLimit || 0;
 			}
@@ -119,7 +123,10 @@ export class ObjectPlacer {
 		const vx = hostObj.vx + relVx;
 		const vy = hostObj.vy + relVy;
 
-		return this.placeObject(objName, x, y, vx, vy);
+		// Calculate object's direction
+		const angle = Math.atan2(relVy, relVx);
+
+		return this.placeObject(objName, x, y, vx, vy, { angle: angle });
 	}
 
 	placeAtOrbitAroundHost(hostName, objName) {
@@ -204,16 +211,17 @@ export class ObjectPlacer {
 	goLaunch(e) {
 		if (!this.isDragging || this.wasMultiTouch) {
 			this.isDragging = false;
-			return; 
+			return;
 		}
 		this.isDragging = false;
-		
+
 		const name = this.getLaunchObjectName();
 		const pos = this.getLaunchPosition(e);
 		const endX = pos.x;
 		const endY = pos.y;
 		const endTime = Date.now();
 		const dt = Math.max((endTime - this.startTime) / TIME_SCALE, 0.01);
+
 		const vx = this.universe.pix2m((endX - this.startX) / dt / THROW_SCALE);
 		const vy = this.universe.pix2m((endY - this.startY) / dt / THROW_SCALE);
 		
@@ -221,7 +229,8 @@ export class ObjectPlacer {
 			name,
 			endX, endY,
 			vx + this.universe.centerObject.vx,
-			vy + this.universe.centerObject.vy
+			vy + this.universe.centerObject.vy,
+			{ angle: Math.atan2(vy, vx) }, // Set direction of dragging
 		);
 		
 		this.startX = null;
