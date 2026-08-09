@@ -320,6 +320,7 @@ export class Rocket extends GravSimObject {
 		this.flightTime = 0;
 	}
 	get mass() { return this.dryMass + this.fuelMass; }
+	set mass(val) {}
 
 	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
 		if (this.burnTime > 0) {

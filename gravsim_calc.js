@@ -115,6 +115,7 @@ class CalcRocket extends GravSimCalcObject {
 		this._thrustRatio = 0;
 	}
 	get mass() { return this.dryMass + this.fuelMass; }
+	set mass(val) {}
 }
 
 class PhysicsEngine {
