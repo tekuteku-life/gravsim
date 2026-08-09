@@ -183,16 +183,33 @@ button:hover { background: #444; }
 #info-panel {
 	position: absolute;
 	bottom: 10px;
-	left: 330px; /* Right-side of bar in PC view */
-	color: #ffffff;
-	font-size: 12px;
-	background-color: rgba(0, 0, 0, 0.6);
-	padding: 5px 10px;
+	left: 330px;
+	color: #00ffcc;
+	font-size: 13px;
+	font-family: 'Courier New', Courier, monospace;
+	background-color: rgba(0, 20, 0, 0.7);
+	padding: 8px 12px;
+	border: 1px solid #00ffcc;
 	border-radius: 5px;
 	pointer-events: none;
 	transition: left 0.3s ease;
+	text-shadow: 0 0 5px rgba(0, 255, 204, 0.5);
+	box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
 }
-#info-panel > p { line-height: 0.5; }
+.info-row {
+	display: flex;
+	justify-content: space-between;
+	width: 220px;
+	border-bottom: 1px dashed #005544;
+	padding-bottom: 2px;
+}
+.info-label {
+	color: #00aa88;
+	font-weight: bold;
+}
 
 /* =========================================
    Responsive (Mobile) Overrides

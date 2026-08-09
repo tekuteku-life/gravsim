@@ -601,6 +601,7 @@ export class ControlPanel {
 		}
 		
 		this.ui.timeIndicator.textContent = text;
+		this.universe.InfoPanel.updateTimeScale(text);
 	}
 
 	updateZoomScaleIndicator(val) {
@@ -620,6 +621,7 @@ export class ControlPanel {
 		}
 		
 		this.ui.zoomIndicator.textContent = text;
+		this.universe.InfoPanel.updateZoomScale(text);
 	}
 
 	generateMassSelect() {

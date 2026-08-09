@@ -162,9 +162,12 @@
 	</form>
 
 	<div id="info-panel">
-		<p>Elapsed time: <span id="elapsed-time">0 yr, 000 d</span></p>
-		<p>Object count: <span id="object-count">0</span></p>
-		<p>FPS: <span id="fps">0</span></p>
+		<div class="info-row"><span class="info-label">TIME</span> <span id="info-time">---</span></div>
+		<div class="info-row"><span class="info-label">ZOOM</span> <span id="info-zoom">---</span></div>
+		<div class="info-row"><span class="info-label">CAMERA</span> <span id="info-camera">---</span></div>
+		<div class="info-row"><span class="info-label">ELAPSED</span> <span id="info-elapsed">0 yr, 000 d</span></div>
+		<div class="info-row"><span class="info-label">FPS</span> <span id="info-fps">0</span></div>
+		<div class="info-row"><span class="info-label">OBJECTS</span> <span id="info-count">0</span></div>
 	</div>
 
 	<button type="button" id="telemetry-toggle-btn">TELEMETRY: OFF</button>

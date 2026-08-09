@@ -83,7 +83,10 @@ export class Universe {
 	// ------------------------------------------
 	get objects() { return this.ObjectManager.objects; }
 	get centerObject() { return this.ObjectManager.centerObject; }
-	set centerObject(obj) { this.ObjectManager.centerObject = obj; }
+	set centerObject(obj) {
+		this.ObjectManager.centerObject = obj;
+		this.InfoPanel.updateCamera(obj.name);
+	}
 	get zoomScale() { return this.Renderer.zoomScale; }
 	
 	// ------------------------------------------
