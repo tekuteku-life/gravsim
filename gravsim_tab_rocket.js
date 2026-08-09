@@ -11,6 +11,8 @@ export class RocketTab {
 	constructor(universe, systemTab) {
 		this.universe = universe;
 		this.systemTab = systemTab;
+		this.previousTimeScaleVal = null;
+		this.previousZoomScaleVal = null;
 		this._initElements();
 		this._bindEvents();
 	}
@@ -251,7 +253,11 @@ export class RocketTab {
 
 	open() {
 		this.universe.RocketLauncher.togglePreview(true);
-		
+
+		// Save time & zoom scale
+		this.saveTimeScale();
+		this.saveZoomScale();
+
 		let targetHostId = this.universe.RocketLauncher.hostId;
 		if (targetHostId === null || targetHostId === 0) { 
 			const nonSunObjects = this.universe.objects.filter(o => o.id !== 0 && o.type === OBJECT_TYPES.CELESTIAL);
@@ -269,6 +275,39 @@ export class RocketTab {
 
 	close() {
 		this.universe.RocketLauncher.togglePreview(false);
+
+		// Restore time & zoom scale
+		this.restoreTimeScale();
+		this.restoreZoomScale();
+	}
+
+	saveTimeScale() {
+		if (this.systemTab.ui.timeScale) {
+			this.previousTimeScaleVal = this.systemTab.ui.timeScale.value;
+		}
+	}
+
+	saveZoomScale() {
+		if (this.systemTab.ui.zoomScale) {
+			this.previousZoomScaleVal = this.systemTab.ui.zoomScale.value;
+		}
+	}
+
+	restoreTimeScale() {
+		if (this.previousTimeScaleVal !== null && this.systemTab.ui.timeScale) {
+			this.systemTab.ui.timeScale.value = this.previousTimeScaleVal;
+			this.systemTab.updateTimeScaleIndicator(this.systemTab.getTimeScale());
+			this.previousTimeScaleVal = null;
+		}
+	}
+
+	restoreZoomScale() {
+		if (this.previousZoomScaleVal !== null && this.systemTab.ui.zoomScale) {
+			this.systemTab.ui.zoomScale.value = this.previousZoomScaleVal;
+			this.systemTab.updateZoomScaleIndicator(this.systemTab.getZoomScale());
+			this.universe.updateZoomScale();
+			this.previousZoomScaleVal = null;
+		}
 	}
 
 	loadState(rlState) {

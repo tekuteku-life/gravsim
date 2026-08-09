@@ -204,6 +204,10 @@ export class RocketLauncher {
 			systemTab.updateZoomScaleIndicator(systemTab.getZoomScale());
 			this.universe.updateZoomScale();
 		}
+		
+		// Fix time & zoom scale
+		this.universe.ControlPanel.rocketTab.saveTimeScale();
+		this.universe.ControlPanel.rocketTab.saveZoomScale();
 
 		this.togglePreview(false);
 	}
