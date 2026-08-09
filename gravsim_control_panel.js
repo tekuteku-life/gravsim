@@ -2,7 +2,7 @@
 // gravsim_control_panel.js
 
 import {
-	DEFAULT_OBJECT_PARAMS, DISTANCE_SCALE,
+	DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, DISTANCE_SCALE,
 	METERS_PER_AU, TIME_SCALE, G, G0,
 	UI_NAVI_UPDATE_UPDATE_INTERVAL,
 } from './gravsim_const.js';
@@ -55,12 +55,12 @@ export class ControlPanel {
 			rlLaunchAngleVal: document.getElementById('rl-launch-angle-val'),
 			rlLaunchMass: document.getElementById('rl-launch-mass'),
 			rlLaunchMassVal: document.getElementById('rl-launch-mass-val'),
+			rlFuelType: document.getElementById('rl-fuel-type'),
+			rlFuelAmount: document.getElementById('rl-fuel-amount'),
+			rlFuelAmountVal: document.getElementById('rl-fuel-amount-val'),
 			rlLaunchThrust: document.getElementById('rl-launch-thrust'),
 			rlLaunchThrustVal: document.getElementById('rl-launch-thrust-val'),
-			rlLaunchBurn: document.getElementById('rl-launch-burn'),
-			rlLaunchBurnVal: document.getElementById('rl-launch-burn-val'),
-			rlLaunchPayload: document.getElementById('rl-launch-payload'),
-			rlLaunchPayloadVal: document.getElementById('rl-launch-payload-val'),
+			
 			rlLaunchMaxG: document.getElementById('rl-launch-maxg'),
 			rlLaunchMaxGVal: document.getElementById('rl-launch-maxg-val'),
 
@@ -68,6 +68,10 @@ export class ControlPanel {
 			rlStatHostName: document.getElementById('rl-stat-host-name'),
 			rlStatTwrY: document.getElementById('rl-stat-twr-y'),
 			rlStatTwrX: document.getElementById('rl-stat-twr-x'),
+			rlStatFuelType: document.getElementById('rl-stat-fuel-type'),
+			rlStatFuelAmount: document.getElementById('rl-stat-fuel-amount'),
+			rlStatFuelIsp: document.getElementById('rl-stat-fuel-isp'),
+			rlStatFuelMaxBurn: document.getElementById('rl-stat-fuel-max-burn'),
 
 			rlExecuteBtn: document.getElementById('rl-execute-btn'),
 			
@@ -185,6 +189,12 @@ export class ControlPanel {
 			});
 		}
 
+		if (this.ui.rlFuelType) {
+			this.ui.rlFuelType.addEventListener('change', (e) => {
+				this.universe.RocketLauncher.fuelType = e.target.value;
+				this._updateRocketStats();
+			});
+		}
 		if (this.ui.rlHostSelect) {
 			this.ui.rlHostSelect.addEventListener('change', (e) => {
 				const newHostId = parseInt(e.target.value, 10);
@@ -216,10 +226,9 @@ export class ControlPanel {
 		bindSlider('rlHostAngle', 'rlHostAngleVal', 'hostAngleDeg');
 		bindSlider('rlHostAlt', 'rlHostAltVal', 'hostAltitudeM', true);
 		bindSlider('rlLaunchAngle', 'rlLaunchAngleVal', 'launchAngleDeg');
-		bindSlider('rlLaunchMass', 'rlLaunchMassVal', 'initialMassT');
+		bindSlider('rlLaunchMass', 'rlLaunchMassVal', 'dryMassT');
+		bindSlider('rlFuelAmount', 'rlFuelAmountVal', 'fuelAmountT');
 		bindSlider('rlLaunchThrust', 'rlLaunchThrustVal', 'thrustKN');
-		bindSlider('rlLaunchBurn', 'rlLaunchBurnVal', 'burnTime');
-		bindSlider('rlLaunchPayload', 'rlLaunchPayloadVal', 'payloadRatio');
 		bindSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', 'maxGLimit', true);
 
 		if (this.ui.rlHostSelect) {
@@ -432,17 +441,17 @@ export class ControlPanel {
 		const objName = this.universe.ObjectPlacer.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		
-		const m0 = rl.initialMassT * 1e3; // Initial mass in kg
-		const mf = m0 * (rl.payloadRatio / 100);
+		const fuel = ROCKET_FUELS[rl.fuelType] || ROCKET_FUELS['liquid'];
+		const ve = fuel.isp * G0;
+		const m0 = (rl.dryMassT + rl.fuelAmountT) * 1e3;
+		const mf = rl.dryMassT * 1e3;
 		
-		// Calculate Delta-v using Tsiolkovsky rocket equation
+		const massFlowRateKgS = (rl.thrustKN * 1e3) / ve;
+		const maxBurnTime = massFlowRateKgS > 0 ? (rl.fuelAmountT * 1e3) / massFlowRateKgS : 0;
+		
 		let dvKmS = 0;
-		if (rl.burnTime > 0 && rl.payloadRatio < 100 && rl.thrustKN > 0) {
-			const mDot = (m0 - mf) / rl.burnTime;
-			const F = rl.thrustKN * 1e3;
-			dvKmS = ((F / mDot) * Math.log(m0 / mf)) / 1000;
-		} else if (rl.thrustKN > 0 && rl.payloadRatio === 100) {
-			dvKmS = ((rl.thrustKN * 1e3 / m0) * rl.burnTime) / 1000;
+		if (maxBurnTime > 0 && rl.thrustKN > 0) {
+			dvKmS = (ve * Math.log(m0 / mf)) / 1000;
 		}
 
 		// Calculate Local Gravity and Direction
@@ -479,7 +488,7 @@ export class ControlPanel {
 			
 			// Calculate local gravity (g = GM / r^2)
 			const localG = (G * hostMassKg) / (rMeters * rMeters);
-			const weightN = m0 * localG;
+			const weightN = (rl.dryMassT + rl.fuelAmountT) * 1e3 * localG;
 			const thrustN = rl.thrustKN * 1e3;
 
 			// Transform thrust vector to relative degree
@@ -497,6 +506,13 @@ export class ControlPanel {
 		this.ui.rlStatHostName.textContent = hostName;
 		this.ui.rlStatTwrY.textContent = twrY.toFixed(2);
 		this.ui.rlStatTwrX.textContent = twrX.toFixed(2);
+
+		if (rl.fuelAmountT > 0 && fuel) {
+			this.ui.rlStatFuelType.textContent = fuel.name;
+			this.ui.rlStatFuelAmount.textContent = rl.fuelAmountT.toLocaleString();
+			this.ui.rlStatFuelIsp.textContent = fuel.isp;
+			this.ui.rlStatFuelMaxBurn.textContent = maxBurnTime.toFixed(1);
+		}
 	}
 
 	_setupLaunchEnvironment(hostId) {
@@ -682,10 +698,10 @@ export class ControlPanel {
 			updateSlider('rlHostAngle', 'rlHostAngleVal', rlState.hostAngleDeg);
 			updateSlider('rlHostAlt', 'rlHostAltVal', rlState.hostAltitudeM);
 			updateSlider('rlLaunchAngle', 'rlLaunchAngleVal', rlState.launchAngleDeg);
-			updateSlider('rlLaunchMass', 'rlLaunchMassVal', rlState.initialMassT);
+			updateSlider('rlLaunchMass', 'rlLaunchMassVal', rlState.dryMassT);
 			updateSlider('rlLaunchThrust', 'rlLaunchThrustVal', rlState.thrustKN);
-			updateSlider('rlLaunchBurn', 'rlLaunchBurnVal', rlState.burnTime);
-			updateSlider('rlLaunchPayload', 'rlLaunchPayloadVal', rlState.payloadRatio);
+			updateSlider('rlFuelAmount', 'rlFuelAmountVal', rlState.fuelAmountT);
+			if (this.ui.rlFuelType && rlState.fuelType) { this.ui.rlFuelType.value = rlState.fuelType; }
 			updateSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', rlState.maxGLimit);
 
 			this._updateRocketStats();

@@ -374,8 +374,8 @@ class PhysicsEngine {
 					const qRatio = obj._currentQ / maxQ;
 					if (qRatio > 0.7) {
 						// Throttle down linearly
-						let qThrottle = 1.0 - (qRatio - 0.7) * 5;
-						qThrottle = Math.max(0.1, Math.min(1.0, qThrottle));
+						let qThrottle = 1.0 - (qRatio - 0.7) * 5.0;
+						qThrottle = Math.max(0.2, Math.min(1.0, qThrottle));
 						throttle = Math.min(throttle, qThrottle);
 					}
 				}

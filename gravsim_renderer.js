@@ -23,6 +23,11 @@ export class Renderer {
 		this.ctx = canvas.getContext('2d');
 		this.zoomScale = 1;
 		this.visualEffects = [];
+		this.rotation = 0;
+	}
+
+	setRotation(angle) {
+		this.rotation = angle;
 	}
 
 	setZoomScale(scale) {
@@ -49,6 +54,7 @@ export class Renderer {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+		if (this.rotation !== undefined) { this.ctx.rotate(this.rotation); }
 
 		// draw object
 		objects.forEach(obj => obj.draw(this.ctx, centerObject, this.zoomScale));

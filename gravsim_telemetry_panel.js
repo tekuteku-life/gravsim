@@ -1,3 +1,4 @@
+
 // gravsim_telemetry_panel.js
 
 import { Renderer } from './gravsim_renderer.js';
@@ -5,8 +6,18 @@ import {
 	TELEMETRY_UPDATE_INTERVAL_MS,
 	TELEMETRY_SUB_VIEW_TARGET_RADIUS,
 	TELEMETRY_SUB_VIEW_MAX_ZOOM,
-	DEFAULT_OBJECT_PARAMS
+	G, G0, UI_TM_MAX_Q_TH,
+	DEFAULT_OBJECT_PARAMS,
+	MISSION_STATUS,
 } from './gravsim_const.js';
+
+const TM_STYLE = {
+	display: { open: 'block', close : 'none' },
+	text: { open: 'TELEMETRY: ON', close: 'TELEMETRY: OFF' },
+	color: { open: '#ff5555', close: '#00ffcc' },
+	bColor: { open: '#ff5555', close: '#00ffcc' },
+	missionStatusColor: { normal: '#00ffcc', max_q: '#ff5555' },
+};
 
 export class TelemetryPanel {
 	constructor(universe) {
@@ -17,29 +28,36 @@ export class TelemetryPanel {
 
 		this.targetId = null;
 		this.lastObjCount = -1;
+		this.maxProp = {};
 
 		this.ui = {
 			toggleBtn: document.getElementById('telemetry-toggle-btn'),
 			panel: document.getElementById('telemetry-panel'),
 			targetSelect: document.getElementById('tm-target-select'),
-			refBody: document.getElementById('tm-refbody'),
+
+			missionStatus: document.getElementById('tm-mission-status'),
+
 			mass: document.getElementById('tm-mass'),
-			
+			remDv: document.getElementById('tm-rem-dv'),
+			twr: document.getElementById('tm-twr'),
+
 			alt: document.getElementById('tm-alt'),
-			vel: document.getElementById('tm-vel'),
-			gforce: document.getElementById('tm-gforce'),
-			
-			atm: document.getElementById('tm-atm'),
+			velV: document.getElementById('tm-vel-v'),
+			velH: document.getElementById('tm-vel-h'),
+			accV: document.getElementById('tm-acc-v'),
+			accH: document.getElementById('tm-acc-h'),
+
+			pitch: document.getElementById('tm-pitch'),
 			aoa: document.getElementById('tm-aoa'),
 			dyn: document.getElementById('tm-dyn'),
-			struct: document.getElementById('tm-struct'),
-			drag: document.getElementById('tm-drag'),
-			
-			rocketData: document.getElementById('tm-rocket-data'),
-			prop: document.getElementById('tm-prop'),
+
 			thrtl: document.getElementById('tm-thrtl'),
-			burn: document.getElementById('tm-burn'),
-			
+			prop: document.getElementById('tm-prop'),
+			fuelBar: document.getElementById('tm-fuel-bar'),
+
+			navPrograde: document.getElementById('tm-nav-prograde'),
+			navGravity: document.getElementById('tm-nav-gravity'),
+
 			subCanvas: document.getElementById('sub-canvas'),
 		};
 		
@@ -52,18 +70,7 @@ export class TelemetryPanel {
 
 	_bindEvents() {
 		if (this.ui.toggleBtn) {
-			this.ui.toggleBtn.addEventListener('click', () => {
-				this.isOpen = !this.isOpen;
-				this.ui.panel.style.display = this.isOpen ? 'block' : 'none';
-				this.ui.toggleBtn.textContent = this.isOpen ? 'TELEMETRY: ON' : 'TELEMETRY: OFF';
-				this.ui.toggleBtn.style.color = this.isOpen ? '#ff5555' : '#00ffcc';
-				this.ui.toggleBtn.style.borderColor = this.isOpen ? '#ff5555' : '#00ffcc';
-				
-				if (this.isOpen) {
-					this.lastUpdate = 0;
-					this.update();
-				}
-			});
+			this.ui.toggleBtn.addEventListener('click', () => { this.open(); });
 		}
 
 		if (this.ui.targetSelect) {
@@ -90,13 +97,39 @@ export class TelemetryPanel {
 		}
 	}
 
+	open() {
+		this.isOpen = !this.isOpen;
+		this.ui.panel.style.display = this.isOpen ? TM_STYLE.display.open : TM_STYLE.display.close;
+		this.ui.toggleBtn.textContent = this.isOpen ? TM_STYLE.text.open : TM_STYLE.text.close;
+		this.ui.toggleBtn.style.color = this.isOpen ? TM_STYLE.color.open : TM_STYLE.color.close;
+		this.ui.toggleBtn.style.borderColor = this.isOpen ? TM_STYLE.bColor.open : TM_STYLE.bColor.close;
+
+		if (this.isOpen) {
+			this.lastUpdate = 0;
+			this.update();
+		}
+	}
+
 	update() {
-		if (!this.isOpen) return;
+		if (!this.isOpen) { return; }
 
 		const now = Date.now();
-		if (now - this.lastUpdate < this.intervalMs) return;
+		if (now - this.lastUpdate < this.intervalMs) {return; }
 		this.lastUpdate = now;
 
+		const target = this._resolveTarget();
+		if (!target) { return; }
+
+		const refData = this._calculateReferenceData(target);
+
+		this._updateVesselStateUI(target, refData.localG_ms2);
+		const flightDynamics = this._updateFlightDynamicsUI(target, refData.refBody, refData.distToRefM);
+		const aerodynamics = this._updateAerodynamicsUI(target, refData.refBody, refData.distToRefM);
+		this._updatePropulsionAndStatusUI(target, aerodynamics.structRatio);
+		this._updateFlightDirectorUI(target, flightDynamics.progradeAngle, flightDynamics.gravityAngle);
+	}
+
+	_resolveTarget() {
 		if (this.lastObjCount !== this.universe.objects.length) {
 			if (this.lastObjCount !== -1 && this.universe.objects.length > this.lastObjCount) {
 				const newestObj = this.universe.objects[this.universe.objects.length - 1];
@@ -112,15 +145,15 @@ export class TelemetryPanel {
 			if (target) {
 				this.targetId = target.id;
 				if (this.ui.targetSelect) this.ui.targetSelect.value = target.id;
-			} else {
-				return;
 			}
 		}
+		return target;
+	}
 
-		// Find Reference Body
+	_calculateReferenceData(target) {
 		let refBody = null;
 		let maxG = -1;
-		let distToRefPx = 0;
+		let distToRefM = 0;
 		
 		for (const obj of this.universe.objects) {
 			if (obj.id === target.id) continue;
@@ -134,87 +167,114 @@ export class TelemetryPanel {
 			if (gForce > maxG) {
 				maxG = gForce;
 				refBody = obj;
-				distToRefPx = Math.sqrt(distSqPx);
+				distToRefM = Math.sqrt(distSqM);
 			}
 		}
 
-		// Update Orbit Info
+		// Calculate Basic Local G
+		let localG_ms2 = 0;
 		if (refBody) {
-			this.ui.refBody.innerText = refBody.name.substring(0, 14);
-			
-			const distM = this.universe.pix2m(distToRefPx);
-			const altM = distM - refBody.radius;
+			const hostMassKg = refBody.mass * 1e3;
+			localG_ms2 = (G * hostMassKg) / (distToRefM * distToRefM);
+		}
+
+		return { refBody, distToRefM, localG_ms2 };
+	}
+
+	_updateVesselStateUI(target, localG_ms2) {
+		this.ui.mass.innerText = target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' ');
+		
+		let thrustN = target.burnTime > 0 ? target.thrustForce * (target.thrustRatio || 0) : 0;
+		const twr = localG_ms2 > 0 ? thrustN / (target.mass * 1000 * localG_ms2) : 0;
+		this.ui.twr.innerText = twr.toFixed(2).padStart(6, ' ');
+
+		let remDv = 0;
+		if (target.emptyMass > 0 && target.mass > target.emptyMass) {
+			let ve = 320 * G; // Default assumption if no flow rate
+			if (target.thrustForce > 0 && target.massLossRate > 0) {
+				ve = target.thrustForce / target.massLossRate;
+			}
+			remDv = (ve * Math.log(target.mass / target.emptyMass)) / 1000;
+		}
+		this.ui.remDv.innerText = remDv.toFixed(2).padStart(6, ' ');
+	}
+
+	_updateFlightDynamicsUI(target, refBody, distToRefM) {
+		let vV = 0, vH = 0, aV = 0, aH = 0;
+		let progradeAngle = 0, gravityAngle = 0;
+
+		if (refBody) {
+			const altM = distToRefM - refBody.radius;
 			this.ui.alt.innerText = (altM / 1000).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' ');
 
-			const dvx = this.universe.pix2m(target.vx - refBody.vx);
-			const dvy = this.universe.pix2m(target.vy - refBody.vy);
-			const velM = Math.sqrt(dvx * dvx + dvy * dvy);
-			this.ui.vel.innerText = (velM / 1000).toLocaleString('en-US', {minimumFractionDigits: 3, maximumFractionDigits: 3}).padStart(9, ' ');
+			const dx = target.x - refBody.x;
+			const dy = target.y - refBody.y;
+			const rPx = Math.sqrt(dx*dx + dy*dy);
+			
+			if (rPx > 0) {
+				const uRx = dx/rPx;
+				const uRy = dy/rPx;
+				const uHx = -uRy;
+				const uHy = uRx;
+
+				const dvx = this.universe.pix2m(target.vx - refBody.vx);
+				const dvy = this.universe.pix2m(target.vy - refBody.vy);
+				vV = (dvx * uRx + dvy * uRy) / 1000;
+				vH = (dvx * uHx + dvy * uHy) / 1000;
+
+				const dax = this.universe.pix2m(target.ax); 
+				const day = this.universe.pix2m(target.ay);
+				aV = (dax * uRx + day * uRy) / G0;
+				aH = (dax * uHx + day * uHy) / G0;
+				
+				progradeAngle = Math.atan2(dvy, dvx);
+				gravityAngle = Math.atan2(-dy, -dx);
+			}
 		} else {
-			this.ui.refBody.innerText = "NONE";
 			this.ui.alt.innerText = "---".padStart(10, ' ');
-			this.ui.vel.innerText = "---".padStart(9, ' ');
+			progradeAngle = Math.atan2(target.vy, target.vx);
 		}
 
-		this.ui.mass.innerText = target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' ');
+		this.ui.velV.innerText = vV.toFixed(2).padStart(7, ' ');
+		this.ui.velH.innerText = vH.toFixed(2).padStart(7, ' ');
+		this.ui.accV.innerText = aV.toFixed(2).padStart(7, ' ');
+		this.ui.accH.innerText = aH.toFixed(2).padStart(7, ' ');
 
-		// G-Force Calculation
-		let gForce = 0;
-		if (target.burnTime > 0 && target.thrustForce > 0) {
-			const thrustN = target.thrustForce * (target.thrustRatio || 0);
-			const massKg = target.mass * 1000;
-			gForce = (thrustN / massKg) / 9.80665;
-		}
-		this.ui.gforce.innerText = gForce.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(7, ' ');
+		return { progradeAngle, gravityAngle };
+	}
 
-		// Update Aerodynamics Info
-		let rho = 0, aoaDeg = 0, q = 0, dragKN = 0, structRatio = 0;
+	_updateAerodynamicsUI(target, refBody, distToRefM) {
+		let pitchDeg = (target.thrustAngle * 180 / Math.PI) % 360;
+		if (pitchDeg < 0) { pitchDeg += 360; }
+		this.ui.pitch.innerText = pitchDeg.toFixed(1).padStart(6, ' ');
+
+		let aoaDeg = 0, structRatio = 0;
 		if (refBody) {
 			const refParam = DEFAULT_OBJECT_PARAMS[refBody.name];
-			const distM = this.universe.pix2m(distToRefPx);
-			const altM = distM - refBody.radius;
-			
+			const altM = distToRefM - refBody.radius;
 			if (refParam && refParam.ATM_LIMIT_ALT && altM < refParam.ATM_LIMIT_ALT && altM > 0) {
-				rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / refParam.ATM_SCALE_HEIGHT);
-				
+				const rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / refParam.ATM_SCALE_HEIGHT);
 				let vAtmM_x = this.universe.pix2m(refBody.vx);
 				let vAtmM_y = this.universe.pix2m(refBody.vy);
 				
 				if (refParam.ROTATION_PERIOD) {
 					const omega = (2 * Math.PI) / refParam.ROTATION_PERIOD;
-					const dxRef = this.universe.pix2m(target.x - refBody.x);
-					const dyRef = this.universe.pix2m(target.y - refBody.y);
-					vAtmM_x += -omega * dyRef;
-					vAtmM_y += omega * dxRef;
+					vAtmM_x += -omega * this.universe.pix2m(target.y - refBody.y);
+					vAtmM_y += omega * this.universe.pix2m(target.x - refBody.x);
 				}
 				
 				const vRelX = this.universe.pix2m(target.vx) - vAtmM_x;
 				const vRelY = this.universe.pix2m(target.vy) - vAtmM_y;
 				const vRelSq = vRelX * vRelX + vRelY * vRelY;
+				const q = 0.5 * rho * vRelSq;
 				
-				q = 0.5 * rho * vRelSq;
+				const velAngle = Math.atan2(vRelY, vRelX);
+				let angleDiff = Math.abs(target.thrustAngle - velAngle);
+				while (angleDiff > Math.PI) { angleDiff -= 2 * Math.PI; }
+				while (angleDiff < -Math.PI) { angleDiff += 2 * Math.PI; }
+				aoaDeg = Math.abs(angleDiff) * (180 / Math.PI);
 				
-				let area = Math.PI * target.radius * target.radius;
-				let cd = 0.47;
 				const objParam = DEFAULT_OBJECT_PARAMS[target.name];
-				
-				if (objParam && objParam.AERO_AREA_FRONT) {
-					cd = objParam.DRAG_COEF || 0.2;
-					const velAngle = Math.atan2(vRelY, vRelX);
-					let angleDiff = Math.abs(target.thrustAngle - velAngle);
-					while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-					while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-					angleDiff = Math.abs(angleDiff);
-					
-					const aoa = Math.min(angleDiff, Math.PI - angleDiff);
-					aoaDeg = aoa * (180 / Math.PI);
-					const sinAoA = Math.sin(aoa);
-					
-					area = objParam.AERO_AREA_FRONT * (1 - sinAoA) + objParam.AERO_AREA_SIDE * sinAoA;
-				}
-				
-				dragKN = (q * cd * area) / 1000;
-				
 				const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
 				if (maxQ !== Infinity) {
 					structRatio = (q / maxQ) * 100;
@@ -222,39 +282,59 @@ export class TelemetryPanel {
 			}
 		}
 
-		if (this.ui.atm) {
-			this.ui.atm.innerText = rho.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4}).padStart(8, ' ');
-			this.ui.aoa.innerText = rho > 0 ? aoaDeg.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(6, ' ') : "---".padStart(6, ' ');
-			this.ui.dyn.innerText = (q / 1000).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(8, ' ');
-			
-			if (structRatio > 0) {
-				this.ui.struct.innerText = structRatio.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(6, ' ');
-				if (structRatio > 80) {
-					this.ui.struct.style.color = '#ffaa00';
-				} else {
-					this.ui.struct.style.color = '#00ffcc';
-				}
-			} else {
-				this.ui.struct.innerText = "---".padStart(6, ' ');
-				this.ui.struct.style.color = '#00ffcc';
-			}
-			
-			this.ui.drag.innerText = dragKN.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(8, ' ');
-		}
+		this.ui.aoa.innerText = aoaDeg.toFixed(1).padStart(5, ' ');
+		this.ui.dyn.innerText = structRatio.toFixed(1).padStart(5, ' ');
 
-		// Rocket Specific Data
-		if (target.emptyMass > 0 && target.massLossRate > 0) {
-			this.ui.rocketData.style.display = 'block';
-			const currentProp = Math.max(0, target.mass - target.emptyMass);
-			this.ui.prop.innerText = currentProp.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(8, ' ');
+		return { structRatio };
+	}
+
+	_updatePropulsionAndStatusUI(target, structRatio) {
+		let mStat = MISSION_STATUS.PRE_LAUNCH;
+		if (target.name === 'Rocket') {
+			if (target.burnTime > 0) {
+				if (structRatio > UI_TM_MAX_Q_TH) { mStat = MISSION_STATUS.MAX_Q; }
+				else { mStat = MISSION_STATUS.ASCENT; }
+			} else {
+				if (target.massLossRate > 0 && target.mass <= target.emptyMass) { mStat = MISSION_STATUS.MECO; }
+				else { mStat = MISSION_STATUS.COASTING; }
+			}
 
 			const thrtlPercent = (target.thrustRatio || 0) * 100;
-			if (this.ui.thrtl) this.ui.thrtl.innerText = thrtlPercent.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(6, ' ');
+			this.ui.thrtl.innerText = thrtlPercent.toFixed(1).padStart(6, ' ');
 
-			this.ui.burn.innerText = target.burnTime.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(8, ' ');
+			const propRem = Math.max(0, target.mass - target.emptyMass);
+			this.ui.prop.innerText = propRem.toFixed(2).padStart(6, ' ');
+
+			if (!this.maxProp[target.id] || propRem > this.maxProp[target.id]) this.maxProp[target.id] = propRem;
+			const pct = this.maxProp[target.id] > 0 ? (propRem / this.maxProp[target.id]) * 100 : 0;
+			this.ui.fuelBar.style.width = `${pct}%`;
 		} else {
-			this.ui.rocketData.style.display = 'none';
+			mStat = MISSION_STATUS.TRACKING;
+			this.ui.thrtl.innerText = "---".padStart(6, ' ');
+			this.ui.prop.innerText = "---".padStart(6, ' ');
+			this.ui.fuelBar.style.width = `0%`;
 		}
+		
+		this.ui.missionStatus.innerText = mStat;
+		if (mStat === MISSION_STATUS.MAX_Q) { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.max_q; }
+		else { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.normal; }
+	}
+
+	_updateFlightDirectorUI(target, progradeAngle, gravityAngle) {
+		const getOffsetPct = (angle, refAngle) => {
+			let diff = angle - refAngle;
+			while(diff > Math.PI) { diff -= 2*Math.PI; }
+			while(diff < -Math.PI) { diff += 2*Math.PI; }
+			return 50 + (diff / Math.PI) * 50; 
+		};
+
+		const progOffset = getOffsetPct(progradeAngle, target.thrustAngle);
+		const gravOffset = getOffsetPct(gravityAngle, target.thrustAngle);
+
+		this.ui.navPrograde.style.left = `${progOffset}%`;
+		this.ui.navGravity.style.left = `${gravOffset}%`;
+
+		this.subRenderer.setRotation(-Math.PI/2 - progradeAngle);
 	}
 
 	draw() {
@@ -284,6 +364,9 @@ export class TelemetryPanel {
 				const subCtx = this.subRenderer.canvas.getContext('2d');
 				subCtx.save();
 				subCtx.translate(this.subRenderer.canvas.width / 2, this.subRenderer.canvas.height / 2);
+				if (this.subRenderer.rotation !== undefined) {
+					subCtx.rotate(this.subRenderer.rotation);
+				}
 				this.universe.RocketLauncher.drawPreview(subCtx, targetObj, subZoom);
 				subCtx.restore();
 			}

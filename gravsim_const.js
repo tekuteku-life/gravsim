@@ -20,6 +20,8 @@ export const UI_DOUBLE_TAP_DURATION = 400;			// Duration which double tap detect
 
 export const UI_NAVI_UPDATE_UPDATE_INTERVAL = 500;	// Update interval for Navi tab (ms)
 
+export const UI_TM_MAX_Q_TH = 80;					// Max-Q message indication threshold (%)
+
 // Program setting
 export const TIME_SCALE = 1e3;
 export const THROW_SCALE = 4e16;
@@ -216,4 +218,21 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"DRAG_COEF": 0.2,
 		"MAX_DYNAMIC_PRESSURE": 50000
 	},
+};
+
+export const ROCKET_FUELS = {
+	"solid": { name: "Solid", isp: 250, density: 1.8 },
+	"liquid": { name: "Liquid", isp: 320, density: 1.0 },
+	"hydro": { name: "Cryogenic", isp: 450, density: 0.3 },
+	"ion": { name: "Ion", isp: 3000, density: 0.5 }
+};
+
+export const MISSION_STATUS = {
+	PRE_LAUNCH: "PRE-LAUNCH",
+	LIFTOFF: "LIFTOFF",
+	ASCENT: "ASCENT",
+	MAX_Q: "MAX-Q",
+	MECO: "MECO",
+	COASTING: "COASTING",
+	TRACKING: "TRACKING"
 };

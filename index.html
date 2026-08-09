@@ -87,37 +87,45 @@
 				<label>Target Host:</label>
 				<select id="rl-host-select" class="full-width"></select>
 
-				<label>Host Angle (deg): <span id="rl-host-angle-val">0</span></label>
-				<input type="range" id="rl-host-angle" min="0" max="360" value="0" class="slider-full">
+				<label>Host Angle (deg): <span id="rl-host-angle-val">270</span></label>
+				<input type="range" id="rl-host-angle" min="0" max="360" value="270" class="slider-full">
 
 				<label>Altitude (m): <span id="rl-host-alt-val">5</span></label>
 				<input type="range" id="rl-host-alt" min="5" max="10000" step="1" value="5" class="slider-full">
 			</div>
 
 			<div class="panel-section launch-params">
-				<label>Launch Angle (deg): <span id="rl-launch-angle-val">90</span></label>
-				<input type="range" id="rl-launch-angle" min="0" max="360" value="90" class="slider-full">
+				<label>Launch Angle (deg): <span id="rl-launch-angle-val">270</span></label>
+				<input type="range" id="rl-launch-angle" min="0" max="360" value="270" class="slider-full">
 
-				<label>Rocket Mass (t): <span id="rl-launch-mass-val">60</span></label>
-				<input type="range" id="rl-launch-mass" min="5" max="5000" step="5" value="60" class="slider-full">
+				<label>Fuel Type:</label>
+				<select id="rl-fuel-type" class="full-width">
+					<option value="solid">Solid (Isp: 250s, Heavy)</option>
+					<option value="liquid" selected>Liquid (Isp: 320s, Balanced)</option>
+					<option value="hydro">Cryogenic (Isp: 450s, Light/Bulky)</option>
+					<option value="ion">Ion (Isp: 3000s, Low Thrust)</option>
+				</select>
 
-				<label>Thrust Force (kN): <span id="rl-launch-thrust-val">1000</span></label>
-				<input type="range" id="rl-launch-thrust" min="600" max="10000" step="50" value="1000" class="slider-full">
+				<label>Fuel Amount (t): <span id="rl-fuel-amount-val">550</span></label>
+				<input type="range" id="rl-fuel-amount" min="1" max="4000" step="1" value="550" class="slider-full">
 
-				<label>Burn Time (s): <span id="rl-launch-burn-val">300</span></label>
-				<input type="range" id="rl-launch-burn" min="1" max="1500" step="1" value="300" class="slider-full">
+				<label>Dry Mass (t): <span id="rl-launch-mass-val">7</span></label>
+				<input type="range" id="rl-launch-mass" min="1" max="500" step="1" value="7" class="slider-full">
 
-				<label>Max G Limit: <span id="rl-launch-maxg-val">5.0</span></label>
-				<input type="range" id="rl-launch-maxg" min="1.5" max="15.0" step="0.1" value="5.0" class="slider-full">
+				<label>Thrust Force (kN): <span id="rl-launch-thrust-val">7000</span></label>
+				<input type="range" id="rl-launch-thrust" min="600" max="10000" step="50" value="7000" class="slider-full">
 
-				<label>Payload Ratio (%): <span id="rl-launch-payload-val">20</span></label>
-				<input type="range" id="rl-launch-payload" min="1" max="100" step="1" value="20" class="slider-full">
+				<label>Max G Limit: <span id="rl-launch-maxg-val">4.0</span></label>
+				<input type="range" id="rl-launch-maxg" min="1.5" max="15.0" step="0.1" value="4.0" class="slider-full">
 			</div>
 
 			<div id="rl-stats-panel">
 				Total Delta-v: <span id="rl-stat-dv">0.00</span> km/s<br>
-				TWR (<span id="rl-stat-host-name">Earth</span>):<br>
-				Y(Vert) <span id="rl-stat-twr-y">0.00</span> / X(Horz) <span id="rl-stat-twr-x">0.00</span>
+				TWR (<span id="rl-stat-host-name">Earth</span>): Y(Vert) <span id="rl-stat-twr-y">0.00</span> / X(Horz) <span id="rl-stat-twr-x">0.00</span><br>
+				Fuel Type: <span id="rl-stat-fuel-type">Liquid</span><br>
+				Fuel Amount: <span id="rl-stat-fuel-amount">0</span> t<br>
+				Isp: <span id="rl-stat-fuel-isp">0</span> s<br>
+				Max Burn: <span id="rl-stat-fuel-max-burn">0</span> s<br>
 			</div>
 			
 			<button type="button" id="rl-execute-btn" class="launch-btn">LAUNCH ROCKET</button>
@@ -161,29 +169,46 @@
 
 	<button type="button" id="telemetry-toggle-btn">TELEMETRY: OFF</button>
 	<div id="telemetry-panel" style="display: none;">
-		<div class="telemetry-header">TELEMETRY DATA</div>
+		<div class="telemetry-header">TELEMETRY HUD</div>
 		<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
-		<div class="telemetry-line">REF BODY : <span id="tm-refbody">---</span></div>
+
+        <div id="tm-status-box" style="text-align: center; font-weight: bold; background: #003322; border: 1px solid #00ffcc; padding: 4px; margin-top: 5px;">
+            <span id="tm-mission-status">PRE-LAUNCH</span>
+        </div>
+
+		<div class="tm-section-header">[ VESSEL STATE ]</div>
 		<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
-		
-		<div class="tm-section-header">[ ORBIT DYNAMICS ]</div>
+		<div class="telemetry-line">REM ΔV   : <span id="tm-rem-dv">---</span> km/s</div>
+		<div class="telemetry-line">CUR TWR  : <span id="tm-twr">---</span></div>
+
+		<div class="tm-section-header">[ FLIGHT DYNAMICS ]</div>
 		<div class="telemetry-line">ALTITUDE : <span id="tm-alt">---</span> km</div>
-		<div class="telemetry-line">VELOCITY : <span id="tm-vel">---</span> km/s</div>
-		<div class="telemetry-line">G-FORCE  : <span id="tm-gforce">---</span> G</div>
+		<div class="telemetry-line">VEL (V/H): <span id="tm-vel-v">---</span> / <span id="tm-vel-h">---</span> km/s</div>
+		<div class="telemetry-line">ACC (V/H): <span id="tm-acc-v">---</span> / <span id="tm-acc-h">---</span> G</div>
 
 		<div class="tm-section-header">[ AERODYNAMICS ]</div>
-		<div class="telemetry-line">ATM DENS : <span id="tm-atm">---</span> kg/m³</div>
-		<div class="telemetry-line">A. o. A. : <span id="tm-aoa">---</span> deg</div>
-		<div class="telemetry-line">DYN PRES : <span id="tm-dyn">---</span> kPa</div>
-		<div class="telemetry-line">STRUCT   : <span id="tm-struct">---</span> %</div>
-		<div class="telemetry-line">DRAG     : <span id="tm-drag">---</span> kN</div>
+		<div class="telemetry-line">PITCH/AOA: <span id="tm-pitch">---</span> / <span id="tm-aoa">---</span> °</div>
+		<div class="telemetry-line">DYN PRES : <span id="tm-dyn">---</span> % Max-Q</div>
 
-		<div id="tm-rocket-data" style="display: none;">
-			<div class="tm-section-header">[ PROPULSION ]</div>
-			<div class="telemetry-line">PROPELLANT:<span id="tm-prop">---</span> t</div>
-			<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>
-			<div class="telemetry-line">BURN REM : <span id="tm-burn">---</span> s</div>
-		</div>
+		<div class="tm-section-header">[ PROPULSION ]</div>
+		<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>
+		<div class="telemetry-line">PROP REM : <span id="tm-prop">---</span> t</div>
+        
+        <div style="margin-top: 10px;">
+            <div style="font-size: 10px; color: #00aa88;">PROPELLANT</div>
+            <div style="width: 100%; height: 6px; background: #222; border: 1px solid #005544;">
+                <div id="tm-fuel-bar" style="width: 100%; height: 100%; background: #00ffcc; transition: width 0.1s;"></div>
+            </div>
+        </div>
+
+        <div style="margin-top: 10px;">
+            <div style="font-size: 10px; color: #00aa88;">FLIGHT DIRECTOR</div>
+            <div style="position: relative; width: 100%; height: 24px; background: rgba(0,255,204,0.1); border: 1px solid #00ffcc; overflow: hidden;">
+                <div style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #fff; font-weight: bold; font-size: 14px; z-index: 3;">＋</div>
+                <div id="tm-nav-prograde" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #00ffcc; font-weight: bold; font-size: 16px; z-index: 2; transition: left 0.1s;">◯</div>
+                <div id="tm-nav-gravity" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #ffaa00; font-weight: bold; font-size: 16px; z-index: 1; transition: left 0.1s;">↓</div>
+            </div>
+        </div>
 
 		<div class="telemetry-header" style="margin-top: 15px;">TARGET CAMERA</div>
 		<canvas id="sub-canvas"></canvas>

@@ -1,6 +1,8 @@
 // gravsim_rocket_launcher.js
 
-import { DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
+import {
+	G0, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS,
+} from './gravsim_const.js';
 
 /*******************************************************************
  * RocketLauncher Class
@@ -20,16 +22,17 @@ export class RocketLauncher {
 		this.freeY = 0;
 
 		// Host mode relative parameters
-		this.hostAngleDeg = 0;
+		this.hostAngleDeg = 270;
 		this.hostAltitudeM = 10; // (m)
 
 		// Rocket parameters
-		this.initialMassT = 60;	// (t)
-		this.launchAngleDeg = 90;
-		this.thrustKN = 1000;	// (kN)
-		this.burnTime = 300;	// (seconds)
-		this.payloadRatio = 20;	// %
-		this.maxGLimit = 5.0;	// G
+		this.dryMassT = 7;	// (t) Payload + empty structure
+		this.fuelAmountT = 550; // (t)
+		this.fuelType = 'liquid';
+		this.launchAngleDeg = 270;
+		this.thrustKN = 7000;	// (kN)
+		this.calculatedBurnTime = 0;
+		this.maxGLimit = 4.0;	// G
 	}
 
 	togglePreview(forceState = null) {
@@ -55,17 +58,17 @@ export class RocketLauncher {
 
 		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
-		const m0 = param.MASS * 1e3;
-
-		// Calculate final mass (mf) based on payload ratio
-		const mf = m0 * (this.payloadRatio / 100);
+		const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
+		const ve = fuel.isp * G0; // Exhaust velocity
+		const m0 = (this.dryMassT + this.fuelAmountT) * 1e3; // Initial mass in kg
+		const mf = this.dryMassT * 1e3; // Final mass in kg
 		
-		if (this.burnTime > 0 && this.payloadRatio < 100 && this.thrustKN > 0) {
-			const mDot = (m0 - mf) / this.burnTime;
-			const F = this.thrustKN * 1e3;
-			deltaVM = (F / mDot) * Math.log(m0 / mf);
-		} else if (this.thrustKN > 0 && this.payloadRatio === 100) {
-			deltaVM = (this.thrustKN * 1e3 / m0) * this.burnTime;
+		// Calculate Max Burn Time based on Thrust and Isp
+		const massFlowRateKgS = (this.thrustKN * 1e3) / ve;
+		this.calculatedBurnTime = massFlowRateKgS > 0 ? (this.fuelAmountT * 1e3) / massFlowRateKgS : 0;
+		
+		if (this.calculatedBurnTime > 0 && this.thrustKN > 0) {
+			deltaVM = ve * Math.log(m0 / mf);
 		}
 
 		if (this.mode === 'host') {
@@ -120,7 +123,7 @@ export class RocketLauncher {
 		// Estimate total Delta-v visually for the arrow length
 		// dV = (Thrust * BurnTime) / avgMass
 		const baseMassTon = DEFAULT_OBJECT_PARAMS['Rocket'].MASS;
-		const estDv = (this.thrustKN * this.burnTime) / baseMassTon;
+		const estDv = (this.thrustKN * this.calculatedBurnTime) / baseMassTon;
 		const arrowLen = Math.max(20, Math.min(300, (estDv / 1000) * 2)); // screen pixels
 		
 		const launchRad = this.launchAngleDeg * (Math.PI / 180);
@@ -165,15 +168,16 @@ export class RocketLauncher {
 		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 
-		const initialMassTon = this.initialMassT;
-		const finalMassTon = initialMassTon * (this.payloadRatio / 100);
-		const massLossRateTon = this.burnTime > 0 ? (initialMassTon - finalMassTon) / this.burnTime : 0;
+		const initialMassTon = this.dryMassT + this.fuelAmountT;
+		const finalMassTon = this.dryMassT;
+		const massLossRateTon = this.calculatedBurnTime > 0 ? (initialMassTon - finalMassTon) / this.calculatedBurnTime : 0;
 
 		const optParams = {
 			force: this.thrustKN * 1e3,
 			mass: initialMassTon,
+			emptyMass: finalMassTon,
 			angle: this.launchAngleDeg * (Math.PI / 180),
-			time: this.burnTime,
+			time: this.calculatedBurnTime,
 			lossRate: massLossRateTon,
 			maxGLimit: this.maxGLimit
 		};
@@ -189,10 +193,9 @@ export class RocketLauncher {
 			hostAngleDeg: this.hostAngleDeg,
 			hostAltitudeM: this.hostAltitudeM,
 			launchAngleDeg: this.launchAngleDeg,
-			initialMassT: this.initialMassT,
+			initialMassT: this.dryMassT,
 			thrustKN: this.thrustKN,
-			burnTime: this.burnTime,
-			payloadRatio: this.payloadRatio,
+			burnTime: this.calculatedBurnTime,
 			maxGLimit: this.maxGLimit
 		};
 	}
@@ -204,10 +207,9 @@ export class RocketLauncher {
 		if (state.hostAngleDeg !== undefined) this.hostAngleDeg = state.hostAngleDeg;
 		if (state.hostAltitudeM !== undefined) this.hostAltitudeM = state.hostAltitudeM;
 		if (state.launchAngleDeg !== undefined) this.launchAngleDeg = state.launchAngleDeg;
-		if (state.initialMassT !== undefined) this.initialMassT = state.initialMassT;
+		if (state.initialMassT !== undefined) this.dryMassT = state.initialMassT;
 		if (state.thrustKN !== undefined) this.thrustKN = state.thrustKN;
-		if (state.burnTime !== undefined) this.burnTime = state.burnTime;
-		if (state.payloadRatio !== undefined) this.payloadRatio = state.payloadRatio;
+		if (state.burnTime !== undefined) this.calculatedBurnTime = state.burnTime;
 		if (state.maxGLimit !== undefined) this.maxGLimit = state.maxGLimit;
 	}
 }
