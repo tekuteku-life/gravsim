@@ -6,37 +6,27 @@ import {
 	OBJECT_STATE, METERS_PER_AU,
 	SPARKLE_ANIM_SPEED, SPARKLE_ROTATE_SPEED,
 	SPARKLE_STAR_SIZE_RATIO, SPARKLE_STAR_INNER_SIZE_RATIO,
-	DEFAULT_OBJECT_PARAMS
+	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES
 } from './gravsim_const.js';
 
 /*******************************************************************
  * GravSimObject class that represents a celestial object in the universe.
  *******************************************************************/
 export class GravSimObject {
-	constructor(name, x, y, vx, vy, mass, color, size, radius,
+	constructor(id, name, type, x, y, vx, vy, color, size, radius,
 		generation = 0, borderColor = null, borderWidth = 0) {
-		GravSimObject._idCounter = (GravSimObject._idCounter || 0);
-
+		this.id = id;
 		this.name = name;
-		this.id = GravSimObject._idCounter;
+		this.type = type;
 		this.x = x;
 		this.y = y;
 		this.vx = vx;
 		this.vy = vy;
 		this.ax = 0;
 		this.ay = 0;
-		this.mass = mass;		// ton
 		this.color = color;
 		this.size = size;
 		this.radius = radius;	// meters
-
-		this.thrustForce = 0;
-		this.burnTime = 0;
-		this.thrustAngle = 0;
-		this.emptyMass = 0;
-		this.massLossRate = 0;
-		this.maxGLimit = 0;
-		this.thrustRatio = 0;
 
 		this.borderColor = borderColor;
 		this.borderWidth = borderWidth;
@@ -46,9 +36,9 @@ export class GravSimObject {
 		this.deadFrames = 0;
 		this.generation = generation;
 		this.isDebris = this.generation > 0;
-
-		GravSimObject._idCounter++;
 	}
+
+	get mass() { return 1; }
 
 	isCenterObject() {
 		return window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id;
@@ -165,15 +155,7 @@ export class GravSimObject {
 			const screenRadius = this._getDrawRadius(zoomScale);
 
 			this._drawBody(ctx, relX, relY, screenRadius);
-			this._drawAtmosphere(ctx, relX, relY, screenRadius, zoomScale);
-
-			if (this.burnTime > 0) {
-				this._drawFlame(ctx, relX, relY, screenRadius);
-			}
-
-			if (this.isEscaping) {
-				this._drawSparkle(ctx, relX, relY, screenRadius);
-			}
+			this._drawEffects(ctx, relX, relY, screenRadius, zoomScale);
 		}
 
 		// Draw trail (Skip for center object)
@@ -217,85 +199,7 @@ export class GravSimObject {
 		}
 	}
 	
-	_drawAtmosphere(ctx, x, y, screenRadius, zoomScale) {
-		const param = DEFAULT_OBJECT_PARAMS[this.name];
-		if (!param || !param.ATM_COLOR || !param.ATM_LIMIT_ALT) return;
-
-		const atmThicknessPx = (param.ATM_LIMIT_ALT / METERS_PER_AU) * DISTANCE_SCALE;
-		const screenThicknessPx = atmThicknessPx * zoomScale;
-
-		if (screenThicknessPx < 1) return;
-
-		const outerScreenRadius = screenRadius + screenThicknessPx;
-
-		ctx.save();
-		
-		const gradient = ctx.createRadialGradient(x, y, screenRadius, x, y, outerScreenRadius);
-		gradient.addColorStop(0, param.ATM_COLOR);
-		gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
-
-		ctx.fillStyle = gradient;
-		ctx.beginPath();
-		ctx.arc(x, y, outerScreenRadius, 0, Math.PI * 2);
-		ctx.fill();
-		
-		ctx.restore();
-	}
-
-	_drawFlame(ctx, x, y, screenRadius) {
-		const flicker = 0.8 + Math.random() * 0.4;
-		const flameLen = screenRadius * 3 * flicker;
-		
-		ctx.save();
-		ctx.translate(x, y);
-		ctx.rotate(this.thrustAngle); // Pointing forward
-
-		ctx.fillStyle = "rgba(255, 100, 0, 0.8)";
-		ctx.beginPath();
-		ctx.moveTo(-screenRadius, 0);
-		ctx.lineTo(-screenRadius * 0.8, screenRadius * 0.8);
-		ctx.lineTo(-screenRadius - flameLen, 0);
-		ctx.lineTo(-screenRadius * 0.8, -screenRadius * 0.8);
-		ctx.fill();
-
-		ctx.fillStyle = "rgba(255, 200, 0, 0.9)";
-		ctx.beginPath();
-		ctx.moveTo(-screenRadius, 0);
-		ctx.lineTo(-screenRadius * 0.9, screenRadius * 0.4);
-		ctx.lineTo(-screenRadius - flameLen * 0.6, 0);
-		ctx.lineTo(-screenRadius * 0.9, -screenRadius * 0.4);
-		ctx.fill();
-		
-		ctx.restore();
-	}
-
-	_drawSparkle(ctx, x, y, screenRadius) {
-		const now = Date.now();
-		const blink = Math.abs(Math.sin(now / SPARKLE_ANIM_SPEED + this.id)); 
-
-		ctx.save();
-		ctx.translate(x, y);
-		ctx.rotate(now / SPARKLE_ROTATE_SPEED); 
-
-		ctx.globalAlpha = blink;
-		ctx.fillStyle = "#FFFFFF"; 
-
-		const starSize = screenRadius * SPARKLE_STAR_SIZE_RATIO; 
-		const innerSize = screenRadius * SPARKLE_STAR_INNER_SIZE_RATIO; 
-
-		ctx.beginPath();
-		ctx.moveTo(0, -starSize);
-		ctx.lineTo(innerSize, -innerSize);
-		ctx.lineTo(starSize, 0);
-		ctx.lineTo(innerSize, innerSize);
-		ctx.lineTo(0, starSize);
-		ctx.lineTo(-innerSize, innerSize);
-		ctx.lineTo(-starSize, 0);
-		ctx.lineTo(-innerSize, -innerSize);
-		ctx.fill();
-
-		ctx.restore();
-	}
+	_drawEffects(ctx, x, y, screenRadius, zoomScale) {}
 
 	_drawTrail(ctx, basis, zoomScale) {
 		const targetLength = TARGET_TRAIL_LENGTH_AU * DISTANCE_SCALE;
@@ -343,5 +247,124 @@ export class GravSimObject {
 		const g = (num >> 8) & 255;
 		const b = num & 255;
 		return `rgba(${r},${g},${b},${alpha})`;
+	}
+}
+
+GravSimObject._idCounter = 0;
+
+export class CelestialBody extends GravSimObject {
+	constructor(id, name, x, y, vx, vy, mass, color, size, radius, generation, borderColor, borderWidth) {
+		super(id, name, OBJECT_TYPES.CELESTIAL, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth);
+		this._mass = mass; // t
+	}
+	get mass() { return this._mass; }
+	set mass(val) { this._mass = val; }
+
+	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
+		const param = DEFAULT_OBJECT_PARAMS[this.name];
+		if (!param || !param.ATM_COLOR || !param.ATM_LIMIT_ALT) { return; }
+
+		const atmThicknessPx = (param.ATM_LIMIT_ALT / METERS_PER_AU) * DISTANCE_SCALE;
+		const screenThicknessPx = atmThicknessPx * zoomScale;
+
+		if (screenThicknessPx < 1) { return; }
+
+		const outerScreenRadius = screenRadius + screenThicknessPx;
+
+		ctx.save();
+		
+		const gradient = ctx.createRadialGradient(x, y, screenRadius, x, y, outerScreenRadius);
+		gradient.addColorStop(0, param.ATM_COLOR);
+		gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+		ctx.fillStyle = gradient;
+		ctx.beginPath();
+		ctx.arc(x, y, outerScreenRadius, 0, Math.PI * 2);
+		ctx.fill();
+		
+		ctx.restore();
+	}
+}
+
+export class Rocket extends GravSimObject {
+	constructor(id, name, x, y, vx, vy, dryMass, fuelMass, color, size, radius, generation, borderColor, borderWidth) {
+		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth);
+		this.dryMass = dryMass; // t
+		this.fuelMass = fuelMass; // t
+		this.thrustForce = 0;
+		this.burnTime = 0;
+		this.thrustAngle = 0;
+		this.massLossRate = 0;
+		this.maxGLimit = 0;
+		this.thrustRatio = 0;
+	}
+	get mass() { return this.dryMass + this.fuelMass; }
+
+	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
+		if (this.burnTime > 0) {
+			const flicker = 0.8 + Math.random() * 0.4;
+			const flameLen = screenRadius * 3 * flicker;
+			
+			ctx.save();
+			ctx.translate(x, y);
+			ctx.rotate(this.thrustAngle); // Pointing forward
+
+			ctx.fillStyle = "rgba(255, 100, 0, 0.8)";
+			ctx.beginPath();
+			ctx.moveTo(-screenRadius, 0);
+			ctx.lineTo(-screenRadius * 0.8, screenRadius * 0.8);
+			ctx.lineTo(-screenRadius - flameLen, 0);
+			ctx.lineTo(-screenRadius * 0.8, -screenRadius * 0.8);
+			ctx.fill();
+
+			ctx.fillStyle = "rgba(255, 200, 0, 0.9)";
+			ctx.beginPath();
+			ctx.moveTo(-screenRadius, 0);
+			ctx.lineTo(-screenRadius * 0.9, screenRadius * 0.4);
+			ctx.lineTo(-screenRadius - flameLen * 0.6, 0);
+			ctx.lineTo(-screenRadius * 0.9, -screenRadius * 0.4);
+			ctx.fill();
+			
+			ctx.restore();
+		}
+
+		if (this.isEscaping) {
+			const now = Date.now();
+			const blink = Math.abs(Math.sin(now / SPARKLE_ANIM_SPEED + this.id)); 
+
+			ctx.save();
+			ctx.translate(x, y);
+			ctx.rotate(now / SPARKLE_ROTATE_SPEED); 
+
+			ctx.globalAlpha = blink;
+			ctx.fillStyle = "#FFFFFF"; 
+
+			const starSize = screenRadius * SPARKLE_STAR_SIZE_RATIO; 
+			const innerSize = screenRadius * SPARKLE_STAR_INNER_SIZE_RATIO; 
+
+			ctx.beginPath();
+			ctx.moveTo(0, -starSize);
+			ctx.lineTo(innerSize, -innerSize);
+			ctx.lineTo(starSize, 0);
+			ctx.lineTo(innerSize, innerSize);
+			ctx.lineTo(0, starSize);
+			ctx.lineTo(-innerSize, innerSize);
+			ctx.lineTo(-starSize, 0);
+			ctx.lineTo(-innerSize, -innerSize);
+			ctx.fill();
+
+			ctx.restore();
+		}
+	}
+
+	_drawBody(ctx, x, y, screenRadius) {
+		ctx.fillStyle = this.color;
+		ctx.beginPath();
+		ctx.save();
+		ctx.translate(x, y);
+		ctx.rotate(this.thrustAngle);
+		ctx.ellipse(0, 0, screenRadius * 2.0, screenRadius * 0.7, 0, 0, Math.PI * 2);
+		ctx.fill();
+		ctx.restore();
 	}
 }

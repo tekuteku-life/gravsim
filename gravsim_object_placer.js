@@ -5,8 +5,7 @@ import {
 	METERS_PER_AU, G,
 	TIME_SCALE, THROW_SCALE, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
-import { GravSimObject } from './gravsim_object.js';
-import { RocketLauncher } from './gravsim_rocket_launcher.js';
+import { CelestialBody, Rocket } from './gravsim_object.js';
 
 function AU2M(au) {
 	return au * METERS_PER_AU;
@@ -14,7 +13,6 @@ function AU2M(au) {
 
 /*******************************************************************
  * ObjectPlacer class that manages the placement of objects in the universe.
- * @property {Universe} universe - The universe instance where objects are placed.
 *******************************************************************/
 export class ObjectPlacer {
 	constructor(universe) {
@@ -45,26 +43,45 @@ export class ObjectPlacer {
 			? param.MIN_DRAW_SIZE
 			: Math.log10((param.RADIUS || 1) * 8) / 2.5;
 
-		const obj = new GravSimObject(
-			param.NAME,
-			x, y,
-			vx, vy,
-			param.MASS,
-			param.COLOR,
-			minDrawSize,
-			param.RADIUS || 1,
-			0,
-			param.BORDER_COLOR || null,
-			param.BORDER_WIDTH || 0
-		);
+		let obj;
+		const nextId = this.universe.ObjectManager.getNextId();
 
-		// Apply active rocket engine parameters if specified
-		if (options.time > 0) {
-			obj.thrustForce = options.force || 0;
-			obj.burnTime = options.time || 0;
-			obj.thrustAngle = options.angle || 0;
-			obj.massLossRate = options.lossRate || 0;
-			obj.mass = options.mass || param.MASS;
+		if (param.NAME === 'Rocket' || objName === 'Rocket') {
+			obj = new Rocket(
+				nextId, param.NAME,
+				x, y,
+				vx, vy,
+				options.emptyMass || param.MASS,
+				(options.mass || param.MASS) - (options.emptyMass || param.MASS),
+				param.COLOR,
+				minDrawSize,
+				param.RADIUS || 1,
+				0,
+				param.BORDER_COLOR || null,
+				param.BORDER_WIDTH || 0
+			);
+
+			// Apply active rocket engine parameters if specified
+			if (options.time > 0) {
+				obj.thrustForce = options.force || 0;
+				obj.burnTime = options.time || 0;
+				obj.thrustAngle = options.angle || 0;
+				obj.massLossRate = options.lossRate || 0;
+				obj.maxGLimit = options.maxGLimit || 0;
+			}
+		} else {
+			obj = new CelestialBody(
+				nextId, param.NAME,
+				x, y,
+				vx, vy,
+				param.MASS, 
+				param.COLOR,
+				minDrawSize,
+				param.RADIUS || 1,
+				0,
+				param.BORDER_COLOR || null,
+				param.BORDER_WIDTH || 0
+			);
 		}
 
 		this.universe.addObject(obj);
@@ -73,24 +90,24 @@ export class ObjectPlacer {
 
 	placeAtOrbit(objName, hostObj) {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
-		
+
 		// Get A/E (circular orbit by default)
 		const a_au = param.A || 1;
 		const e = param.E || 0;
 		const a_m = AU2M(a_au);
 		const r_p_m = a_m * (1 - e); // perihelion distance (m)
-		
+
 		// Calculate velocity at perihelion by using Vis-viva equation
 		const totalMassKg = (hostObj.mass + param.MASS) * 1e3;
 		const v_p_m = Math.sqrt(G * totalMassKg * (2 / r_p_m - 1 / a_m));
 
 		const perihelionDeg = param.PERIHELION_DEG || 0;
 		const theta = perihelionDeg * (Math.PI / 180);
-		
+
 		const r_p_px = this.universe.m2pix(r_p_m);
 		const relX = r_p_px * Math.cos(theta);
 		const relY = r_p_px * Math.sin(theta);
-		
+
 		// Calculate velocity vector
 		// (At perihelion, the velocity vector is perpendicular to the radius vector)
 		const v_p_px = this.universe.m2pix(v_p_m);
@@ -207,7 +224,7 @@ export class ObjectPlacer {
 			vy + this.universe.centerObject.vy
 		);
 		
-		this.startX = null; // Reset start position
+		this.startX = null;
 		this.startY = null;
 	}
 }

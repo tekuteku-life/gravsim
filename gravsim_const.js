@@ -237,3 +237,5 @@ export const MISSION_STATUS = {
 	COASTING: "COASTING",
 	TRACKING: "TRACKING"
 };
+
+export const OBJECT_TYPES = { CELESTIAL: 0, ROCKET: 1 };

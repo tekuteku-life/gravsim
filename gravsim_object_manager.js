@@ -1,15 +1,15 @@
+
+// gravsim_object_manager.js
+
 import {
 	G, REMOVE_DISTANCE_AU, DEBRIS_MIN_FRAG,
 	DEBRIS_FRAG_DECAY_RATE, OBJECT_STATE,
 	DEBRIS_IMPACT_SCATTER_BASE, DEBRIS_IMPACT_SCATTER_VAR,
 	DEBRIS_SHATTER_SCATTER_BASE, DEBRIS_SHATTER_SCATTER_VAR,
-	DEBRIS_MASS_VAR_BASE, DEBRIS_MASS_VAR_RANGE,
+	DEBRIS_MASS_VAR_BASE, DEBRIS_MASS_VAR_RANGE, OBJECT_TYPES
 } from './gravsim_const.js';
-import { GravSimObject } from './gravsim_object.js';
+import { GravSimObject, CelestialBody, Rocket } from './gravsim_object.js';
 
-/*******************************************************************
- * ObjectManager Class
-*******************************************************************/
 export class ObjectManager {
 	constructor(renderer, workerManager) {
 		this.renderer = renderer;
@@ -27,23 +27,32 @@ export class ObjectManager {
 		return false;
 	}
 
+	getNextId() {
+		GravSimObject._idCounter = (GravSimObject._idCounter || 0);
+		const id = GravSimObject._idCounter;
+		GravSimObject._idCounter++;
+		return id;
+	}
+
 	addObject(obj) {
 		if (!(obj instanceof GravSimObject)) throw new Error("Invalid object type.");
 		this.objects.push(obj);
+		const isRocket = obj.type === OBJECT_TYPES.ROCKET;
 		this.workerManager.postMessage({
 			cmd: 'add',
 			id: obj.id,
 			name: obj.name,
+			type: obj.type,
 			x: this.renderer.pix2m(obj.x), y: this.renderer.pix2m(obj.y),
 			vx: this.renderer.pix2m(obj.vx), vy: this.renderer.pix2m(obj.vy),
 			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
-			mass: obj.mass * 1e3,
+			mass: isRocket ? obj.dryMass * 1e3 : obj.mass * 1e3,
+			fuelMass: isRocket ? obj.fuelMass * 1e3 : 0,
 			radius: obj.radius,
 			generation: obj.generation,
 			thrustForce: obj.thrustForce || 0,
 			burnTime: obj.burnTime || 0,
 			thrustAngle: obj.thrustAngle || 0,
-			emptyMass: (obj.emptyMass || 0) * 1e3,
 			massLossRate: (obj.massLossRate || 0) * 1e3,
 			maxGLimit: obj.maxGLimit || 0,
 		});
@@ -71,7 +80,7 @@ export class ObjectManager {
 
 	updateObjectParams(data) {
 		const buffer = new Float64Array(data.objectsData);
-		const OBJ_ATTR_COUNT = 19;
+		const OBJ_ATTR_COUNT = 20;
 		const objCount = buffer.length / OBJ_ATTR_COUNT;
 
 		for (let i = 0; i < objCount; i++) {
@@ -80,19 +89,26 @@ export class ObjectManager {
 
 			const target = this.objects.find(t => t.id === id);
 			if (target) {
-				target.x = this.renderer.m2pix(buffer[offset + 1]);
-				target.y = this.renderer.m2pix(buffer[offset + 2]);
-				target.vx = this.renderer.m2pix(buffer[offset + 3]);
-				target.vy = this.renderer.m2pix(buffer[offset + 4]);
-				target.ax = this.renderer.m2pix(buffer[offset + 5]);
-				target.ay = this.renderer.m2pix(buffer[offset + 6]);
-				target.mass = buffer[offset + 7] / 1e3;
-				target.radius = buffer[offset + 8];
-				target.burnTime = buffer[offset + 9];
-				target.thrustRatio = buffer[offset + 17];
+				const type = buffer[offset + 1];
+				target.x = this.renderer.m2pix(buffer[offset + 2]);
+				target.y = this.renderer.m2pix(buffer[offset + 3]);
+				target.vx = this.renderer.m2pix(buffer[offset + 4]);
+				target.vy = this.renderer.m2pix(buffer[offset + 5]);
+				target.ax = this.renderer.m2pix(buffer[offset + 6]);
+				target.ay = this.renderer.m2pix(buffer[offset + 7]);
+				
+				if (type === OBJECT_TYPES.ROCKET) {
+					target.dryMass = buffer[offset + 8] / 1e3;
+					target.fuelMass = buffer[offset + 9] / 1e3;
+					target.burnTime = buffer[offset + 11];
+					target.thrustRatio = buffer[offset + 12];
+				} else {
+					target.mass = buffer[offset + 8] / 1e3;
+				}
+				target.radius = buffer[offset + 10];
 				target.addHistory();
 
-				const flags = buffer[offset + 10];
+				const flags = buffer[offset + 13];
 				const isCollided = (flags & 1) !== 0;
 				const isShattered = (flags & 2) !== 0;
 				const isImpact = (flags & 4) !== 0;
@@ -101,15 +117,14 @@ export class ObjectManager {
 					if (isImpact && target.state === OBJECT_STATE.ACTIVE) {
 						this._generateImpactDebris(
 							target, 
-							buffer[offset + 11] / 1e3,
-							this.renderer.m2pix(buffer[offset + 12]), 
-							this.renderer.m2pix(buffer[offset + 13]),
-							this.renderer.m2pix(buffer[offset + 14]),
-							this.renderer.m2pix(buffer[offset + 15]),
-							this.renderer.m2pix(buffer[offset + 16])
+							buffer[offset + 14] / 1e3,
+							this.renderer.m2pix(buffer[offset + 15]), 
+							this.renderer.m2pix(buffer[offset + 16]),
+							this.renderer.m2pix(buffer[offset + 17]),
+							this.renderer.m2pix(buffer[offset + 18]),
+							this.renderer.m2pix(buffer[offset + 19])
 						);
 					}
-
 					target.setCollided();
 				}
 
@@ -154,9 +169,10 @@ export class ObjectManager {
 
 			const fragName = sourceObj.name.endsWith(' Debris') ? sourceObj.name : `${sourceObj.name} Debris`;
 
-			const fragment = new GravSimObject(
-				fragName, fragX, fragY, fragVx, fragVy, fragMass, debrisColor, 
-				Math.log10(fragRadius * 8) / 2.5, fragRadius, nextGen
+			const nextId = this.getNextId();
+			const fragment = new CelestialBody(
+				nextId, fragName, fragX, fragY, fragVx, fragVy, fragMass, debrisColor, 
+				Math.log10(fragRadius * 8) / 2.5, fragRadius, nextGen, null, 0
 			);
 			this.addObject(fragment);
 		}
@@ -264,18 +280,26 @@ export class ObjectManager {
 	}
 
 	getState() {
-		return this.objects.map(obj => ({
-			id: obj.id,
-			name: obj.name,
-			x: obj.x, y: obj.y,
-			vx: obj.vx, vy: obj.vy,
-			mass: obj.mass, color: obj.color,
-			size: obj.size, radius: obj.radius,
-			generation: obj.generation,
-			borderColor: obj.borderColor, borderWidth: obj.borderWidth,
-			thrustForce: obj.thrustForce, burnTime: obj.burnTime,
-			thrustAngle: obj.thrustAngle, emptyMass: obj.emptyMass, massLossRate: obj.massLossRate, maxGLimit: obj.maxGLimit
-		}));
+		return this.objects.map(obj => {
+			const base = {
+				id: obj.id, type: obj.type, name: obj.name,
+				x: obj.x, y: obj.y, vx: obj.vx, vy: obj.vy,
+				color: obj.color, size: obj.size, radius: obj.radius,
+				generation: obj.generation, borderColor: obj.borderColor, borderWidth: obj.borderWidth
+			};
+			if (obj.type === OBJECT_TYPES.ROCKET) {
+				base.dryMass = obj.dryMass;
+				base.fuelMass = obj.fuelMass;
+				base.thrustForce = obj.thrustForce;
+				base.burnTime = obj.burnTime;
+				base.thrustAngle = obj.thrustAngle;
+				base.massLossRate = obj.massLossRate;
+				base.maxGLimit = obj.maxGLimit;
+			} else {
+				base.mass = obj.mass;
+			}
+			return base;
+		});
 	}
 
 	loadState(stateArray) {
@@ -284,18 +308,23 @@ export class ObjectManager {
 
 		if (Array.isArray(stateArray)) {
 			stateArray.forEach(o => {
-				const obj = new GravSimObject(
-					o.name, o.x, o.y, o.vx, o.vy, o.mass, o.color, o.size, o.radius,
-					o.generation, o.borderColor, o.borderWidth
-				);
-				obj.id = o.id; 
-				obj.thrustForce = o.thrustForce || 0;
-				obj.burnTime = o.burnTime || 0;
-				obj.thrustAngle = o.thrustAngle || 0;
-				obj.emptyMass = o.emptyMass || 0;
-				obj.massLossRate = o.massLossRate || 0;
-				obj.maxGLimit = o.maxGLimit || 0;
-				
+				let obj;
+				if (o.type === OBJECT_TYPES.ROCKET) {
+					obj = new Rocket(
+						o.id, o.name, o.x, o.y, o.vx, o.vy, o.dryMass, o.fuelMass, o.color, o.size, o.radius,
+						o.generation, o.borderColor, o.borderWidth
+					);
+					obj.thrustForce = o.thrustForce || 0;
+					obj.burnTime = o.burnTime || 0;
+					obj.thrustAngle = o.thrustAngle || 0;
+					obj.massLossRate = o.massLossRate || 0;
+					obj.maxGLimit = o.maxGLimit || 0;
+				} else {
+					obj = new CelestialBody(
+						o.id, o.name, o.x, o.y, o.vx, o.vy, o.mass, o.color, o.size, o.radius,
+						o.generation, o.borderColor, o.borderWidth
+					);
+				}
 				this.addObject(obj);
 				if (o.id > maxId) maxId = o.id;
 			});

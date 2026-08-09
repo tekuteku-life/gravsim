@@ -1,8 +1,9 @@
+
 // gravsim_calc.js
 
 import {
 	G, C, G0, YEARS_PER_SECOND,
-	TIME_SCALE,
+	TIME_SCALE, OBJECT_TYPES,
 	ROCHE_MIN_MASS_TO_DESTROY, ROCHE_UNBREAKABLE_DENSITY,
 	ROCHE_RIGID_BODY_RADIUS, ROCHE_RIGID_DESTROYER_MASS,
 	DEBRIS_MAX_GENERATION, DEBRIS_MIN_MASS_TO_SHATTER,
@@ -16,24 +17,17 @@ const CALC_INTERVAL = 60;
  * Entity Class
 *******************************************************************/
 class GravSimCalcObject {
-	constructor(id, name, x, y, vx, vy, ax, ay, mass, radius, generation, thrustData) {
+	constructor(id, name, type, x, y, vx, vy, ax, ay, radius, generation) {
 		this.id = id;
 		this.name = name;
+		this.type = type;
 		this.x = x;
 		this.y = y;
 		this.vx = vx;
 		this.vy = vy;
 		this.ax = ax;
 		this.ay = ay;
-		this.mass = mass; // kg
 		this.radius = radius;
-		this.thrustForce = thrustData?.thrustForce || 0;
-		this.burnTime = thrustData?.burnTime || 0;
-		this.thrustAngle = thrustData?.thrustAngle || 0;
-		this.emptyMass = thrustData?.emptyMass || 0; // kg
-		this.massLossRate = thrustData?.massLossRate || 0;
-		this.maxGLimit = thrustData?.maxGLimit || 0;
-		this._thrustRatio = 0;
 		this._currentQ = 0;
 		this.collided = false;
 		this.shattered = false;
@@ -47,6 +41,7 @@ class GravSimCalcObject {
 		this.impactWinnerY = 0;
 		this.impactWinnerRadius = 0;
 	}
+	get mass() { return 1; }
 	
 	getXt(dt) { return this.x + this.vx * dt + 1/2 * this.ax * dt * dt; }
 	getYt(dt) { return this.y + this.vy * dt + 1/2 * this.ay * dt * dt; }
@@ -98,30 +93,61 @@ class GravSimCalcObject {
 	}
 }
 
-/*******************************************************************
- * Physics Engine Class
-*******************************************************************/
+class CalcCelestialBody extends GravSimCalcObject {
+	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass) {
+		super(id, name, OBJECT_TYPES.CELESTIAL, x, y, vx, vy, ax, ay, radius, generation);
+		this._mass = mass; // kg
+	}
+	get mass() { return this._mass; }
+	set mass(val) { this._mass = val; }
+}
+
+class CalcRocket extends GravSimCalcObject {
+	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, dryMass, fuelMass, thrustData) {
+		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, ax, ay, radius, generation);
+		this.dryMass = dryMass; // kg
+		this.fuelMass = fuelMass; // kg
+		this.thrustForce = thrustData?.thrustForce || 0;
+		this.burnTime = thrustData?.burnTime || 0;
+		this.thrustAngle = thrustData?.thrustAngle || 0;
+		this.massLossRate = thrustData?.massLossRate || 0;
+		this.maxGLimit = thrustData?.maxGLimit || 0;
+		this._thrustRatio = 0;
+	}
+	get mass() { return this.dryMass + this.fuelMass; }
+}
+
 class PhysicsEngine {
 	constructor() {
 		this.objects = [];
 	}
 
 	addObject(data) {
-		this.objects.push(new GravSimCalcObject(
-			data.id, data.name, data.x, data.y,
-			data.vx || 0, data.vy || 0,
-			data.ax || 0, data.ay || 0,
-			data.mass || 1, data.radius || 1,
-			data.generation || 0,
-			{
-				thrustForce: data.thrustForce,
-				burnTime: data.burnTime,
-				thrustAngle: data.thrustAngle,
-				emptyMass: data.emptyMass,
-				maxGLimit: data.maxGLimit,
-				massLossRate: data.massLossRate
-			},
-		));
+		if (data.type === OBJECT_TYPES.ROCKET) {
+			this.objects.push(new CalcRocket(
+				data.id, data.name,
+				data.x, data.y,
+				data.vx || 0, data.vy || 0,
+				data.ax || 0, data.ay || 0,
+				data.radius || 1, data.generation || 0,
+				data.mass || 1, data.fuelMass || 0, {
+					thrustForce: data.thrustForce,
+					burnTime: data.burnTime,
+					thrustAngle: data.thrustAngle,
+					maxGLimit: data.maxGLimit,
+					massLossRate: data.massLossRate
+				}
+			));
+		} else {
+			this.objects.push(new CalcCelestialBody(
+				data.id, data.name,
+				data.x, data.y,
+				data.vx || 0, data.vy || 0,
+				data.ax || 0, data.ay || 0,
+				data.radius || 1, data.generation || 0,
+				data.mass || 1
+			));
+		}
 	}
 
 	removeObject(id) {
@@ -354,43 +380,48 @@ class PhysicsEngine {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
 
-			let actualDt = 0;
-			let throttle = 1.0;
+			if (obj.type === OBJECT_TYPES.ROCKET) {
+				let actualDt = 0;
+				let throttle = 1.0;
 
-			if (obj.burnTime > 0) {
-				// Max-G Limiter (Throttle down)
-				if (obj.maxGLimit > 0) {
-					const F_max = obj.thrustForce; // Newtons
-					const currentMassKg = obj.mass;
-					const maxAllowedThrust = obj.maxGLimit * G0 * currentMassKg;
-					if (F_max > maxAllowedThrust) {
-						throttle = maxAllowedThrust / F_max;
+				if (obj.burnTime > 0) {
+					// Max-G Limiter (Throttle down)
+					if (obj.maxGLimit > 0) {
+						const F_max = obj.thrustForce; // Newtons
+						const currentMassKg = obj.mass;
+						const maxAllowedThrust = obj.maxGLimit * G0 * currentMassKg;
+						if (F_max > maxAllowedThrust) {
+							throttle = maxAllowedThrust / F_max;
+						}
+					}
+
+					// Max-Q Auto-Throttle (Flight Computer Feedback)
+					const maxQ = DEFAULT_OBJECT_PARAMS[obj.name]?.MAX_DYNAMIC_PRESSURE || Infinity;
+					if (maxQ !== Infinity && obj._currentQ > 0) {
+						const qRatio = obj._currentQ / maxQ;
+						if (qRatio > 0.7) {
+							// Throttle down linearly
+							let qThrottle = 1.0 - (qRatio - 0.7) * 5.0;
+							qThrottle = Math.max(0.2, Math.min(1.0, qThrottle));
+							throttle = Math.min(throttle, qThrottle);
+						}
+					}
+
+					// The time consumed is proportional to the throttle
+					const consumedTime = dt * throttle;
+					actualDt = Math.min(consumedTime, obj.burnTime);
+
+					obj.fuelMass -= obj.massLossRate * actualDt;
+					obj.burnTime -= actualDt;
+
+					if (obj.burnTime <= 0 || obj.fuelMass <= 0) {
+						obj.fuelMass = 0;
+						obj.burnTime = 0;
 					}
 				}
 
-				// Max-Q Auto-Throttle (Flight Computer Feedback)
-				const maxQ = DEFAULT_OBJECT_PARAMS[obj.name]?.MAX_DYNAMIC_PRESSURE || Infinity;
-				if (maxQ !== Infinity && obj._currentQ > 0) {
-					const qRatio = obj._currentQ / maxQ;
-					if (qRatio > 0.7) {
-						// Throttle down linearly
-						let qThrottle = 1.0 - (qRatio - 0.7) * 5.0;
-						qThrottle = Math.max(0.2, Math.min(1.0, qThrottle));
-						throttle = Math.min(throttle, qThrottle);
-					}
-				}
-
-				// The time consumed is proportional to the throttle
-				const consumedTime = dt * throttle;
-				actualDt = Math.min(consumedTime, obj.burnTime);
-
-				obj.mass -= obj.massLossRate * actualDt;
-				if (obj.emptyMass > 0 && obj.mass < obj.emptyMass) { obj.mass = obj.emptyMass; }
-				if (obj.mass < 1) { obj.mass = 1; } // Safeguard (Min 1kg)
-				obj.burnTime -= actualDt;
+				obj._thrustRatio = dt > 0 ? (actualDt / dt) : 0;
 			}
-
-			obj._thrustRatio = dt > 0 ? (actualDt / dt) : 0;
 
 			// Apply gravity, aerodynamics and thrust (Velocity Verlet integration Step 1)
 			this._updateGravityFor(obj);
@@ -428,7 +459,7 @@ class PhysicsEngine {
 			}
 		}
 
-		if (obj._thrustRatio > 0 && obj.mass > 0) {
+		if (obj.type === OBJECT_TYPES.ROCKET && obj._thrustRatio > 0 && obj.mass > 0) {
 			const thrustAx = (obj.thrustForce * Math.cos(obj.thrustAngle)) / obj.mass;
 			const thrustAy = (obj.thrustForce * Math.sin(obj.thrustAngle)) / obj.mass;
 
@@ -510,7 +541,7 @@ class SimulationController {
 	}
 
 	formatForMessage() {
-		const OBJ_ATTR_COUNT = 19;
+		const OBJ_ATTR_COUNT = 20;
 		const buffer = new Float64Array(this.engine.objects.length * OBJ_ATTR_COUNT);
 
 		for (let i = 0; i < this.engine.objects.length; i++) {
@@ -518,23 +549,33 @@ class SimulationController {
 			const offset = i * OBJ_ATTR_COUNT;
 
 			buffer[offset + 0] = obj.id;
-			buffer[offset + 1] = obj.x || 0;
-			buffer[offset + 2] = obj.y || 0;
-			buffer[offset + 3] = obj.vx || 0;
-			buffer[offset + 4] = obj.vy || 0;
-			buffer[offset + 5] = obj.ax || 0;
-			buffer[offset + 6] = obj.ay || 0;
-			buffer[offset + 7] = obj.mass || 1;
-			buffer[offset + 8] = obj.radius || 1;
-			buffer[offset + 9] = obj.burnTime > 0 ? obj.burnTime : 0;
-			buffer[offset + 10] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0);
-			buffer[offset + 11] = obj.debrisMass || 0;
-			buffer[offset + 12] = obj.impactVx || 0;
-			buffer[offset + 13] = obj.impactVy || 0;
-			buffer[offset + 14] = obj.impactWinnerX || 0;
-			buffer[offset + 15] = obj.impactWinnerY || 0;
-			buffer[offset + 16] = obj.impactWinnerRadius || 0;
-			buffer[offset + 17] = obj._thrustRatio || 0;
+			buffer[offset + 1] = obj.type;
+			buffer[offset + 2] = obj.x || 0;
+			buffer[offset + 3] = obj.y || 0;
+			buffer[offset + 4] = obj.vx || 0;
+			buffer[offset + 5] = obj.vy || 0;
+			buffer[offset + 6] = obj.ax || 0;
+			buffer[offset + 7] = obj.ay || 0;
+			
+			if (obj.type === OBJECT_TYPES.ROCKET) {
+				buffer[offset + 8] = obj.dryMass;
+				buffer[offset + 9] = obj.fuelMass;
+				buffer[offset + 11] = obj.burnTime > 0 ? obj.burnTime : 0;
+				buffer[offset + 12] = obj._thrustRatio || 0;
+			} else {
+				buffer[offset + 8] = obj.mass;
+				buffer[offset + 9] = 0;
+				buffer[offset + 11] = 0;
+				buffer[offset + 12] = 0;
+			}
+			buffer[offset + 10] = obj.radius || 1;
+			buffer[offset + 13] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0);
+			buffer[offset + 14] = obj.debrisMass || 0;
+			buffer[offset + 15] = obj.impactVx || 0;
+			buffer[offset + 16] = obj.impactVy || 0;
+			buffer[offset + 17] = obj.impactWinnerX || 0;
+			buffer[offset + 18] = obj.impactWinnerY || 0;
+			buffer[offset + 19] = obj.impactWinnerRadius || 0;
 		}
 		return buffer;
 	}

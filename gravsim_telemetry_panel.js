@@ -8,7 +8,7 @@ import {
 	TELEMETRY_SUB_VIEW_MAX_ZOOM,
 	G, G0, UI_TM_MAX_Q_TH,
 	DEFAULT_OBJECT_PARAMS,
-	MISSION_STATUS,
+	MISSION_STATUS, OBJECT_TYPES,
 } from './gravsim_const.js';
 
 const TM_STYLE = {
@@ -82,7 +82,7 @@ export class TelemetryPanel {
 	}
 
 	_updateTargetOptions() {
-		if (!this.ui.targetSelect) return;
+		if (!this.ui.targetSelect) { return; }
 		
 		this.ui.targetSelect.innerHTML = '';
 		for (const obj of this.universe.objects) {
@@ -144,7 +144,7 @@ export class TelemetryPanel {
 			target = this.universe.centerObject;
 			if (target) {
 				this.targetId = target.id;
-				if (this.ui.targetSelect) this.ui.targetSelect.value = target.id;
+				if (this.ui.targetSelect) { this.ui.targetSelect.value = target.id; }
 			}
 		}
 		return target;
@@ -189,12 +189,12 @@ export class TelemetryPanel {
 		this.ui.twr.innerText = twr.toFixed(2).padStart(6, ' ');
 
 		let remDv = 0;
-		if (target.emptyMass > 0 && target.mass > target.emptyMass) {
-			let ve = 320 * G; // Default assumption if no flow rate
+		if (target.type === OBJECT_TYPES.ROCKET && target.dryMass > 0) {
+			let ve = 320 * G0; // Default assumption if no flow rate
 			if (target.thrustForce > 0 && target.massLossRate > 0) {
 				ve = target.thrustForce / target.massLossRate;
 			}
-			remDv = (ve * Math.log(target.mass / target.emptyMass)) / 1000;
+			remDv = (ve * Math.log(target.mass / target.dryMass)) / 1000;
 		}
 		this.ui.remDv.innerText = remDv.toFixed(2).padStart(6, ' ');
 	}
@@ -290,23 +290,25 @@ export class TelemetryPanel {
 
 	_updatePropulsionAndStatusUI(target, structRatio) {
 		let mStat = MISSION_STATUS.PRE_LAUNCH;
-		if (target.name === 'Rocket') {
+		if (target.type === OBJECT_TYPES.ROCKET) {
 			if (target.burnTime > 0) {
 				if (structRatio > UI_TM_MAX_Q_TH) { mStat = MISSION_STATUS.MAX_Q; }
 				else { mStat = MISSION_STATUS.ASCENT; }
 			} else {
-				if (target.massLossRate > 0 && target.mass <= target.emptyMass) { mStat = MISSION_STATUS.MECO; }
+				if (target.massLossRate > 0 && target.fuelMass <= 0) { mStat = MISSION_STATUS.MECO; }
 				else { mStat = MISSION_STATUS.COASTING; }
 			}
 
 			const thrtlPercent = (target.thrustRatio || 0) * 100;
 			this.ui.thrtl.innerText = thrtlPercent.toFixed(1).padStart(6, ' ');
 
-			const propRem = Math.max(0, target.mass - target.emptyMass);
-			this.ui.prop.innerText = propRem.toFixed(2).padStart(6, ' ');
+			const propRem = target.fuelMass;
+			const displayProp = propRem < 0.01 ? 0 : propRem;
+			this.ui.prop.innerText = displayProp.toFixed(2).padStart(6, ' ');
 
 			if (!this.maxProp[target.id] || propRem > this.maxProp[target.id]) this.maxProp[target.id] = propRem;
-			const pct = this.maxProp[target.id] > 0 ? (propRem / this.maxProp[target.id]) * 100 : 0;
+			let pct = this.maxProp[target.id] > 0 ? (propRem / this.maxProp[target.id]) * 100 : 0;
+			if (pct < 0.5) { pct = 0; }
 			this.ui.fuelBar.style.width = `${pct}%`;
 		} else {
 			mStat = MISSION_STATUS.TRACKING;
@@ -347,7 +349,7 @@ export class TelemetryPanel {
 		}
 
 		let targetObj = this.universe.objects.find(o => o.id === this.targetId);
-		if (!targetObj) targetObj = this.universe.centerObject;
+		if (!targetObj) { targetObj = this.universe.centerObject; }
 
 		if (targetObj) {
 			const realRadiusPx = this.universe.m2pix(targetObj.radius);
