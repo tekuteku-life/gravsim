@@ -175,9 +175,10 @@
 		<div class="telemetry-header">TELEMETRY HUD</div>
 		<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
 
-        <div id="tm-status-box" style="text-align: center; font-weight: bold; background: #003322; border: 1px solid #00ffcc; padding: 4px; margin-top: 5px;">
-            <span id="tm-mission-status">PRE-LAUNCH</span>
-        </div>
+		<div id="tm-status-box" style="text-align: center; font-weight: bold; background: #003322; border: 1px solid #00ffcc; padding: 4px; margin-top: 5px;">
+			<span id="tm-mission-status">PRE-LAUNCH</span>
+		</div>
+		<div class="telemetry-line" style="margin-top: 5px;">MISSION T: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
 
 		<div class="tm-section-header">[ VESSEL STATE ]</div>
 		<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
@@ -192,6 +193,7 @@
 		<div class="tm-section-header">[ AERODYNAMICS ]</div>
 		<div class="telemetry-line">PITCH/AOA: <span id="tm-pitch">---</span> / <span id="tm-aoa">---</span> °</div>
 		<div class="telemetry-line">DYN PRES : <span id="tm-dyn">---</span> % Max-Q</div>
+		<div class="telemetry-line">Q AX/LAT : <span id="tm-dyn-ax">---</span> / <span id="tm-dyn-lat">---</span> kPa</div>
 
 		<div class="tm-section-header">[ PROPULSION ]</div>
 		<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>

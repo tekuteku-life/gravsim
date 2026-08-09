@@ -317,6 +317,7 @@ export class Rocket extends GravSimObject {
 		this.massLossRate = 0; // t/s
 		this.maxGLimit = 0;
 		this.thrustRatio = 0;
+		this.flightTime = 0;
 	}
 	get mass() { return this.dryMass + this.fuelMass; }
 

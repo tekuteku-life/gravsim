@@ -36,6 +36,7 @@ export class TelemetryPanel {
 			targetSelect: document.getElementById('tm-target-select'),
 
 			missionStatus: document.getElementById('tm-mission-status'),
+			missionTime: document.getElementById('tm-met'),
 
 			mass: document.getElementById('tm-mass'),
 			remDv: document.getElementById('tm-rem-dv'),
@@ -50,6 +51,8 @@ export class TelemetryPanel {
 			pitch: document.getElementById('tm-pitch'),
 			aoa: document.getElementById('tm-aoa'),
 			dyn: document.getElementById('tm-dyn'),
+			dynAx: document.getElementById('tm-dyn-ax'),
+			dynLat: document.getElementById('tm-dyn-lat'),
 
 			thrtl: document.getElementById('tm-thrtl'),
 			prop: document.getElementById('tm-prop'),
@@ -128,6 +131,7 @@ export class TelemetryPanel {
 		const flightDynamics = this._updateFlightDynamicsUI(target, refData.refBody, refData.distToRefM);
 		const aerodynamics = this._updateAerodynamicsUI(target, refData.refBody, refData.distToRefM);
 		this._updatePropulsionAndStatusUI(target, aerodynamics.structRatio);
+		this._updateMissionTimeUI(target);
 		this._updateFlightDirectorUI(target, flightDynamics.progradeAngle, flightDynamics.gravityAngle);
 	}
 
@@ -150,7 +154,7 @@ export class TelemetryPanel {
 			}
 		}
 
-		if (target.type === OBJECT_TYPES.CELESTIAL) {
+		if (target && target.type === OBJECT_TYPES.CELESTIAL) {
 			target = null;
 		}
 		return target;
@@ -255,6 +259,8 @@ export class TelemetryPanel {
 		this.ui.pitch.innerText = pitchDeg.toFixed(1).padStart(6, ' ');
 
 		let aoaDeg = 0, structRatio = 0;
+		let qAxialKpa = 0, qLateralKpa = 0;
+
 		if (refBody) {
 			const refParam = DEFAULT_OBJECT_PARAMS[refBody.name];
 			const altM = distToRefM - refBody.radius;
@@ -278,6 +284,10 @@ export class TelemetryPanel {
 				let angleDiff = Math.abs(target.thrustAngle - velAngle);
 				while (angleDiff > Math.PI) { angleDiff -= 2 * Math.PI; }
 				while (angleDiff < -Math.PI) { angleDiff += 2 * Math.PI; }
+				
+				qAxialKpa = (q * Math.pow(Math.cos(angleDiff), 2)) / 1000;
+				qLateralKpa = (q * Math.pow(Math.sin(angleDiff), 2)) / 1000;
+				
 				aoaDeg = Math.abs(angleDiff) * (180 / Math.PI);
 				
 				const objParam = DEFAULT_OBJECT_PARAMS[target.name];
@@ -290,6 +300,8 @@ export class TelemetryPanel {
 
 		this.ui.aoa.innerText = aoaDeg.toFixed(1).padStart(5, ' ');
 		this.ui.dyn.innerText = structRatio.toFixed(1).padStart(5, ' ');
+		if (this.ui.dynAx) { this.ui.dynAx.innerText = qAxialKpa.toFixed(1).padStart(6, ' '); }
+		if (this.ui.dynLat) { this.ui.dynLat.innerText = qLateralKpa.toFixed(1).padStart(6, ' '); }
 
 		return { structRatio };
 	}
@@ -326,6 +338,36 @@ export class TelemetryPanel {
 		this.ui.missionStatus.innerText = mStat;
 		if (mStat === MISSION_STATUS.MAX_Q) { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.max_q; }
 		else { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.normal; }
+	}
+
+	_updateMissionTimeUI(target) {
+		if (!this.ui.missionTime) return;
+		if (target.type === OBJECT_TYPES.ROCKET) {
+			const totalSec = Math.floor(target.flightTime || 0);
+
+			const SEC_PER_DAY = 86400;
+			const SEC_PER_YEAR = 365.25 * SEC_PER_DAY;
+
+			const years = Math.floor(totalSec / SEC_PER_YEAR);
+			let remSec = totalSec % SEC_PER_YEAR;
+
+			const days = Math.floor(remSec / SEC_PER_DAY);
+			remSec %= SEC_PER_DAY;
+
+			const hours = Math.floor(remSec / 3600);
+			remSec %= 3600;
+
+			const mins = Math.floor(remSec / 60);
+			const secs = remSec % 60;
+
+			const pad = (num, len = 2) => String(num).padStart(len, '0');
+
+			// 表示例: T+ 000y 000d 00:00:00
+			const timeStr = `T+ ${pad(years, 3)}y ${pad(days, 3)}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+			this.ui.missionTime.innerText = timeStr;
+		} else {
+			this.ui.missionTime.innerText = "T+ ---y ---d --:--:--";
+		}
 	}
 
 	_updateFlightDirectorUI(target, progradeAngle, gravityAngle) {

@@ -2,8 +2,8 @@
 // gravsim_universe.js
 
 import {
-	YEARS_PER_SECOND, TIME_SCALE,
-	UI_DOUBLE_TAP_DURATION,
+	YEARS_PER_SECOND, TIME_SCALE, OBJECT_STATE,
+	UI_DOUBLE_TAP_DURATION, OBJECT_TYPES,
 } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
 import { InfoPanel } from './gravsim_info_panel.js';
@@ -158,6 +158,13 @@ export class Universe {
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
 		const scaledDt = dt * (YEARS_PER_SECOND / TIME_SCALE) * this.timeScale;
+
+		// Update flight time for rocket
+		this.objects.forEach(obj => {
+			if (obj.type === OBJECT_TYPES.ROCKET && obj.state === OBJECT_STATE.ACTIVE) {
+				obj.flightTime += scaledDt;
+			}
+		});
 
 		// UI Update
 		if (this.objects.length === 1) {
