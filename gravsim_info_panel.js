@@ -54,7 +54,7 @@ export class InfoPanel {
 		if( elapsed >= 500 ) {
 			const fps = (this.fpsCount / (elapsed / 1e3)).toFixed(1);
 			fpsSpan.textContent = `${fps}`;
-			
+
 			this.lastTime = now;
 			this.fpsCount = 0;
 		}

@@ -137,8 +137,8 @@ class PhysicsEngine {
 			obj.vy = data.vy || 0;
 			obj.ax = data.ax || 0;
 			obj.ay = data.ay || 0;
-			if (data.mass !== undefined) obj.mass = data.mass;
-			if (data.radius !== undefined) obj.radius = data.radius;
+			if (data.mass !== undefined) { obj.mass = data.mass; }
+			if (data.radius !== undefined) { obj.radius = data.radius; }
 		}
 	}
 
