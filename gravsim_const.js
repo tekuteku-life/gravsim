@@ -19,6 +19,7 @@ export const ROCHE_RIGID_DESTROYER_MASS = 1e25;		// ton: Minimum mass required t
 export const UI_DOUBLE_TAP_DURATION = 400;			// Duration which double tap detected
 
 export const UI_NAVI_UPDATE_UPDATE_INTERVAL = 500;	// Update interval for Navi tab (ms)
+export const UI_INFO_PANEL_UPDATA_INTERVAL = 500;	// Update interval for Info panel (ms)
 
 export const UI_TM_MAX_Q_TH = 80;					// Max-Q message indication threshold (%)
 

@@ -1,11 +1,13 @@
+
 // gravsim_info_panel.js
 
-import { YEARS_PER_SECOND } from './gravsim_const.js';
+import {
+	YEARS_PER_SECOND,
+	UI_INFO_PANEL_UPDATA_INTERVAL,
+} from './gravsim_const.js';
 
 /*******************************************************************
  * InfoPanel class that manages the information panel.
- * @property {HTMLElement} panel - The HTML element for the info panel.
- * @property {number} elapsedTime - The elapsed time in years.
 *******************************************************************/
 export class InfoPanel {
 	constructor() {
@@ -13,6 +15,12 @@ export class InfoPanel {
 		if (!this.panel) {
 			throw new Error("Info panel element with id 'info-panel' not found.");
 		}
+
+		this.ui = {
+			elapsed: document.getElementById('elapsed-time'),
+			count: document.getElementById('object-count'),
+			fps: document.getElementById('fps')
+		};
 
 		this.elapsedTime = 0; // in years
 		this.lastTime = new Date();
@@ -24,25 +32,22 @@ export class InfoPanel {
 	}
 
 	updateElapsedTime(dt) {
-		const elapsedTimeSpan = document.getElementById('elapsed-time');
 		this.elapsedTime += dt / YEARS_PER_SECOND;
-		if (elapsedTimeSpan) {
+		if (this.ui.elapsed) {
 			const y = Math.floor(this.elapsedTime);
 			const d = Math.floor((this.elapsedTime - y) * 365.25);
-			elapsedTimeSpan.textContent = `${y} yr, ${String(d).padStart(3, '0')} d`;
+			this.ui.elapsed.textContent = `${y} yr, ${String(d).padStart(3, '0')} d`;
 		}
 	}
 
 	updateObjectCount(counts) {
-		const objectCountSpan = document.getElementById('object-count');
-		if( objectCountSpan ) {
-			objectCountSpan.textContent = `${counts}`;
+		if (this.ui.count) {
+			this.ui.count.textContent = `${counts}`;
 		}
 	}
 
 	updateFPS() {
-		const fpsSpan = document.getElementById('fps');
-		if (!fpsSpan) {
+		if (!this.ui.fps) {
 			console.error("FPS element with id 'fps' not found.");
 			return;
 		}
@@ -51,9 +56,9 @@ export class InfoPanel {
 		const elapsed = now - this.lastTime;
 
 		this.fpsCount++;
-		if( elapsed >= 500 ) {
+		if (elapsed >= UI_INFO_PANEL_UPDATA_INTERVAL) {
 			const fps = (this.fpsCount / (elapsed / 1e3)).toFixed(1);
-			fpsSpan.textContent = `${fps}`;
+			this.ui.fps.textContent = `${fps}`;
 
 			this.lastTime = now;
 			this.fpsCount = 0;
