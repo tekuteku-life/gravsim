@@ -2,6 +2,7 @@
 
 import {
 	G0, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS,
+	DISTANCE_SCALE, METERS_PER_AU,
 } from './gravsim_const.js';
 
 /*******************************************************************
@@ -182,7 +183,28 @@ export class RocketLauncher {
 			maxGLimit: this.maxGLimit
 		};
 
-		this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
+		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
+
+		// Set new rocket to center object
+		this.universe.centerObject = newRocket;
+		this.universe.ControlPanel.updateCenterOptions();
+
+		// Zoom the rocket
+		const systemTab = this.universe.ControlPanel.systemTab;
+		if (systemTab && systemTab.ui.zoomScale) {
+			const realRadiusPx = (newRocket.radius / METERS_PER_AU) * DISTANCE_SCALE;
+			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 2.2;
+			let idealExp = Math.log10(targetSize / realRadiusPx);
+
+			const maxZoom = parseFloat(systemTab.ui.zoomScale.max);
+			const minZoom = parseFloat(systemTab.ui.zoomScale.min);
+			idealExp = Math.max(minZoom, Math.min(maxZoom, idealExp));
+
+			systemTab.ui.zoomScale.value = idealExp.toFixed(2);
+			systemTab.updateZoomScaleIndicator(systemTab.getZoomScale());
+			this.universe.updateZoomScale();
+		}
+
 		this.togglePreview(false);
 	}
 
