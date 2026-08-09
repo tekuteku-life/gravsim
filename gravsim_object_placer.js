@@ -64,7 +64,7 @@ export class ObjectPlacer {
 			obj.burnTime = options.time || 0;
 			obj.thrustAngle = options.angle || 0;
 			obj.massLossRate = options.lossRate || 0;
-			obj.mass = options.mass || param.mass;
+			obj.mass = options.mass || param.MASS;
 		}
 
 		this.universe.addObject(obj);
