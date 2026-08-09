@@ -1,7 +1,11 @@
 
 // gravsim_tab_navi.js
 
-import { DEFAULT_OBJECT_PARAMS, G, G0, UI_NAVI_UPDATE_UPDATE_INTERVAL } from './gravsim_const.js';
+import {
+	DEFAULT_OBJECT_PARAMS, G, G0,
+	UI_NAVI_UPDATE_UPDATE_INTERVAL,
+	OBJECT_TYPES,
+} from './gravsim_const.js';
 
 export class NaviTab {
 	constructor(universe) {
@@ -59,6 +63,8 @@ export class NaviTab {
 		const currentId = this.naviTargetId;
 		this.ui.nvTargetSelect.innerHTML = '';
 		for (const obj of this.universe.objects) {
+			if (obj.type === OBJECT_TYPES.ROCKET) { continue; }
+
 			const option = document.createElement('option');
 			option.value = obj.id;
 			option.textContent = `${obj.name.substring(0, 10)} (ID:${obj.id})`;

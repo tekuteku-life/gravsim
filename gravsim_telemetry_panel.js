@@ -86,6 +86,8 @@ export class TelemetryPanel {
 		
 		this.ui.targetSelect.innerHTML = '';
 		for (const obj of this.universe.objects) {
+			if (obj.type === OBJECT_TYPES.CELESTIAL) { continue; }
+
 			const option = document.createElement('option');
 			option.value = obj.id;
 			option.textContent = `${obj.name.substring(0, 10)} (ID:${obj.id})`;
@@ -146,6 +148,10 @@ export class TelemetryPanel {
 				this.targetId = target.id;
 				if (this.ui.targetSelect) { this.ui.targetSelect.value = target.id; }
 			}
+		}
+
+		if (target.type === OBJECT_TYPES.CELESTIAL) {
+			target = null;
 		}
 		return target;
 	}
@@ -351,7 +357,7 @@ export class TelemetryPanel {
 		let targetObj = this.universe.objects.find(o => o.id === this.targetId);
 		if (!targetObj) { targetObj = this.universe.centerObject; }
 
-		if (targetObj) {
+		if (targetObj && targetObj.type === OBJECT_TYPES.ROCKET) {
 			const realRadiusPx = this.universe.m2pix(targetObj.radius);
 
 			// Keep the radius of the object 20px on Sub screen

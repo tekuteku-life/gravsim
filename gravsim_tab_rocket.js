@@ -1,7 +1,11 @@
 
 // gravsim_tab_rocket.js
 
-import { DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, DISTANCE_SCALE, METERS_PER_AU, G, G0 } from './gravsim_const.js';
+import {
+	DEFAULT_OBJECT_PARAMS, ROCKET_FUELS,
+	DISTANCE_SCALE, METERS_PER_AU,
+	OBJECT_TYPES, G, G0,
+} from './gravsim_const.js';
 
 export class RocketTab {
 	constructor(universe, systemTab) {
@@ -122,6 +126,8 @@ export class RocketTab {
 		this.ui.rlHostSelect.innerHTML = '';
 
 		for (const obj of this.universe.objects) {
+			if (obj.type === OBJECT_TYPES.ROCKET) { continue; }
+
 			const option = document.createElement('option');
 			option.value = obj.id;
 			option.textContent = `${obj.name} (ID: ${obj.id})`;
@@ -248,7 +254,7 @@ export class RocketTab {
 		
 		let targetHostId = this.universe.RocketLauncher.hostId;
 		if (targetHostId === null || targetHostId === 0) { 
-			const nonSunObjects = this.universe.objects.filter(o => o.id !== 0);
+			const nonSunObjects = this.universe.objects.filter(o => o.id !== 0 && o.type === OBJECT_TYPES.CELESTIAL);
 			if (nonSunObjects.length > 0) {
 				targetHostId = Math.max(...nonSunObjects.map(o => o.id));
 			} else {
