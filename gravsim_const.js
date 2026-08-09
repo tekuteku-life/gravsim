@@ -18,6 +18,8 @@ export const ROCHE_RIGID_DESTROYER_MASS = 1e25;		// ton: Minimum mass required t
 // UI setting
 export const UI_DOUBLE_TAP_DURATION = 400;			// Duration which double tap detected
 
+export const UI_NAVI_UPDATE_UPDATE_INTERVAL = 500;	// Update interval for Navi tab (ms)
+
 // Program setting
 export const TIME_SCALE = 1e3;
 export const THROW_SCALE = 4e16;

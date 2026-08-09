@@ -109,6 +109,11 @@ label {
 }
 .panel-section > label:first-of-type { margin-top: 0; }
 
+.panel-section-header {
+	color:#aaa;
+	border-color:#555;
+}
+
 .slider-full {
 	width: 100%;
 	margin: 5px 0;

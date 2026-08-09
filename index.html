@@ -20,6 +20,7 @@
 			<button type="button" class="tab-btn active" data-target="tab-sys">System</button>
 			<button type="button" class="tab-btn" data-target="tab-deploy">Deploy</button>
 			<button type="button" class="tab-btn" data-target="tab-rocket">Rocket</button>
+			<button type="button" class="tab-btn" data-target="tab-navi">Navi</button>
 		</div>
 
 		<!-- =====================================
@@ -120,6 +121,35 @@
 			</div>
 			
 			<button type="button" id="rl-execute-btn" class="launch-btn">LAUNCH ROCKET</button>
+		</div>
+
+		<!-- =====================================
+			 TAB 4: Target Navigation
+		====================================== -->
+		<div id="tab-navi" class="tab-content">
+			<div class="panel-section">
+				<label>Target Body:</label>
+				<select id="nv-target-select" class="full-width"></select>
+			</div>
+			<div class="panel-section">
+				<div class="panel-section-header">[ PHYSICAL ]</div>
+				<div>Mass: <span id="nv-mass" style="float:right;">--- t</span></div>
+				<div>Radius: <span id="nv-radius" style="float:right;">--- km</span></div>
+				<div>Surface G: <span id="nv-surface-g" style="float:right;">--- G</span></div>
+				<div>Escape Vel: <span id="nv-escape-v" style="float:right;">--- km/s</span></div>
+			</div>
+			<div class="panel-section">
+				<div class="panel-section-header">[ ORBITAL ]</div>
+				<div>Ref Body: <span id="nv-ref-body" style="float:right;">NONE</span></div>
+				<div>Altitude: <span id="nv-alt" style="float:right;">--- km</span></div>
+				<div>Velocity: <span id="nv-vel" style="float:right;">--- km/s</span></div>
+			</div>
+			<div class="panel-section" style="border:none;">
+				<div class="panel-section-header">[ ATMOSPHERE ]</div>
+				<div>Max Alt: <span id="nv-atm-alt" style="float:right;">--- km</span></div>
+				<div>Density: <span id="nv-atm-rho" style="float:right;">--- kg/m³</span></div>
+				<div>Scale Ht: <span id="nv-atm-scale" style="float:right;">--- m</span></div>
+			</div>
 		</div>
 	</form>
 

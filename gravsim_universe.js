@@ -89,8 +89,14 @@ export class Universe {
 	// ------------------------------------------
 	// Delegates
 	// ------------------------------------------
-	addObject(obj) { this.ObjectManager.addObject(obj); }
-	removeObject(obj) { this.ObjectManager.removeObject(obj); }
+	addObject(obj) {
+		this.ObjectManager.addObject(obj);
+		this.ControlPanel.updateNaviTab();
+	}
+	removeObject(obj) {
+		this.ObjectManager.removeObject(obj);
+		this.ControlPanel.updateNaviTab();
+	}
 	updateObject(obj) { this.ObjectManager.updateObject(obj); }
 	updateObjectParams(data) { this.ObjectManager.updateObjectParams(data); }
 
