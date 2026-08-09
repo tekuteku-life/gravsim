@@ -311,10 +311,10 @@ export class Rocket extends GravSimObject {
 		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth);
 		this.dryMass = dryMass; // t
 		this.fuelMass = fuelMass; // t
-		this.thrustForce = 0;
+		this.thrustForce = 0; // N
 		this.burnTime = 0;
 		this.thrustAngle = 0;
-		this.massLossRate = 0;
+		this.massLossRate = 0; // t/s
 		this.maxGLimit = 0;
 		this.thrustRatio = 0;
 	}

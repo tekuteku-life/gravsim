@@ -198,7 +198,7 @@ export class TelemetryPanel {
 		if (target.type === OBJECT_TYPES.ROCKET && target.dryMass > 0) {
 			let ve = 320 * G0; // Default assumption if no flow rate
 			if (target.thrustForce > 0 && target.massLossRate > 0) {
-				ve = target.thrustForce / target.massLossRate;
+				ve = target.thrustForce / (target.massLossRate * 1000);
 			}
 			remDv = (ve * Math.log(target.mass / target.dryMass)) / 1000;
 		}
