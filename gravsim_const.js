@@ -1,3 +1,4 @@
+
 // gravsim_const.js
 
 // Unit
@@ -60,6 +61,7 @@ export const SPARKLE_ANIM_SPEED = 80;				// Sparkle blinking speed
 export const SPARKLE_ROTATE_SPEED = 500;			// Sparkle rotate speed
 export const SPARKLE_STAR_SIZE_RATIO = 3.0;			// Sparkle star size ration (based on object's radius)
 export const SPARKLE_STAR_INNER_SIZE_RATIO = 0.4;	// Sparkle star inner-size ration (based on object's radius)
+export const SPARKLE_MAX_SIZE_PX = 30;				// Sparkle max size (px)
 
 export const TELEMETRY_UPDATE_INTERVAL_MS = 100;	// Telemetry update interval（ms）
 export const TELEMETRY_SUB_VIEW_TARGET_RADIUS = 20;	// Target radius on sub-screen（px）

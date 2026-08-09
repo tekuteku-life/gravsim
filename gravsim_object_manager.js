@@ -245,36 +245,58 @@ export class ObjectManager {
 	}
 
 	_checkEscapeAndRemove() {
-		if (!this.centerObject) { return; }
+		const massiveBodies = this.objects.filter(o => o.type === OBJECT_TYPES.CELESTIAL && o.state === OBJECT_STATE.ACTIVE);
+		if (massiveBodies.length === 0) { return; }
+		const sun = massiveBodies.reduce((max, obj) => obj.mass > max.mass ? obj : max, massiveBodies[0]);
 
 		for (const obj of this.objects) {
-			if (obj.id === this.centerObject.id || obj.state !== OBJECT_STATE.ACTIVE) {
+			if (obj.id === sun.id || obj.state !== OBJECT_STATE.ACTIVE) {
 				obj.isEscaping = false;
 				continue;
 			}
 
-			const dx = obj.x - this.centerObject.x;
-			const dy = obj.y - this.centerObject.y;
-			const distPx = Math.sqrt(dx * dx + dy * dy);
+			let dominantBody = null;
+			let maxG = -1;
+			let distToDominantM = 0;
 
-			const r = this.renderer.pix2m(distPx);
-			if (r === 0) { continue; }
+			for (const mBody of massiveBodies) {
+				if (obj.id === mBody.id) { continue; }
+				const dx = obj.x - mBody.x;
+				const dy = obj.y - mBody.y;
+				const distSqPx = dx * dx + dy * dy;
+				const distSqM = Math.pow(this.renderer.pix2m(Math.sqrt(distSqPx)), 2);
+				if (distSqM === 0) { continue; }
+				
+				const gForce = mBody.mass / distSqM;
+				if (gForce > maxG) {
+					maxG = gForce;
+					dominantBody = mBody;
+					distToDominantM = Math.sqrt(distSqM);
+				}
+			}
 
-			const dvx = this.renderer.pix2m(obj.vx - this.centerObject.vx);
-			const dvy = this.renderer.pix2m(obj.vy - this.centerObject.vy);
+			if (dominantBody && distToDominantM > 0) {
+				const dvx = this.renderer.pix2m(obj.vx - dominantBody.vx);
+				const dvy = this.renderer.pix2m(obj.vy - dominantBody.vy);
+				const v2 = dvx * dvx + dvy * dvy;
+				
+				const totalMassKg = (dominantBody.mass + obj.mass) * 1e3;
+				const escapeV2 = (2 * G * totalMassKg) / distToDominantM;
 
-			const v2 = dvx * dvx + dvy * dvy;
-
-			const totalMass = (this.centerObject.mass + obj.mass) * 1e3;
-			const escapeV2 = (2 * G * totalMass) / r; // Escape velocity squared (v_e^2 = 2GM / r)
-
-			// Check if the object is escaping the center object's gravity
-			obj.isEscaping = (v2 >= escapeV2);
+				// Check if the object is escaping the center object's gravity
+				obj.isEscaping = (v2 >= escapeV2);
+			} else {
+				obj.isEscaping = false;
+			}
 
 			// Remove the object if it is escaping and far enough
-			if (obj.isEscaping && this.renderer.pix2au(distPx) > REMOVE_DISTANCE_AU) {
-				this.removeObject(obj);
-				console.debug(`${obj.name} (id:${obj.id}) got out from heliosphere`);
+			if (obj.isEscaping && dominantBody && dominantBody.id === sun.id) {
+				const cx = obj.x - sun.x;
+				const cy = obj.y - sun.y;
+				if (this.renderer.pix2au(Math.sqrt(cx*cx + cy*cy)) > REMOVE_DISTANCE_AU) {
+					this.removeObject(obj);
+					console.debug(`${obj.name} (id:${obj.id}) got out from heliosphere`);
+				}
 			}
 		}
 	}
