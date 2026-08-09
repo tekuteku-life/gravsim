@@ -13,8 +13,7 @@ import {
  * GravSimObject class that represents a celestial object in the universe.
  *******************************************************************/
 export class GravSimObject {
-	constructor(id, name, type, x, y, vx, vy, color, size, radius,
-		generation = 0, borderColor = null, borderWidth = 0) {
+	constructor(id, name, type, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth) {
 		this.id = id;
 		this.name = name;
 		this.type = type;
@@ -26,16 +25,14 @@ export class GravSimObject {
 		this.ay = 0;
 		this.color = color;
 		this.size = size;
-		this.radius = radius;	// meters
-
-		this.borderColor = borderColor;
-		this.borderWidth = borderWidth;
-
+		this.radius = radius; // m
+		this.generation = generation || 0;
+		this.isDebris = this.generation > 0;
+		this.borderColor = borderColor || null;
+		this.borderWidth = borderWidth || 0;
 		this.state = OBJECT_STATE.ACTIVE;
 		this.history = [];
 		this.deadFrames = 0;
-		this.generation = generation;
-		this.isDebris = this.generation > 0;
 	}
 
 	get mass() { return 1; }
@@ -71,14 +68,7 @@ export class GravSimObject {
 		this.history = [];
 	}
 
-	finished() {
-		if( this.state === OBJECT_STATE.REMOVED
-			&& this.history.length === 0
-		) {
-			return true;
-		}
-		return false;
-	}
+	finished() { return this.state === OBJECT_STATE.REMOVED && this.history.length === 0; }
 
 	setCollided() {
 		this.state = OBJECT_STATE.REMOVED;
@@ -100,20 +90,8 @@ export class GravSimObject {
 		this.ay = 0;
 	}
 
-	getRelativeX(basis) {
-		if( basis ) {
-			return this.x - basis.x;
-		} else {
-			return this.x;
-		}
-	}
-	getRelativeY(basis) {
-		if( basis ) {
-			return this.y - basis.y;
-		} else {
-			return this.y;
-		}
-	}
+	getRelativeX(basis) { return basis ? this.x - basis.x : this.x; }
+	getRelativeY(basis) { return basis ? this.y - basis.y : this.y; }
 
 	getRelativeHistoryX(i, basis) {
 		if( basis ) {
@@ -151,7 +129,7 @@ export class GravSimObject {
 		if (this.state === OBJECT_STATE.ACTIVE) {
 			const relX = this.getRelativeX(basis) * zoomScale;
 			const relY = this.getRelativeY(basis) * zoomScale;
-			
+
 			const screenRadius = this._getDrawRadius(zoomScale);
 
 			this._drawBody(ctx, relX, relY, screenRadius);
@@ -170,11 +148,7 @@ export class GravSimObject {
 		const screenRadiusPx = realRadiusPx * zoomScale;
 
 		// this.size acts as the minimum visual radius on the screen
-		if (screenRadiusPx < this.size) {
-			return this.size;
-		} else {
-			return screenRadiusPx;
-		}
+		return screenRadiusPx < this.size ? this.size : screenRadiusPx;
 	}
 
 	_drawBody(ctx, x, y, screenRadius) {
