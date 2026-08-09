@@ -7,6 +7,7 @@ export const YEARS_PER_SECOND = 60*60*24*365.25;	// 1 year in seconds
 // physical constant
 export const G = 6.67430e-11;						// Gravitational constant (m^3 kg^-1 s^-2)
 export const C = 2.99792458e8;						// speed of light (m/s)
+export const G0 = 9.80665;							// gravitational acceleration of the Earth (m/s^2)
 
 // Roche limit physical thresholds
 export const ROCHE_MIN_MASS_TO_DESTROY = 1e15;		// ton: Minimum mass required to tear another object apart

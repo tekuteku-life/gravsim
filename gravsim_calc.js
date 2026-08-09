@@ -1,7 +1,7 @@
 // gravsim_calc.js
 
 import {
-	G, C, YEARS_PER_SECOND,
+	G, C, G0, YEARS_PER_SECOND,
 	TIME_SCALE,
 	ROCHE_MIN_MASS_TO_DESTROY, ROCHE_UNBREAKABLE_DENSITY,
 	ROCHE_RIGID_BODY_RADIUS, ROCHE_RIGID_DESTROYER_MASS,
@@ -25,12 +25,12 @@ class GravSimCalcObject {
 		this.vy = vy;
 		this.ax = ax;
 		this.ay = ay;
-		this.mass = mass;
+		this.mass = mass; // kg
 		this.radius = radius;
 		this.thrustForce = thrustData?.thrustForce || 0;
 		this.burnTime = thrustData?.burnTime || 0;
 		this.thrustAngle = thrustData?.thrustAngle || 0;
-		this.emptyMass = thrustData?.emptyMass || 0;
+		this.emptyMass = thrustData?.emptyMass || 0; // kg
 		this.massLossRate = thrustData?.massLossRate || 0;
 		this.maxGLimit = thrustData?.maxGLimit || 0;
 		this._thrustRatio = 0;
@@ -40,7 +40,7 @@ class GravSimCalcObject {
 		this.generation = generation || 0;
 		this.isDebris = this.generation > 0;
 		this.isImpact = false;
-		this.debrisMass = 0;
+		this.debrisMass = 0; // kg
 		this.impactVx = 0;
 		this.impactVy = 0;
 		this.impactWinnerX = 0;
@@ -344,7 +344,7 @@ class PhysicsEngine {
 		}
 		
 		const dragForce = q * cd * area;
-		const accelDrag = dragForce / (obj.mass * 1000); // mass is in tons
+		const accelDrag = dragForce / obj.mass;
 		
 		obj.ax -= (vRelX / vRel) * accelDrag;
 		obj.ay -= (vRelY / vRel) * accelDrag;
@@ -361,8 +361,8 @@ class PhysicsEngine {
 				// Max-G Limiter (Throttle down)
 				if (obj.maxGLimit > 0) {
 					const F_max = obj.thrustForce; // Newtons
-					const currentMassKg = obj.mass * 1000;
-					const maxAllowedThrust = obj.maxGLimit * G * currentMassKg;
+					const currentMassKg = obj.mass;
+					const maxAllowedThrust = obj.maxGLimit * G0 * currentMassKg;
 					if (F_max > maxAllowedThrust) {
 						throttle = maxAllowedThrust / F_max;
 					}
