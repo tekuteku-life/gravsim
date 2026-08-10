@@ -10,10 +10,6 @@ import {
 } from './gravsim_const.js';
 
 const TM_STYLE = {
-	display: { open: 'block', close : 'none' },
-	text: { open: 'TELEMETRY: ON', close: 'TELEMETRY: OFF' },
-	color: { open: '#ff5555', close: '#00ffcc' },
-	bColor: { open: '#ff5555', close: '#00ffcc' },
 	missionStatusColor: { normal: '#00ffcc', max_q: '#ff5555' },
 };
 
@@ -105,10 +101,8 @@ export class TelemetryPanel {
 
 	_openCloseCtl(_open) {
 		this.isOpen = _open;
-		this.ui.panel.style.display = _open ? TM_STYLE.display.open : TM_STYLE.display.close;
-		this.ui.toggleBtn.textContent = _open ? TM_STYLE.text.open : TM_STYLE.text.close;
-		this.ui.toggleBtn.style.color = _open ? TM_STYLE.color.open : TM_STYLE.color.close;
-		this.ui.toggleBtn.style.borderColor = _open ? TM_STYLE.bColor.open : TM_STYLE.bColor.close;
+
+		this.ui.panel.classList.toggle('open', _open);
 
 		if (_open) {
 			this.lastUpdate = 0;

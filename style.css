@@ -17,24 +17,6 @@ html, body {
 }
 
 /* =========================================
-   Mobile Toggle Button
-   ========================================= */
-#mobile-menu-toggle {
-	display: none; /* Hidden on PC view */
-	position: absolute;
-	top: 10px;
-	left: 10px;
-	z-index: 1000;
-	background: rgba(0, 0, 0, 0.7);
-	color: #fff;
-	border: 1px solid #444;
-	padding: 8px 12px;
-	border-radius: 4px;
-	cursor: pointer;
-	font-weight: bold;
-}
-
-/* =========================================
    Sidebar Control Panel
    ========================================= */
 .sidebar {
@@ -192,12 +174,13 @@ button:hover { background: #444; }
 	border: 1px solid #00ffcc;
 	border-radius: 5px;
 	pointer-events: none;
-	transition: left 0.3s ease;
+	transition: left 0.3s ease, bottom 0.3s ease;
 	text-shadow: 0 0 5px rgba(0, 255, 204, 0.5);
 	box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
 	display: flex;
 	flex-direction: column;
 	gap: 4px;
+	z-index: 800;
 }
 .info-row {
 	display: flex;
@@ -211,38 +194,21 @@ button:hover { background: #444; }
 	font-weight: bold;
 }
 
-/* =========================================
-   Responsive (Mobile) Overrides
-   ========================================= */
-@media (max-width: 768px) {
-	#mobile-menu-toggle { display: block; }
-	
-	/* Hide sidebar on Smart Phone view & adding slide-in animation by .open */
-	.sidebar {
-		transform: translateX(-100%);
-		width: 85vw;
-		max-width: 350px;
-	}
-	.sidebar.open { transform: translateX(0); }
 
-	/* Adjust Info-panel */
-	#info-panel { left: 10px; }
-	
-	/* Adjust telemetry-panel */
-	#telemetry-panel {
-		top: 50px;
-		right: 5px;
-		width: auto;
-		min-width: 200px;
-		font-size: 11px;
-		padding: 8px;
-		max-height: calc(100vh - 65px);
-	}
+/* =========================================
+   Top UI Container (PC Base View)
+   ========================================= */
+#mobile-top-container {
+	position: absolute;
+	top: 0; left: 0; width: 100%; height: 100%;
+	pointer-events: none; 
+	z-index: 1000;
 }
 
-/*=========================================
- * Telemetry HUD Styles
- *=========================================*/
+#mobile-menu-toggle {
+	display: none; /* Hidden on PC view */
+}
+
 #telemetry-toggle-btn {
 	position: absolute;
 	top: 2px;
@@ -253,10 +219,8 @@ button:hover { background: #444; }
 	background-color: rgba(0, 20, 0, 0.5);
 	color: #00ffcc;
 	border: 1px solid #00ffcc;
-	border-radius: 3px;
 	padding: 5px 10px;
-	cursor: pointer;
-	z-index: 100;
+	pointer-events: auto;
 	transition: all 0.2s;
 }
 #telemetry-toggle-btn:hover {
@@ -275,15 +239,32 @@ button:hover { background: #444; }
 	pointer-events: auto;
 	background-color: rgba(0, 20, 0, 0.7);
 	border: 1px solid #00ffcc;
-	border-radius: 5px;
 	padding: 10px;
 	color: #00ffcc;
 	font-family: 'Courier New', Courier, monospace;
 	font-size: 13px;
 	text-shadow: 0 0 5px rgba(0, 255, 204, 0.5);
 	box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
-	z-index: 99;
 	box-sizing: border-box;
+	
+	/* Slide in from right (PC) */
+	transform: translateX(120%);
+	visibility: hidden;
+	transition: transform 0.3s ease, visibility 0.3s ease;
+}
+
+#telemetry-panel.open {
+	transform: translateX(0);
+	visibility: visible;
+}
+
+/* 2-Column layout structure (Act as 1-column on PC) */
+.tm-2col-container {
+	display: flex;
+	flex-direction: column;
+}
+.tm-col {
+	width: 100%;
 }
 
 .telemetry-header {
@@ -404,4 +385,123 @@ button:hover { background: #444; }
 	border-radius: 3px;
 	display: block;
 	margin: 0 auto;
+}
+
+/* =========================================
+   Responsive (Mobile) Overrides
+   ========================================= */
+@media (max-width: 768px) {
+	/* Convert sidebar to bottom sheet */
+	.sidebar {
+		top: auto;
+		bottom: 0;
+		left: 0;
+		width: 100vw;
+		height: 40dvh;
+		max-width: none;
+		transform: translateY(100%);
+		border-radius: 12px 12px 0 0;
+		border-top: 1px solid #333;
+	}
+	.sidebar.open {
+		transform: translateY(0);
+		bottom: 30px;
+	}
+
+	/* Adjust Info-panel */
+	#info-panel {
+		left: 10px;
+		bottom: 30px;
+	}
+
+	/* Shift Info-panel up when sidebar opens */
+	body:has(.sidebar.open) #info-panel {
+		bottom: calc(40dvh + 30px);
+	}
+
+	/* Top UI Container behaves as a flex column to push buttons down */
+	#mobile-top-container {
+		display: flex;
+		flex-direction: column;
+	}
+
+	#top-buttons {
+		pointer-events: auto;
+		display: flex;
+		justify-content: space-between;
+	}
+
+	/* Toggle Buttons become part of the flow */
+	#mobile-menu-toggle {
+		display: block;
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 100vw;
+		background: rgba(0, 0, 0, 0.7);
+		color: #fff;
+		border: 1px solid #444;
+		padding: 5px 10px;
+		border-radius: 4px;
+		cursor: pointer;
+		font-weight: bold;
+		font-size: 14px;
+	}
+	#telemetry-toggle-btn {
+		position: absolute;
+		top: 0; right: 0;
+		font-size: 14px;
+		width: 100vw;
+		border-radius: 0;
+	}
+
+	/* Telemetry Panel acts as an accordion */
+	#telemetry-panel {
+		position: relative;
+		top: 30px; right: auto;
+		width: 100vw;
+		max-height: 0;
+		padding-top: 0; padding-bottom: 0;
+		border: none;
+		transform: translateX(0); /* Remove PC slide-in transform */
+		visibility: visible; /* Always visible, hidden by max-height */
+		overflow-y: hidden;
+		transition: max-height 0.3s ease, padding 0.3s ease;
+		background-color: rgba(0, 20, 0, 0.9);
+	}
+
+	#telemetry-panel.open {
+		max-height: 45dvh; /* Sufficient height to show content */
+		padding-top: 10px; padding-bottom: 10px;
+		border-bottom: 1px solid #00ffcc;
+		overflow-y: auto;
+	}
+
+	.telemetry-header {
+		display: none;
+	}
+
+	/* Prevent overlap with sidebar */
+	body:has(.sidebar.open) #telemetry-panel.open {
+		max-height: calc(45dvh - 65px);
+	}
+
+	/* 2-Column layout for telemetry content on Mobile */
+	.tm-2col-container {
+		flex-direction: row;
+		gap: 10px;
+	}
+	.tm-col {
+		width: 50%;
+	}
+
+	/* Compact UI for Mobile Telemetry */
+	#telemetry-panel { font-size: 10px; }
+	.telemetry-header { font-size: 12px; }
+	.tm-section-header { font-size: 11px; margin-top: 5px; }
+
+	#sub-canvas {
+		width: 100% !important;
+		height: 50vw !important;
+	}
 }

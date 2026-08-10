@@ -10,8 +10,68 @@
 <body>
 	<canvas id="gravsim-canvas"></canvas>
 
-	<!-- Open/Close button for Smart Phone -->
-	<button type="button" id="mobile-menu-toggle">☰ MENU</button>
+	<!-- Mobile Top UI Container (Panel + Buttons) -->
+	<div id="mobile-top-container">
+		<div id="telemetry-panel">
+			<div class="telemetry-header">TELEMETRY HUD</div>
+			<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
+
+			<div id="tm-status-box">
+				<span id="tm-mission-status">PRE-LAUNCH</span>
+			</div>
+			<div class="telemetry-line" style="margin-top: 5px;">MET: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
+
+			<div class="tm-2col-container">
+				<div class="tm-col">
+					<div class="tm-section-header">[ VESSEL STATE ]</div>
+					<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
+					<div class="telemetry-line">REM ΔV   : <span id="tm-rem-dv">---</span> km/s</div>
+					<div class="telemetry-line">CUR TWR  : <span id="tm-twr">---</span></div>
+
+					<div class="tm-section-header">[ AERODYNAMICS ]</div>
+					<div class="telemetry-line">PITCH/AOA: <span id="tm-pitch">---</span> / <span id="tm-aoa">---</span> °</div>
+					<div class="telemetry-line">DYN PRES : <span id="tm-dyn">---</span> % Max-Q</div>
+					<div class="telemetry-line">Q AX/LAT : <span id="tm-dyn-ax">---</span> / <span id="tm-dyn-lat">---</span> kPa</div>
+
+					<div class="tm-section-header">[ FLIGHT DYNAMICS ]</div>
+					<div class="telemetry-line">ALTITUDE : <span id="tm-alt">---</span> km</div>
+					<div class="telemetry-line">VEL (V/H): <span id="tm-vel-v">---</span> / <span id="tm-vel-h">---</span> km/s</div>
+					<div class="telemetry-line">ACC (V/H): <span id="tm-acc-v">---</span> / <span id="tm-acc-h">---</span> G</div>
+
+					<div style="margin-top: 10px;">
+						<div class="tm-bar-header">FLIGHT DIRECTOR</div>
+						<div id="tm-nav-wrapper">
+							<div id="tm-nav-direction">＋</div>
+							<div id="tm-nav-prograde">◯</div>
+							<div id="tm-nav-gravity">↓</div>
+						</div>
+					</div>
+
+				</div>
+
+				<div class="tm-col">
+					<div class="tm-section-header">[ PROPULSION ]</div>
+					<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>
+					<div class="telemetry-line">PROP REM : <span id="tm-prop">---</span> t</div>
+
+					<div style="margin: 10px 0;">
+						<div class="tm-bar-header">PROPELLANT</div>
+						<div id="tm-fuel-bar-wrapper">
+							<div id="tm-fuel-bar"></div>
+						</div>
+					</div>
+
+					<div class="telemetry-header">TARGET CAMERA</div>
+					<canvas id="sub-canvas"></canvas>
+				</div>
+			</div>
+		</div>
+
+		<div id="top-buttons">
+			<button type="button" id="mobile-menu-toggle">MENU</button>
+			<button type="button" id="telemetry-toggle-btn">TELEMETRY</button>
+		</div>
+	</div>
 
 	<!-- Control pannel (side-bar) -->
 	<form id="ctrl-panel" class="sidebar">
@@ -168,55 +228,6 @@
 		<div class="info-row"><span class="info-label">ELAPSED</span> <span id="info-elapsed">0 yr, 000 d</span></div>
 		<div class="info-row"><span class="info-label">FPS</span> <span id="info-fps">0</span></div>
 		<div class="info-row"><span class="info-label">OBJECTS</span> <span id="info-count">0</span></div>
-	</div>
-
-	<button type="button" id="telemetry-toggle-btn">TELEMETRY: OFF</button>
-	<div id="telemetry-panel" style="display: none;">
-		<div class="telemetry-header">TELEMETRY HUD</div>
-		<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
-
-		<div id="tm-status-box">
-			<span id="tm-mission-status">PRE-LAUNCH</span>
-		</div>
-		<div class="telemetry-line" style="margin-top: 5px;">MET: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
-
-		<div class="tm-section-header">[ VESSEL STATE ]</div>
-		<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
-		<div class="telemetry-line">REM ΔV   : <span id="tm-rem-dv">---</span> km/s</div>
-		<div class="telemetry-line">CUR TWR  : <span id="tm-twr">---</span></div>
-
-		<div class="tm-section-header">[ FLIGHT DYNAMICS ]</div>
-		<div class="telemetry-line">ALTITUDE : <span id="tm-alt">---</span> km</div>
-		<div class="telemetry-line">VEL (V/H): <span id="tm-vel-v">---</span> / <span id="tm-vel-h">---</span> km/s</div>
-		<div class="telemetry-line">ACC (V/H): <span id="tm-acc-v">---</span> / <span id="tm-acc-h">---</span> G</div>
-
-		<div class="tm-section-header">[ AERODYNAMICS ]</div>
-		<div class="telemetry-line">PITCH/AOA: <span id="tm-pitch">---</span> / <span id="tm-aoa">---</span> °</div>
-		<div class="telemetry-line">DYN PRES : <span id="tm-dyn">---</span> % Max-Q</div>
-		<div class="telemetry-line">Q AX/LAT : <span id="tm-dyn-ax">---</span> / <span id="tm-dyn-lat">---</span> kPa</div>
-
-		<div class="tm-section-header">[ PROPULSION ]</div>
-		<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>
-		<div class="telemetry-line">PROP REM : <span id="tm-prop">---</span> t</div>
-
-		<div style="margin-top: 10px;">
-			<div class="tm-bar-header">PROPELLANT</div>
-			<div id="tm-fuel-bar-wrapper">
-				<div id="tm-fuel-bar"></div>
-			</div>
-		</div>
-
-		<div style="margin-top: 10px;">
-			<div class="tm-bar-header">FLIGHT DIRECTOR</div>
-			<div id="tm-nav-wrapper">
-				<div id="tm-nav-direction">＋</div>
-				<div id="tm-nav-prograde">◯</div>
-				<div id="tm-nav-gravity">↓</div>
-			</div>
-		</div>
-
-		<div class="telemetry-header" style="margin-top: 15px;">TARGET CAMERA</div>
-		<canvas id="sub-canvas"></canvas>
 	</div>
 </body>
 </html>
