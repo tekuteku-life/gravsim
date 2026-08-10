@@ -245,8 +245,8 @@ button:hover { background: #444; }
  *=========================================*/
 #telemetry-toggle-btn {
 	position: absolute;
-	top: 10px;
-	right: 10px;
+	top: 2px;
+	right: 2px;
 	font-family: 'Courier New', Courier, monospace;
 	font-size: 14px;
 	font-weight: bold;
@@ -265,10 +265,11 @@ button:hover { background: #444; }
 
 #telemetry-panel {
 	position: absolute;
-	top: 45px;
-	right: 10px;
-	width: 250px;
+	top: 35px;
+	right: 2px;
+	width: 270px;
 	max-height: calc(100vh - 60px);
+	overflow-x: hidden;
 	overflow-y: auto;
 	touch-action: pan-y;
 	pointer-events: auto;
@@ -299,6 +300,15 @@ button:hover { background: #444; }
 	margin-bottom: 4px;
 	white-space: pre;
 }
+
+#tm-status-box {
+	text-align: center;
+	font-weight: bold;
+	background: #003322;
+	border: 1px solid #00ffcc;
+	padding: 4px; margin-top: 5px;
+}
+
 #tm-target-select {
 	background: transparent;
 	color: #00ffcc;
@@ -321,6 +331,68 @@ button:hover { background: #444; }
 	border-bottom: 1px dashed #005544;
 	padding-bottom: 2px;
 	font-weight: bold;
+}
+
+.tm-bar-header {
+	font-size: 10px;
+	color: #00aa88;
+}
+
+#tm-fuel-bar-wrapper {
+	width: 100%;
+	height: 6px;
+	background: #222;
+	border: 1px solid #005544;
+}
+
+#tm-fuel-bar {
+	width: 100%;
+	height: 100%;
+	background: #00ffcc;
+	transition: width 0.1s;
+}
+
+#tm-nav-wrapper {
+	position: relative;
+	width: 100%;
+	height: 24px;
+	background: rgba(0,255,204,0.1);
+	border: 1px solid #00ffcc; overflow: hidden;
+}
+
+#tm-nav-direction {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	color: #fff;
+	font-weight: bold;
+	font-size: 14px;
+	z-index: 3;
+}
+
+#tm-nav-prograde {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	color: #00ffcc;
+	font-weight: bold;
+	font-size: 16px;
+	z-index: 2;
+	transition: left 0.1s;
+}
+
+#tm-nav-gravity {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	color: #ffaa00;
+	font-weight: bold;
+	font-size: 16px;
+	z-index: 1;
+	transition: left 0.1s;
 }
 
 /* Sub-canvas */

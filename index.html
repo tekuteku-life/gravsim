@@ -175,10 +175,10 @@
 		<div class="telemetry-header">TELEMETRY HUD</div>
 		<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
 
-		<div id="tm-status-box" style="text-align: center; font-weight: bold; background: #003322; border: 1px solid #00ffcc; padding: 4px; margin-top: 5px;">
+		<div id="tm-status-box">
 			<span id="tm-mission-status">PRE-LAUNCH</span>
 		</div>
-		<div class="telemetry-line" style="margin-top: 5px;">MISSION T: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
+		<div class="telemetry-line" style="margin-top: 5px;">MET: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
 
 		<div class="tm-section-header">[ VESSEL STATE ]</div>
 		<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
@@ -198,22 +198,22 @@
 		<div class="tm-section-header">[ PROPULSION ]</div>
 		<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>
 		<div class="telemetry-line">PROP REM : <span id="tm-prop">---</span> t</div>
-        
-        <div style="margin-top: 10px;">
-            <div style="font-size: 10px; color: #00aa88;">PROPELLANT</div>
-            <div style="width: 100%; height: 6px; background: #222; border: 1px solid #005544;">
-                <div id="tm-fuel-bar" style="width: 100%; height: 100%; background: #00ffcc; transition: width 0.1s;"></div>
-            </div>
-        </div>
 
-        <div style="margin-top: 10px;">
-            <div style="font-size: 10px; color: #00aa88;">FLIGHT DIRECTOR</div>
-            <div style="position: relative; width: 100%; height: 24px; background: rgba(0,255,204,0.1); border: 1px solid #00ffcc; overflow: hidden;">
-                <div style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #fff; font-weight: bold; font-size: 14px; z-index: 3;">＋</div>
-                <div id="tm-nav-prograde" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #00ffcc; font-weight: bold; font-size: 16px; z-index: 2; transition: left 0.1s;">◯</div>
-                <div id="tm-nav-gravity" style="position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #ffaa00; font-weight: bold; font-size: 16px; z-index: 1; transition: left 0.1s;">↓</div>
-            </div>
-        </div>
+		<div style="margin-top: 10px;">
+			<div class="tm-bar-header">PROPELLANT</div>
+			<div id="tm-fuel-bar-wrapper">
+				<div id="tm-fuel-bar"></div>
+			</div>
+		</div>
+
+		<div style="margin-top: 10px;">
+			<div class="tm-bar-header">FLIGHT DIRECTOR</div>
+			<div id="tm-nav-wrapper">
+				<div id="tm-nav-direction">＋</div>
+				<div id="tm-nav-prograde">◯</div>
+				<div id="tm-nav-gravity">↓</div>
+			</div>
+		</div>
 
 		<div class="telemetry-header" style="margin-top: 15px;">TARGET CAMERA</div>
 		<canvas id="sub-canvas"></canvas>
