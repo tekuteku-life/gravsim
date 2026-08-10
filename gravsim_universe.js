@@ -85,6 +85,7 @@ export class Universe {
 	get centerObject() { return this.ObjectManager.centerObject; }
 	set centerObject(obj) {
 		this.ObjectManager.centerObject = obj;
+		this.ControlPanel.systemTab.updateCenterOptions();
 		this.InfoPanel.updateCamera(obj.name);
 	}
 	get zoomScale() { return this.Renderer.zoomScale; }

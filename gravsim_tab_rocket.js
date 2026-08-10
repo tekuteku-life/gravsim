@@ -13,6 +13,7 @@ export class RocketTab {
 		this.systemTab = systemTab;
 		this.previousTimeScaleVal = null;
 		this.previousZoomScaleVal = null;
+		this.previousCameraTarget = null;
 		this._initElements();
 		this._bindEvents();
 	}
@@ -254,9 +255,10 @@ export class RocketTab {
 	open() {
 		this.universe.RocketLauncher.togglePreview(true);
 
-		// Save time & zoom scale
+		// Save time & zoom scale & camera target
 		this.saveTimeScale();
 		this.saveZoomScale();
+		this.saveCameraTarget();
 
 		let targetHostId = this.universe.RocketLauncher.hostId;
 		if (targetHostId === null || targetHostId === 0) { 
@@ -276,9 +278,10 @@ export class RocketTab {
 	close() {
 		this.universe.RocketLauncher.togglePreview(false);
 
-		// Restore time & zoom scale
+		// Restore time & zoom scale & camera target
 		this.restoreTimeScale();
 		this.restoreZoomScale();
+		this.restoreCameraTarget();
 	}
 
 	saveTimeScale() {
@@ -290,6 +293,12 @@ export class RocketTab {
 	saveZoomScale() {
 		if (this.systemTab.ui.zoomScale) {
 			this.previousZoomScaleVal = this.systemTab.ui.zoomScale.value;
+		}
+	}
+
+	saveCameraTarget() {
+		if (this.universe.centerObject !== null) {
+			this.previousCameraTarget = this.universe.centerObject;
 		}
 	}
 
@@ -307,6 +316,12 @@ export class RocketTab {
 			this.systemTab.updateZoomScaleIndicator(this.systemTab.getZoomScale());
 			this.universe.updateZoomScale();
 			this.previousZoomScaleVal = null;
+		}
+	}
+
+	restoreCameraTarget() {
+		if (this.previousCameraTarget !== null) {
+			this.universe.centerObject = this.previousCameraTarget;
 		}
 	}
 
