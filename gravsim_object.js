@@ -318,6 +318,17 @@ export class Rocket extends GravSimObject {
 		this.maxGLimit = 0;
 		this.thrustRatio = 0;
 		this.flightTime = 0;
+		this.telemetry = {
+			status: 0,
+			qAxialKpa: 0, qLateralKpa: 0, structRatio: 0,
+			aoaDeg: 0, progradeAngle: 0, gravityAngle: 0,
+			remDv: 0, // m/s
+			twr: 0, altM: 0,
+			vV: 0, vH: 0, // m/s
+			aV: 0, aH: 0, // m/s^2
+			currentG: 0,
+			flightTime: 0, // s
+		};
 	}
 	get mass() { return this.dryMass + this.fuelMass; }
 	set mass(val) {}

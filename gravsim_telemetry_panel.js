@@ -6,8 +6,6 @@ import {
 	TELEMETRY_UPDATE_INTERVAL_MS,
 	TELEMETRY_SUB_VIEW_TARGET_RADIUS,
 	TELEMETRY_SUB_VIEW_MAX_ZOOM,
-	G, G0, UI_TM_MAX_Q_TH,
-	DEFAULT_OBJECT_PARAMS,
 	MISSION_STATUS, OBJECT_TYPES,
 } from './gravsim_const.js';
 
@@ -130,14 +128,11 @@ export class TelemetryPanel {
 		const target = this._resolveTarget();
 		if (!target) { return; }
 
-		const refData = this._calculateReferenceData(target);
-
-		this._updateVesselStateUI(target, refData.localG_ms2);
-		const flightDynamics = this._updateFlightDynamicsUI(target, refData.refBody, refData.distToRefM);
-		const aerodynamics = this._updateAerodynamicsUI(target, refData.refBody, refData.distToRefM);
-		this._updatePropulsionAndStatusUI(target, aerodynamics.structRatio);
-		this._updateMissionTimeUI(target);
-		this._updateFlightDirectorUI(target, flightDynamics.progradeAngle, flightDynamics.gravityAngle);
+		if (target.type === OBJECT_TYPES.ROCKET && target.telemetry) {
+			this._updateUIFromTelemetry(target);
+		} else {
+			this._resetUIForTracking(target);
+		}
 	}
 
 	_resolveTarget() {
@@ -165,217 +160,112 @@ export class TelemetryPanel {
 		return target;
 	}
 
-	_calculateReferenceData(target) {
-		let refBody = null;
-		let maxG = -1;
-		let distToRefM = 0;
-		
-		for (const obj of this.universe.objects) {
-			if (obj.id === target.id) continue;
-			const dx = target.x - obj.x;
-			const dy = target.y - obj.y;
-			const distSqPx = dx * dx + dy * dy;
-			const distSqM = Math.pow(this.universe.pix2m(Math.sqrt(distSqPx)), 2);
-			if (distSqM === 0) continue;
-			
-			const gForce = obj.mass / distSqM; 
-			if (gForce > maxG) {
-				maxG = gForce;
-				refBody = obj;
-				distToRefM = Math.sqrt(distSqM);
-			}
-		}
+	_updateUIFromTelemetry(target) {
+		const tm = target.telemetry;
 
-		// Calculate Basic Local G
-		let localG_ms2 = 0;
-		if (refBody) {
-			const hostMassKg = refBody.mass * 1e3;
-			localG_ms2 = (G * hostMassKg) / (distToRefM * distToRefM);
-		}
-
-		return { refBody, distToRefM, localG_ms2 };
-	}
-
-	_updateVesselStateUI(target, localG_ms2) {
 		this.ui.mass.innerText = target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' ');
-		
-		let thrustN = target.burnTime > 0 ? target.thrustForce * (target.thrustRatio || 0) : 0;
-		const twr = localG_ms2 > 0 ? thrustN / (target.mass * 1000 * localG_ms2) : 0;
-		this.ui.twr.innerText = twr.toFixed(2).padStart(6, ' ');
+		this.ui.twr.innerText = tm.twr.toFixed(2).padStart(6, ' ');
+		this.ui.remDv.innerText = (tm.remDv / 1e3).toFixed(2).padStart(6, ' ');
 
-		let remDv = 0;
-		if (target.type === OBJECT_TYPES.ROCKET && target.dryMass > 0) {
-			let ve = 320 * G0; // Default assumption if no flow rate
-			if (target.thrustForce > 0 && target.massLossRate > 0) {
-				ve = target.thrustForce / (target.massLossRate * 1000);
-			}
-			remDv = (ve * Math.log(target.mass / target.dryMass)) / 1000;
-		}
-		this.ui.remDv.innerText = remDv.toFixed(2).padStart(6, ' ');
-	}
+		this.ui.alt.innerText = (tm.altM / 1000).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' ');
+		this.ui.velV.innerText = (tm.vV / 1e3).toFixed(2).padStart(7, ' ');
+		this.ui.velH.innerText = (tm.vH / 1e3).toFixed(2).padStart(7, ' ');
+		this.ui.accV.innerText = tm.aV.toFixed(2).padStart(7, ' ');
+		this.ui.accH.innerText = tm.aH.toFixed(2).padStart(7, ' ');
 
-	_updateFlightDynamicsUI(target, refBody, distToRefM) {
-		let vV = 0, vH = 0, aV = 0, aH = 0;
-		let progradeAngle = 0, gravityAngle = 0;
-
-		if (refBody) {
-			const altM = distToRefM - refBody.radius;
-			this.ui.alt.innerText = (altM / 1000).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' ');
-
-			const dx = target.x - refBody.x;
-			const dy = target.y - refBody.y;
-			const rPx = Math.sqrt(dx*dx + dy*dy);
-			
-			if (rPx > 0) {
-				const uRx = dx/rPx;
-				const uRy = dy/rPx;
-				const uHx = -uRy;
-				const uHy = uRx;
-
-				const dvx = this.universe.pix2m(target.vx - refBody.vx);
-				const dvy = this.universe.pix2m(target.vy - refBody.vy);
-				vV = (dvx * uRx + dvy * uRy) / 1000;
-				vH = (dvx * uHx + dvy * uHy) / 1000;
-
-				const dax = this.universe.pix2m(target.ax); 
-				const day = this.universe.pix2m(target.ay);
-				aV = (dax * uRx + day * uRy) / G0;
-				aH = (dax * uHx + day * uHy) / G0;
-				
-				progradeAngle = Math.atan2(dvy, dvx);
-				gravityAngle = Math.atan2(-dy, -dx);
-			}
-		} else {
-			this.ui.alt.innerText = "---".padStart(10, ' ');
-			progradeAngle = Math.atan2(target.vy, target.vx);
-		}
-
-		this.ui.velV.innerText = vV.toFixed(2).padStart(7, ' ');
-		this.ui.velH.innerText = vH.toFixed(2).padStart(7, ' ');
-		this.ui.accV.innerText = aV.toFixed(2).padStart(7, ' ');
-		this.ui.accH.innerText = aH.toFixed(2).padStart(7, ' ');
-
-		return { progradeAngle, gravityAngle };
-	}
-
-	_updateAerodynamicsUI(target, refBody, distToRefM) {
 		let pitchDeg = (target.thrustAngle * 180 / Math.PI) % 360;
 		if (pitchDeg < 0) { pitchDeg += 360; }
 		this.ui.pitch.innerText = pitchDeg.toFixed(1).padStart(6, ' ');
+		this.ui.aoa.innerText = tm.aoaDeg.toFixed(1).padStart(5, ' ');
+		this.ui.dyn.innerText = tm.structRatio.toFixed(1).padStart(5, ' ');
+		if (this.ui.dynAx) { this.ui.dynAx.innerText = tm.qAxialKpa.toFixed(1).padStart(6, ' '); }
+		if (this.ui.dynLat) { this.ui.dynLat.innerText = tm.qLateralKpa.toFixed(1).padStart(6, ' '); }
 
-		let aoaDeg = 0, structRatio = 0;
-		let qAxialKpa = 0, qLateralKpa = 0;
+		const thrtlPercent = (target.thrustRatio || 0) * 100;
+		this.ui.thrtl.innerText = thrtlPercent.toFixed(1).padStart(6, ' ');
 
-		if (refBody) {
-			const refParam = DEFAULT_OBJECT_PARAMS[refBody.name];
-			const altM = distToRefM - refBody.radius;
-			if (refParam && refParam.ATM_LIMIT_ALT && altM < refParam.ATM_LIMIT_ALT && altM > 0) {
-				const rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / refParam.ATM_SCALE_HEIGHT);
-				let vAtmM_x = this.universe.pix2m(refBody.vx);
-				let vAtmM_y = this.universe.pix2m(refBody.vy);
-				
-				if (refParam.ROTATION_PERIOD) {
-					const omega = (2 * Math.PI) / refParam.ROTATION_PERIOD;
-					vAtmM_x += -omega * this.universe.pix2m(target.y - refBody.y);
-					vAtmM_y += omega * this.universe.pix2m(target.x - refBody.x);
-				}
-				
-				const vRelX = this.universe.pix2m(target.vx) - vAtmM_x;
-				const vRelY = this.universe.pix2m(target.vy) - vAtmM_y;
-				const vRelSq = vRelX * vRelX + vRelY * vRelY;
-				const q = 0.5 * rho * vRelSq;
-				
-				const velAngle = Math.atan2(vRelY, vRelX);
-				let angleDiff = Math.abs(target.thrustAngle - velAngle);
-				while (angleDiff > Math.PI) { angleDiff -= 2 * Math.PI; }
-				while (angleDiff < -Math.PI) { angleDiff += 2 * Math.PI; }
-				
-				qAxialKpa = (q * Math.pow(Math.cos(angleDiff), 2)) / 1000;
-				qLateralKpa = (q * Math.pow(Math.sin(angleDiff), 2)) / 1000;
-				
-				aoaDeg = Math.abs(angleDiff) * (180 / Math.PI);
-				
-				const objParam = DEFAULT_OBJECT_PARAMS[target.name];
-				const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
-				if (maxQ !== Infinity) {
-					structRatio = (q / maxQ) * 100;
-				}
-			}
-		}
+		const propRem = target.fuelMass;
+		const displayProp = propRem < 0.01 ? 0 : propRem;
+		this.ui.prop.innerText = displayProp.toFixed(2).padStart(6, ' ');
 
-		this.ui.aoa.innerText = aoaDeg.toFixed(1).padStart(5, ' ');
-		this.ui.dyn.innerText = structRatio.toFixed(1).padStart(5, ' ');
-		if (this.ui.dynAx) { this.ui.dynAx.innerText = qAxialKpa.toFixed(1).padStart(6, ' '); }
-		if (this.ui.dynLat) { this.ui.dynLat.innerText = qLateralKpa.toFixed(1).padStart(6, ' '); }
+		if (!this.maxProp[target.id] || propRem > this.maxProp[target.id]) this.maxProp[target.id] = propRem;
+		let pct = this.maxProp[target.id] > 0 ? (propRem / this.maxProp[target.id]) * 100 : 0;
+		if (pct < 0.5) { pct = 0; }
+		this.ui.fuelBar.style.width = `${pct}%`;
 
-		return { structRatio };
-	}
-
-	_updatePropulsionAndStatusUI(target, structRatio) {
-		let mStat = MISSION_STATUS.PRE_LAUNCH;
-		if (target.type === OBJECT_TYPES.ROCKET) {
-			if (target.burnTime > 0) {
-				if (structRatio > UI_TM_MAX_Q_TH) { mStat = MISSION_STATUS.MAX_Q; }
-				else { mStat = MISSION_STATUS.ASCENT; }
-			} else {
-				if (target.massLossRate > 0 && target.fuelMass <= 0) { mStat = MISSION_STATUS.MECO; }
-				else { mStat = MISSION_STATUS.COASTING; }
-			}
-
-			const thrtlPercent = (target.thrustRatio || 0) * 100;
-			this.ui.thrtl.innerText = thrtlPercent.toFixed(1).padStart(6, ' ');
-
-			const propRem = target.fuelMass;
-			const displayProp = propRem < 0.01 ? 0 : propRem;
-			this.ui.prop.innerText = displayProp.toFixed(2).padStart(6, ' ');
-
-			if (!this.maxProp[target.id] || propRem > this.maxProp[target.id]) this.maxProp[target.id] = propRem;
-			let pct = this.maxProp[target.id] > 0 ? (propRem / this.maxProp[target.id]) * 100 : 0;
-			if (pct < 0.5) { pct = 0; }
-			this.ui.fuelBar.style.width = `${pct}%`;
-		} else {
-			mStat = MISSION_STATUS.TRACKING;
-			this.ui.thrtl.innerText = "---".padStart(6, ' ');
-			this.ui.prop.innerText = "---".padStart(6, ' ');
-			this.ui.fuelBar.style.width = `0%`;
-		}
-		
+		// Status Mapping
+		const statusMap = {
+			0: MISSION_STATUS.PRE_LAUNCH,
+			1: MISSION_STATUS.LIFTOFF,
+			2: MISSION_STATUS.ASCENT,
+			3: MISSION_STATUS.MAX_Q,
+			4: MISSION_STATUS.MECO,
+			5: MISSION_STATUS.COASTING,
+			6: MISSION_STATUS.TRACKING
+		};
+		const mStat = statusMap[tm.status] || MISSION_STATUS.PRE_LAUNCH;
 		this.ui.missionStatus.innerText = mStat;
 		if (mStat === MISSION_STATUS.MAX_Q) { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.max_q; }
 		else { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.normal; }
+
+		this._updateMissionTimeUI(tm.flightTime);
+		this._updateFlightDirectorUI(target.thrustAngle, tm.progradeAngle, tm.gravityAngle);
 	}
 
-	_updateMissionTimeUI(target) {
-		if (!this.ui.missionTime) return;
-		if (target.type === OBJECT_TYPES.ROCKET) {
-			const totalSec = Math.floor(target.flightTime || 0);
+	_resetUIForTracking(target) {
+		this.ui.mass.innerText = target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' ');
+		this.ui.twr.innerText = "---".padStart(6, ' ');
+		this.ui.remDv.innerText = "---".padStart(6, ' ');
 
-			const SEC_PER_DAY = 86400;
-			const SEC_PER_YEAR = 365.25 * SEC_PER_DAY;
+		this.ui.alt.innerText = "---".padStart(10, ' ');
+		this.ui.velV.innerText = "---".padStart(7, ' ');
+		this.ui.velH.innerText = "---".padStart(7, ' ');
+		this.ui.accV.innerText = "---".padStart(7, ' ');
+		this.ui.accH.innerText = "---".padStart(7, ' ');
 
-			const years = Math.floor(totalSec / SEC_PER_YEAR);
-			let remSec = totalSec % SEC_PER_YEAR;
+		this.ui.pitch.innerText = "---".padStart(6, ' ');
+		this.ui.aoa.innerText = "---".padStart(5, ' ');
+		this.ui.dyn.innerText = "---".padStart(5, ' ');
+		if (this.ui.dynAx) { this.ui.dynAx.innerText = "---".padStart(6, ' '); }
+		if (this.ui.dynLat) { this.ui.dynLat.innerText = "---".padStart(6, ' '); }
 
-			const days = Math.floor(remSec / SEC_PER_DAY);
-			remSec %= SEC_PER_DAY;
+		this.ui.thrtl.innerText = "---".padStart(6, ' ');
+		this.ui.prop.innerText = "---".padStart(6, ' ');
+		this.ui.fuelBar.style.width = `0%`;
 
-			const hours = Math.floor(remSec / 3600);
-			remSec %= 3600;
+		this.ui.missionStatus.innerText = MISSION_STATUS.TRACKING;
+		this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.normal;
 
-			const mins = Math.floor(remSec / 60);
-			const secs = remSec % 60;
-
-			const pad = (num, len = 2) => String(num).padStart(len, '0');
-
-			// 表示例: T+ 000y 000d 00:00:00
-			const timeStr = `T+ ${pad(years, 3)}y ${pad(days, 3)}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
-			this.ui.missionTime.innerText = timeStr;
-		} else {
-			this.ui.missionTime.innerText = "T+ ---y ---d --:--:--";
-		}
+		this.ui.missionTime.innerText = "T+ ---y ---d --:--:--";
+		this.ui.navPrograde.style.left = `50%`;
+		this.ui.navGravity.style.left = `50%`;
 	}
 
-	_updateFlightDirectorUI(target, progradeAngle, gravityAngle) {
+	_updateMissionTimeUI(flightTime) {
+		const totalSec = Math.floor(flightTime || 0);
+
+		const SEC_PER_DAY = 86400;
+		const SEC_PER_YEAR = 365.25 * SEC_PER_DAY;
+
+		const years = Math.floor(totalSec / SEC_PER_YEAR);
+		let remSec = totalSec % SEC_PER_YEAR;
+
+		const days = Math.floor(remSec / SEC_PER_DAY);
+		remSec %= SEC_PER_DAY;
+
+		const hours = Math.floor(remSec / 3600);
+		remSec %= 3600;
+
+		const mins = Math.floor(remSec / 60);
+		const secs = remSec % 60;
+
+		const pad = (num, len = 2) => String(num).padStart(len, '0');
+
+		const timeStr = `T+ ${pad(years, 3)}y ${pad(days, 3)}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
+		this.ui.missionTime.innerText = timeStr;
+	}
+
+	_updateFlightDirectorUI(thrustAngle, progradeAngle, gravityAngle) {
 		const getOffsetPct = (angle, refAngle) => {
 			let diff = angle - refAngle;
 			while(diff > Math.PI) { diff -= 2*Math.PI; }
@@ -383,8 +273,8 @@ export class TelemetryPanel {
 			return 50 + (diff / Math.PI) * 50; 
 		};
 
-		const progOffset = getOffsetPct(progradeAngle, target.thrustAngle);
-		const gravOffset = getOffsetPct(gravityAngle, target.thrustAngle);
+		const progOffset = getOffsetPct(progradeAngle, thrustAngle);
+		const gravOffset = getOffsetPct(gravityAngle, thrustAngle);
 
 		this.ui.navPrograde.style.left = `${progOffset}%`;
 		this.ui.navGravity.style.left = `${gravOffset}%`;

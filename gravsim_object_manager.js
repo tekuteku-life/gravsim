@@ -80,7 +80,7 @@ export class ObjectManager {
 
 	updateObjectParams(data) {
 		const buffer = new Float64Array(data.objectsData);
-		const OBJ_ATTR_COUNT = 20;
+		const OBJ_ATTR_COUNT = 37;
 		const objCount = buffer.length / OBJ_ATTR_COUNT;
 
 		for (let i = 0; i < objCount; i++) {
@@ -96,12 +96,32 @@ export class ObjectManager {
 				target.vy = this.renderer.m2pix(buffer[offset + 5]);
 				target.ax = this.renderer.m2pix(buffer[offset + 6]);
 				target.ay = this.renderer.m2pix(buffer[offset + 7]);
-				
+
 				if (type === OBJECT_TYPES.ROCKET) {
 					target.dryMass = buffer[offset + 8] / 1e3;
 					target.fuelMass = buffer[offset + 9] / 1e3;
 					target.burnTime = buffer[offset + 11];
 					target.thrustRatio = buffer[offset + 12];
+
+					target.telemetry = {
+						status: buffer[offset + 20],
+						qAxialKpa: buffer[offset + 21],
+						qLateralKpa: buffer[offset + 22],
+						structRatio: buffer[offset + 23],
+						aoaDeg: buffer[offset + 24],
+						progradeAngle: buffer[offset + 25],
+						gravityAngle: buffer[offset + 26],
+						remDv: buffer[offset + 27],
+						twr: buffer[offset + 28],
+						altM: buffer[offset + 29],
+						vV: buffer[offset + 30],
+						vH: buffer[offset + 31],
+						aV: buffer[offset + 32],
+						aH: buffer[offset + 33],
+						currentG: buffer[offset + 34],
+						flightTime: buffer[offset + 35],
+					};
+					target.thrustAngle = buffer[offset + 36];
 				} else {
 					target.mass = buffer[offset + 8] / 1e3;
 				}
