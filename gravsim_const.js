@@ -176,6 +176,11 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"A": 9.582,
 		"E": 0.0565,
 		"PERIHELION_DEG": 92.43,
+		"ATM_COLOR": "rgba(240, 220, 130, 0.4)",
+		"ATM_LIMIT_ALT": 4000000,
+		"ATM_DENSITY_0": 0.19,
+		"ATM_SCALE_HEIGHT": 59500,
+		"ROTATION_PERIOD": 38360
 	},
 	"Uranus": {
 		"NAME" : "Uranus",
@@ -185,6 +190,11 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"A": 19.191,
 		"E": 0.0457,
 		"PERIHELION_DEG": 170.96,
+		"ATM_COLOR": "rgba(175, 238, 238, 0.4)",
+		"ATM_LIMIT_ALT": 2000000,
+		"ATM_DENSITY_0": 0.42,
+		"ATM_SCALE_HEIGHT": 27700,
+		"ROTATION_PERIOD": 62064
 	},
 	"Neptune": {
 		"NAME" : "Neptune",
@@ -194,6 +204,11 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"A": 30.070,
 		"E": 0.0113,
 		"PERIHELION_DEG": 44.97,
+		"ATM_COLOR": "rgba(65, 105, 225, 0.4)",
+		"ATM_LIMIT_ALT": 2000000,
+		"ATM_DENSITY_0": 0.45,
+		"ATM_SCALE_HEIGHT": 19700,
+		"ROTATION_PERIOD": 57996
 	},
 	"Moon": {
 		"NAME" : "Moon",
