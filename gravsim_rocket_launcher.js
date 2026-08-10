@@ -209,6 +209,9 @@ export class RocketLauncher {
 		this.universe.ControlPanel.rocketTab.saveTimeScale();
 		this.universe.ControlPanel.rocketTab.saveZoomScale();
 
+		// Open telemetry
+		this.universe.TelemetryPanel.open();
+
 		this.togglePreview(false);
 	}
 

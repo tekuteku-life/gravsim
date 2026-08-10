@@ -73,7 +73,10 @@ export class TelemetryPanel {
 
 	_bindEvents() {
 		if (this.ui.toggleBtn) {
-			this.ui.toggleBtn.addEventListener('click', () => { this.open(); });
+			this.ui.toggleBtn.addEventListener('click', () => {
+				if (!this.isOpen) { this.open(); }
+				else { this.close(); }
+			});
 		}
 
 		if (this.ui.targetSelect) {
@@ -102,18 +105,20 @@ export class TelemetryPanel {
 		}
 	}
 
-	open() {
-		this.isOpen = !this.isOpen;
-		this.ui.panel.style.display = this.isOpen ? TM_STYLE.display.open : TM_STYLE.display.close;
-		this.ui.toggleBtn.textContent = this.isOpen ? TM_STYLE.text.open : TM_STYLE.text.close;
-		this.ui.toggleBtn.style.color = this.isOpen ? TM_STYLE.color.open : TM_STYLE.color.close;
-		this.ui.toggleBtn.style.borderColor = this.isOpen ? TM_STYLE.bColor.open : TM_STYLE.bColor.close;
+	_openCloseCtl(_open) {
+		this.isOpen = _open;
+		this.ui.panel.style.display = _open ? TM_STYLE.display.open : TM_STYLE.display.close;
+		this.ui.toggleBtn.textContent = _open ? TM_STYLE.text.open : TM_STYLE.text.close;
+		this.ui.toggleBtn.style.color = _open ? TM_STYLE.color.open : TM_STYLE.color.close;
+		this.ui.toggleBtn.style.borderColor = _open ? TM_STYLE.bColor.open : TM_STYLE.bColor.close;
 
-		if (this.isOpen) {
+		if (_open) {
 			this.lastUpdate = 0;
 			this.update();
 		}
 	}
+	open() { this._openCloseCtl(true); }
+	close() { this._openCloseCtl(false); }
 
 	update() {
 		if (!this.isOpen) { return; }
