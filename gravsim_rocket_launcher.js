@@ -205,9 +205,10 @@ export class RocketLauncher {
 			this.universe.updateZoomScale();
 		}
 		
-		// Fix time & zoom scale
+		// Fix time & zoom scale & camera target
 		this.universe.ControlPanel.rocketTab.saveTimeScale();
 		this.universe.ControlPanel.rocketTab.saveZoomScale();
+		this.universe.ControlPanel.rocketTab.saveCameraTarget();
 
 		// Open telemetry
 		this.universe.TelemetryPanel.open();
