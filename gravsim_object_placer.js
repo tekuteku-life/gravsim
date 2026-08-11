@@ -186,6 +186,10 @@ export class ObjectPlacer {
 	}
 
 	setReadyForLaunch(e) {
+		if (!e.touches && e.button !== 0) { 
+			return;
+		}
+
 		if (e.touches) {
 			if (e.touches.length > 1) {
 				this.isDragging = false;
