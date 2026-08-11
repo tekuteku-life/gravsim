@@ -172,8 +172,8 @@ export class ObjectPlacer {
 		}
 		
 		return {
-			x: (x - screenCenterX) / zoomScale + centerObjX,
-			y: (y - screenCenterY) / zoomScale + centerObjY,
+			x: (x - screenCenterX) / zoomScale + centerObjX + this.universe.cameraOffset.x,
+			y: (y - screenCenterY) / zoomScale + centerObjY + this.universe.cameraOffset.y,
 		};
 	}
 
@@ -213,6 +213,11 @@ export class ObjectPlacer {
 	}
 
 	goLaunch(e) {
+		if (!e.touches && e.button !== 0) {
+			this.isDragging = false;
+			return;
+		}
+
 		if (!this.isDragging || this.wasMultiTouch) {
 			this.isDragging = false;
 			return;

@@ -50,10 +50,16 @@ export class Renderer {
 		});
 	}
 
-	draw(objects, centerObject) {
+	draw(objects, centerObject, cameraOffset = {x: 0, y: 0}) {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+
+		// Apply offset to pan
+		const offsetX_px = -cameraOffset.x * this.zoomScale;
+		const offsetY_px = -cameraOffset.y * this.zoomScale;
+		this.ctx.translate(offsetX_px, offsetY_px);
+
 		if (this.rotation !== undefined) { this.ctx.rotate(this.rotation); }
 
 		// draw object

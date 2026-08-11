@@ -14,6 +14,10 @@ export class ControlPanel {
 	constructor(universe) {
 		this.universe = universe;
 		this.lastTouchDist = null;
+		this.lastTouchCenter = null;
+		this.isPanning = false;
+		this.hasPanned = false;
+		this.lastPanPos = { x: 0, y: 0 };
 
 		this._initElements();
 		
@@ -43,7 +47,42 @@ export class ControlPanel {
 		canvas.addEventListener('touchend', (e) => this._resetTouchDist(e));
 		canvas.addEventListener('touchcancel', () => this._resetTouchDist(null));
 
-		// --- Mobile Menu Toggle ---
+		// Pan Events (Right click or Middle click)
+		canvas.addEventListener('mousedown', (e) => {
+			if (e.button === 1 || e.button === 2) {
+				this.isPanning = true;
+				this.hasPanned = false;
+				this.lastPanPos = { x: e.clientX, y: e.clientY };
+			}
+		});
+		canvas.addEventListener('mousemove', (e) => {
+			if (this.isPanning) {
+				const dx = e.clientX - this.lastPanPos.x;
+				const dy = e.clientY - this.lastPanPos.y;
+				
+				if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+					this.hasPanned = true;
+				}
+				
+				const zoomScale = this.universe.zoomScale;
+				this.universe.cameraOffset.x -= dx / zoomScale;
+				this.universe.cameraOffset.y -= dy / zoomScale;
+				
+				this.lastPanPos = { x: e.clientX, y: e.clientY };
+			}
+		});
+		canvas.addEventListener('mouseup', (e) => {
+			if (e.button === 1 || e.button === 2) {
+				if (this.isPanning) {
+					e.preventDefault();
+				}
+				this.isPanning = false;
+			}
+		});
+		canvas.addEventListener('mouseleave', () => {
+			this.isPanning = false;
+		});
+
 		if (this.ui.mobileMenuToggle) {
 			this.ui.mobileMenuToggle.addEventListener('click', () => {
 				this.ui.ctrlPanel.classList.toggle('open');
@@ -87,23 +126,45 @@ export class ControlPanel {
 	_handleTouchZoom(e) {
 		if (e.touches.length === 2) {
 			e.preventDefault();
-			const dx = e.touches[0].clientX - e.touches[1].clientX;
-			const dy = e.touches[0].clientY - e.touches[1].clientY;
+			const touch1 = e.touches[0];
+			const touch2 = e.touches[1];
+			
+			const dx = touch1.clientX - touch2.clientX;
+			const dy = touch1.clientY - touch2.clientY;
 			const dist = Math.sqrt(dx * dx + dy * dy);
 
-			if (this.lastTouchDist !== null) {
+			const cx = (touch1.clientX + touch2.clientX) / 2;
+			const cy = (touch1.clientY + touch2.clientY) / 2;
+
+			if (this.lastTouchDist !== null && this.lastTouchCenter !== null) {
+				// Zoom
 				const delta = dist - this.lastTouchDist;
 				let step = this.systemTab.getZoomStep() || 0.1;
 				step = (delta > 0 ? step : -step) * Math.abs(delta) * 0.05;
 				this.systemTab.setZoomScaleByStep(step);
+
+				// Pan
+				const panX = cx - this.lastTouchCenter.x;
+				const panY = cy - this.lastTouchCenter.y;
+				
+				if (Math.abs(panX) > 2 || Math.abs(panY) > 2) {
+					this.hasPanned = true;
+				}
+
+				const zoomScale = this.universe.zoomScale;
+				this.universe.cameraOffset.x -= panX / zoomScale;
+				this.universe.cameraOffset.y -= panY / zoomScale;
 			}
+			
 			this.lastTouchDist = dist;
+			this.lastTouchCenter = { x: cx, y: cy };
 		}
 	}
 
 	_resetTouchDist(e) {
 		if (!e || e.touches.length < 2) {
 			this.lastTouchDist = null;
+			this.lastTouchCenter = null;
 		}
 	}
 
@@ -125,7 +186,7 @@ export class ControlPanel {
 
 	getState() {
 		return {
-			controlPanel: this.systemTab.getState(), // Match what loadState expects for cpState
+			controlPanel: this.systemTab.getState(),
 		};
 	}
 

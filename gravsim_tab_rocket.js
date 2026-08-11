@@ -14,6 +14,7 @@ export class RocketTab {
 		this.previousTimeScaleVal = null;
 		this.previousZoomScaleVal = null;
 		this.previousCameraTarget = null;
+		this.previousCameraOffset = null;
 		this._initElements();
 		this._bindEvents();
 	}
@@ -306,6 +307,7 @@ export class RocketTab {
 	saveCameraTarget() {
 		if (this.universe.centerObject !== null) {
 			this.previousCameraTarget = this.universe.centerObject;
+			this.previousCameraOffset = { ...this.universe.cameraOffset };
 		}
 	}
 
@@ -328,7 +330,11 @@ export class RocketTab {
 
 	restoreCameraTarget() {
 		if (this.previousCameraTarget !== null) {
-			this.universe.centerObject = this.previousCameraTarget;
+			// By pass setter to reset offset, unintentionally
+			this.universe.ObjectManager.centerObject = this.previousCameraTarget;
+			this.universe.cameraOffset = { ...this.previousCameraOffset };
+			this.universe.ControlPanel.systemTab.updateCenterOptions();
+			this.universe.InfoPanel.updateCamera(this.previousCameraTarget.name);
 		}
 	}
 

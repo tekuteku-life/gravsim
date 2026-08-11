@@ -18,13 +18,34 @@ export class ObjectManager {
 		this.centerObject = null;
 	}
 
-	ensureCenterObject() {
+	ensureCenterObject(currentOffset = {x: 0, y: 0}) {
 		if (this.centerObject && this.centerObject.state !== OBJECT_STATE.ACTIVE) {
-			const maxMassObj = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
-			this.centerObject = maxMassObj;
-			return true;
+			const oldCenter = this.centerObject;
+			let nextCenter = null;
+
+			// Tracking debris
+			const debrisName = oldCenter.name.endsWith(' Debris') ? oldCenter.name : `${oldCenter.name} Debris`;
+			const debrisList = this.objects.filter(o => o.name === debrisName && o.state === OBJECT_STATE.ACTIVE);
+			if (debrisList.length > 0) {
+				nextCenter = debrisList.reduce((max, obj) => obj.mass > max.mass ? obj : max, debrisList[0]);
+			}
+
+			// Select lergest object
+			if (!nextCenter && this.objects.length > 0) {
+				nextCenter = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
+			}
+
+			if (nextCenter) {
+				// Keep camera position
+				const newOffset = {
+					x: currentOffset.x + (oldCenter.x - nextCenter.x),
+					y: currentOffset.y + (oldCenter.y - nextCenter.y)
+				};
+				this.centerObject = nextCenter;
+				return { changed: true, newOffset, newCenter: nextCenter };
+			}
 		}
-		return false;
+		return { changed: false };
 	}
 
 	getNextId() {

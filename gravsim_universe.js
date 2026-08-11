@@ -59,12 +59,13 @@ class CalcWorkerManager {
 export class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
-		
+		this.cameraOffset = { x: 0, y: 0 };
+
 		// Initialize Modules
 		this.Renderer = new Renderer(_canvas);
 		this.CalcWorkerManager = new CalcWorkerManager();
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
-		
+
 		this.InfoPanel = new InfoPanel();
 		this.TelemetryPanel = new TelemetryPanel(this);
 		this.ControlPanel = new ControlPanel(this);
@@ -85,8 +86,9 @@ export class Universe {
 	get centerObject() { return this.ObjectManager.centerObject; }
 	set centerObject(obj) {
 		this.ObjectManager.centerObject = obj;
+		this.cameraOffset = { x: 0, y: 0 }; // Reset offset when camera target changed
 		this.ControlPanel.systemTab.updateCenterOptions();
-		this.InfoPanel.updateCamera(obj.name);
+		this.InfoPanel.updateCamera(obj ? obj.name : 'None');
 	}
 	get zoomScale() { return this.Renderer.zoomScale; }
 	
@@ -116,7 +118,13 @@ export class Universe {
 		// Reset for PC
 		this.canvas.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
-			this.reset();
+			// Reset when did not pan
+			if (this.ControlPanel && !this.ControlPanel.hasPanned) {
+				this.reset();
+			}
+			if (this.ControlPanel) {
+				this.ControlPanel.hasPanned = false;
+			}
 		});
 
 		// Reset for smart phone (double tap with 2 fingers)
@@ -150,9 +158,13 @@ export class Universe {
 
 	update(dt) {
 		// Center Object Check
-		const centerChanged = this.ObjectManager.ensureCenterObject();
-		if (centerChanged) {
+		const centerStatus = this.ObjectManager.ensureCenterObject(this.cameraOffset);
+		if (centerStatus.changed) {
+			// By pass setter to keep offset
+			this.ObjectManager.centerObject = centerStatus.newCenter;
+			this.cameraOffset = centerStatus.newOffset;
 			this.ControlPanel.updateCenterOptions();
+			this.InfoPanel.updateCamera(this.centerObject ? this.centerObject.name : 'None');
 		}
 
 		// Time Management
@@ -186,11 +198,12 @@ export class Universe {
 	}
 
 	draw() {
-		this.Renderer.draw(this.objects, this.centerObject);
+		this.Renderer.draw(this.objects, this.centerObject, this.cameraOffset);
 
 		this.ctx = this.canvas.getContext('2d');
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
+		this.ctx.translate(-this.cameraOffset.x * this.zoomScale, -this.cameraOffset.y * this.zoomScale);
 		this.RocketLauncher.drawPreview(this.ctx, this.centerObject, this.zoomScale);
 		this.ctx.restore();
 
@@ -200,6 +213,7 @@ export class Universe {
 	getState() {
 		return {
 			centerObjectId: this.centerObject ? this.centerObject.id : null,
+			cameraOffset: this.cameraOffset,
 			objectManager: this.ObjectManager.getState(),
 			rocketLauncher: this.RocketLauncher.getState(),
 			controlPanel: this.ControlPanel.getState()
@@ -216,6 +230,12 @@ export class Universe {
 		if (state.centerObjectId !== undefined && state.centerObjectId !== null) {
 			const target = this.objects.find(o => o.id === state.centerObjectId);
 			this.centerObject = target || (this.objects.length > 0 ? this.objects[0] : null);
+		}
+
+		if (state.cameraOffset) {
+			this.cameraOffset = state.cameraOffset;
+		} else {
+			this.cameraOffset = { x: 0, y: 0 };
 		}
 
 		if (state.rocketLauncher) {
