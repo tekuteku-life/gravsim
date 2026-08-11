@@ -1,3 +1,4 @@
+
 // gravsim_rocket_launcher.js
 
 import {
@@ -34,6 +35,7 @@ export class RocketLauncher {
 		this.thrustKN = 7000;	// (kN)
 		this.calculatedBurnTime = 0;
 		this.maxGLimit = 4.0;	// G
+		this.autoControl = true; // Auto Flight Computer flag
 	}
 
 	togglePreview(forceState = null) {
@@ -180,7 +182,8 @@ export class RocketLauncher {
 			angle: this.launchAngleDeg * (Math.PI / 180),
 			time: this.calculatedBurnTime,
 			lossRate: massLossRateTon,
-			maxGLimit: this.maxGLimit
+			maxGLimit: this.maxGLimit,
+			autoControl: this.autoControl
 		};
 
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
@@ -226,7 +229,8 @@ export class RocketLauncher {
 			initialMassT: this.dryMassT,
 			thrustKN: this.thrustKN,
 			burnTime: this.calculatedBurnTime,
-			maxGLimit: this.maxGLimit
+			maxGLimit: this.maxGLimit,
+			autoControl: this.autoControl
 		};
 	}
 
@@ -241,5 +245,6 @@ export class RocketLauncher {
 		if (state.thrustKN !== undefined) this.thrustKN = state.thrustKN;
 		if (state.burnTime !== undefined) this.calculatedBurnTime = state.burnTime;
 		if (state.maxGLimit !== undefined) this.maxGLimit = state.maxGLimit;
+		if (state.autoControl !== undefined) this.autoControl = state.autoControl;
 	}
 }

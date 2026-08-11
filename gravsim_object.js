@@ -318,6 +318,7 @@ export class Rocket extends GravSimObject {
 		this.maxGLimit = 0;
 		this.thrustRatio = 0;
 		this.flightTime = 0;
+		this.autoControl = true;
 		this.telemetry = {
 			status: 0,
 			qAxialKpa: 0, qLateralKpa: 0, structRatio: 0,

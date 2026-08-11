@@ -55,6 +55,7 @@ export class ObjectManager {
 			thrustAngle: obj.thrustAngle || 0,
 			massLossRate: (obj.massLossRate || 0) * 1e3,
 			maxGLimit: obj.maxGLimit || 0,
+			autoControl: isRocket ? obj.autoControl : true,
 		});
 	}
 

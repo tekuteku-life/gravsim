@@ -38,7 +38,8 @@ class PhysicsEngine {
 					burnTime: data.burnTime,
 					thrustAngle: data.thrustAngle,
 					maxGLimit: data.maxGLimit,
-					massLossRate: data.massLossRate
+					massLossRate: data.massLossRate,
+					autoControl: data.autoControl
 				}
 			));
 		} else {

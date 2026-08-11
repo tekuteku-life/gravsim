@@ -165,6 +165,7 @@ class GravSimCalcObject {
 		// Max-Q structural check
 		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
 		if (q > maxQ) {
+			console.info(this.name + "(ID:" + this.id + ") was destructed by dynamic pressure");
 			this.shattered = true;
 			return;
 		}
@@ -196,6 +197,7 @@ export class CalcRocket extends GravSimCalcObject {
 		this.thrustAngle = thrustData?.thrustAngle || 0;
 		this.massLossRate = thrustData?.massLossRate || 0;
 		this.maxGLimit = thrustData?.maxGLimit || 0;
+		this.autoControl = thrustData?.autoControl !== undefined ? thrustData.autoControl : true;
 		this._thrustRatio = 0;
 		
 		this._qAxialKpa = 0;
@@ -232,8 +234,13 @@ export class CalcRocket extends GravSimCalcObject {
 		};
 
 		const command = this.flightComputer.update(sensorData);
-		throttle = command.throttle;
-		this.thrustAngle = command.thrustAngleRad;
+		
+		if (this.autoControl) {
+			throttle = command.throttle;
+			this.thrustAngle = command.thrustAngleRad;
+		} else {
+			throttle = 1.0;
+		}
 
 		if (this.burnTime > 0) {
 			// The time consumed is proportional to the throttle

@@ -38,6 +38,7 @@ export class RocketTab {
 			rlLaunchThrustVal: document.getElementById('rl-launch-thrust-val'),
 			rlLaunchMaxG: document.getElementById('rl-launch-maxg'),
 			rlLaunchMaxGVal: document.getElementById('rl-launch-maxg-val'),
+			rlAutoControl: document.getElementById('rl-auto-control'),
 			rlStatDv: document.getElementById('rl-stat-dv'),
 			rlStatHostName: document.getElementById('rl-stat-host-name'),
 			rlStatTwrY: document.getElementById('rl-stat-twr-y'),
@@ -76,6 +77,12 @@ export class RocketTab {
 			this.ui.rlHostSelect.addEventListener('focus', () => {
 				this._updateRocketHostOptions();
 				this._updateRocketStats();
+			});
+		}
+
+		if (this.ui.rlAutoControl) {
+			this.ui.rlAutoControl.addEventListener('change', (e) => {
+				this.universe.RocketLauncher.autoControl = e.target.checked;
 			});
 		}
 
@@ -348,6 +355,11 @@ export class RocketTab {
 		updateSlider('rlFuelAmount', 'rlFuelAmountVal', rlState.fuelAmountT);
 		if (this.ui.rlFuelType && rlState.fuelType) { this.ui.rlFuelType.value = rlState.fuelType; }
 		updateSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', rlState.maxGLimit);
+
+		if (rlState.autoControl !== undefined && this.ui.rlAutoControl) {
+			this.ui.rlAutoControl.checked = rlState.autoControl;
+			this.universe.RocketLauncher.autoControl = rlState.autoControl;
+		}
 
 		this._updateRocketStats();
 	}

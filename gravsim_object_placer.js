@@ -73,6 +73,10 @@ export class ObjectPlacer {
 				obj.massLossRate = options.lossRate || 0;
 				obj.maxGLimit = options.maxGLimit || 0;
 			}
+
+			if (options.autoControl !== undefined) {
+				obj.autoControl = options.autoControl;
+			}
 		} else {
 			obj = new CelestialBody(
 				nextId, param.NAME,
