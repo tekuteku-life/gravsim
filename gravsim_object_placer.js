@@ -1,14 +1,11 @@
 
 // gravsim_object_placer.js
 
-import {
-	METERS_PER_AU, G,
-	TIME_SCALE, THROW_SCALE, DEFAULT_OBJECT_PARAMS
-} from './gravsim_const.js';
+import { PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
 
 function AU2M(au) {
-	return au * METERS_PER_AU;
+	return au * PHYSICS.METERS_PER_AU;
 }
 
 /*******************************************************************
@@ -107,7 +104,7 @@ export class ObjectPlacer {
 
 		// Calculate velocity at perihelion by using Vis-viva equation
 		const totalMassKg = (hostObj.mass + param.MASS) * 1e3;
-		const v_p_m = Math.sqrt(G * totalMassKg * (2 / r_p_m - 1 / a_m));
+		const v_p_m = Math.sqrt(PHYSICS.G * totalMassKg * (2 / r_p_m - 1 / a_m));
 
 		const perihelionDeg = param.PERIHELION_DEG || 0;
 		const theta = perihelionDeg * (Math.PI / 180);
@@ -233,10 +230,10 @@ export class ObjectPlacer {
 		const endX = pos.x;
 		const endY = pos.y;
 		const endTime = Date.now();
-		const dt = Math.max((endTime - this.startTime) / TIME_SCALE, 0.01);
+		const dt = Math.max((endTime - this.startTime) / SIMULATION.TIME_SCALE, 0.01);
 
-		const vx = this.universe.pix2m((endX - this.startX) / dt / THROW_SCALE);
-		const vy = this.universe.pix2m((endY - this.startY) / dt / THROW_SCALE);
+		const vx = this.universe.pix2m((endX - this.startX) / dt / SIMULATION.THROW_SCALE);
+		const vy = this.universe.pix2m((endY - this.startY) / dt / SIMULATION.THROW_SCALE);
 		
 		this.placeObject(
 			name,

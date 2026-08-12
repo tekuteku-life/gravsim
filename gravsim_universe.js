@@ -1,10 +1,7 @@
 
 // gravsim_universe.js
 
-import {
-	YEARS_PER_SECOND, TIME_SCALE, OBJECT_STATE,
-	UI_DOUBLE_TAP_DURATION, OBJECT_TYPES,
-} from './gravsim_const.js';
+import { PHYSICS, SIMULATION, OBJECT_STATE, UI, OBJECT_TYPES } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
 import { InfoPanel } from './gravsim_info_panel.js';
 import { TelemetryPanel } from './gravsim_telemetry_panel.js';
@@ -133,7 +130,7 @@ export class Universe {
 			if (e.touches && e.touches.length === 2) {
 				const now = Date.now();
 
-				if (now - lastTwoFingerTapTime < UI_DOUBLE_TAP_DURATION) {
+				if (now - lastTwoFingerTapTime < UI.DOUBLE_TAP_DURATION) {
 					e.preventDefault();
 					this.reset();
 					lastTwoFingerTapTime = 0; 
@@ -170,7 +167,7 @@ export class Universe {
 		// Time Management
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
-		const scaledDt = dt * (YEARS_PER_SECOND / TIME_SCALE) * this.timeScale;
+		const scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
 
 		// Update flight time for rocket
 		this.objects.forEach(obj => {

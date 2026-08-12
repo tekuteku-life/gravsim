@@ -2,12 +2,7 @@
 // gravsim_telemetry_panel.js
 
 import { Renderer } from './gravsim_renderer.js';
-import {
-	TELEMETRY_UPDATE_INTERVAL_MS,
-	TELEMETRY_SUB_VIEW_TARGET_RADIUS,
-	TELEMETRY_SUB_VIEW_MAX_ZOOM,
-	MISSION_STATUS, OBJECT_TYPES,
-} from './gravsim_const.js';
+import { UI, TELEMETRY, OBJECT_TYPES } from './gravsim_const.js';
 
 const TM_STYLE = {
 	missionStatusColor: { normal: '#00ffcc', max_q: '#ff5555' },
@@ -18,7 +13,7 @@ export class TelemetryPanel {
 		this.universe = universe;
 		this.isOpen = false;
 		this.lastUpdate = 0;
-		this.intervalMs = TELEMETRY_UPDATE_INTERVAL_MS;
+		this.intervalMs = UI.UPDATE_INTERVAL.TELEMETRY;
 
 		this.targetId = null;
 		this.lastObjCount = -1;
@@ -187,19 +182,9 @@ export class TelemetryPanel {
 		if (pct < 0.5) { pct = 0; }
 		this.ui.fuelBar.style.width = `${pct}%`;
 
-		// Status Mapping
-		const statusMap = {
-			0: MISSION_STATUS.PRE_LAUNCH,
-			1: MISSION_STATUS.LIFTOFF,
-			2: MISSION_STATUS.ASCENT,
-			3: MISSION_STATUS.MAX_Q,
-			4: MISSION_STATUS.MECO,
-			5: MISSION_STATUS.COASTING,
-			6: MISSION_STATUS.TRACKING
-		};
-		const mStat = statusMap[tm.status] || MISSION_STATUS.PRE_LAUNCH;
+		const mStat = TELEMETRY.STATUS_MAP[tm.status] || TELEMETRY.STATUS_MAP[0];
 		this.ui.missionStatus.innerText = mStat;
-		if (mStat === MISSION_STATUS.MAX_Q) { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.max_q; }
+		if (mStat === TELEMETRY.STATUS_MAP[3]) { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.max_q; }
 		else { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.normal; }
 
 		this._updateMissionTimeUI(tm.flightTime);
@@ -227,7 +212,7 @@ export class TelemetryPanel {
 		this.ui.prop.innerText = "---".padStart(6, ' ');
 		this.ui.fuelBar.style.width = `0%`;
 
-		this.ui.missionStatus.innerText = MISSION_STATUS.TRACKING;
+		this.ui.missionStatus.innerText = TELEMETRY.STATUS_MAP[6];
 		this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.normal;
 
 		this.ui.missionTime.innerText = "T+ ---y ---d --:--:--";
@@ -291,9 +276,9 @@ export class TelemetryPanel {
 		if (targetObj && targetObj.type === OBJECT_TYPES.ROCKET) {
 			const realRadiusPx = this.universe.m2pix(targetObj.radius);
 
-			// Keep the radius of the object 20px on Sub screen
-			let subZoom = TELEMETRY_SUB_VIEW_TARGET_RADIUS / Math.max(realRadiusPx, 1e-10);
-			subZoom = Math.min(subZoom, TELEMETRY_SUB_VIEW_MAX_ZOOM);
+			// Keep the radius of the object specified size on Sub screen
+			let subZoom = TELEMETRY.SUB_VIEW_TARGET_RADIUS / Math.max(realRadiusPx, 1e-10);
+			subZoom = Math.min(subZoom, TELEMETRY.SUB_VIEW_MAX_ZOOM);
 
 			this.subRenderer.setZoomScale(subZoom);
 			this.subRenderer.draw(this.universe.objects, targetObj);

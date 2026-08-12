@@ -2,13 +2,9 @@
 // gravsim_calc.js
 
 import {
-	G, C, G0, YEARS_PER_SECOND,
-	TIME_SCALE, OBJECT_TYPES,
-	ROCHE_MIN_MASS_TO_DESTROY, ROCHE_UNBREAKABLE_DENSITY,
-	ROCHE_RIGID_BODY_RADIUS, ROCHE_RIGID_DESTROYER_MASS,
-	DEBRIS_MAX_GENERATION, DEBRIS_MIN_MASS_TO_SHATTER,
-	CALC_EXPAND_DIV_NUM, CALC_SUB_STEPS_BASE, CALC_SUB_STEPS_MAX,
-	DEFAULT_OBJECT_PARAMS
+	PHYSICS, SIMULATION, ROCHE_LIMIT, DEBRIS,
+	CALC_BUFFER_CONFIG, BUFFER_INDEX,
+	OBJECT_TYPES, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js'
 
 import { CalcCelestialBody, CalcRocket } from './gravsim_calc_object.js'
@@ -107,7 +103,7 @@ class PhysicsEngine {
 					const vRelSq = dvx * dvx + dvy * dvy;
 
 					// The square of escape speed (v_esc^2 = 2GM / R)
-					const escapeVSq = (2 * G * totalMass) / (winner.radius + loser.radius);
+					const escapeVSq = (2 * PHYSICS.G * totalMass) / (winner.radius + loser.radius);
 
 					// Energy ratio (higher value generates more debris)
 					const energyRatio = vRelSq / escapeVSq;
@@ -119,7 +115,7 @@ class PhysicsEngine {
 					const winnerDensity = winner.mass / Math.pow(winner.radius, 3);
 
 					// Debris isn't disrupted
-					if (winnerDensity <= ROCHE_UNBREAKABLE_DENSITY && !loser.isDebris) {
+					if (winnerDensity <= ROCHE_LIMIT.UNBREAKABLE_DENSITY && !loser.isDebris) {
 						debrisRatio = massRatio * (energyRatio * 0.5);
 						debrisRatio = Math.max(0.0, Math.min(debrisRatio, 0.9));
 
@@ -161,7 +157,7 @@ class PhysicsEngine {
 			const massiveObj = this.objects[i];
 
 			if (massiveObj.collided || massiveObj.shattered) { continue; }
-			if (massiveObj.mass < ROCHE_MIN_MASS_TO_DESTROY) { continue; }
+			if (massiveObj.mass < ROCHE_LIMIT.MIN_MASS_TO_DESTROY) { continue; }
 
 			for (let j = 0; j < this.objects.length; j++) {
 				if (i === j) { continue; }
@@ -171,9 +167,9 @@ class PhysicsEngine {
 
 				// Decrease calculation cost
 				if (massiveObj.mass <= fragileObj.mass) { continue; }
-				if (fragileObj.radius < ROCHE_RIGID_BODY_RADIUS) { continue; }
-				if (fragileObj.generation >= DEBRIS_MAX_GENERATION) { continue; }
-				if (fragileObj.isDebris && fragileObj.mass < DEBRIS_MIN_MASS_TO_SHATTER) { continue; }
+				if (fragileObj.radius < ROCHE_LIMIT.RIGID_BODY_RADIUS) { continue; }
+				if (fragileObj.generation >= DEBRIS.MAX_GENERATION) { continue; }
+				if (fragileObj.isDebris && fragileObj.mass < DEBRIS.MIN_MASS_TO_SHATTER) { continue; }
 
 				if (fragileObj.isRocheLimit(massiveObj)) {
 					fragileObj.shattered = true;
@@ -271,9 +267,9 @@ class PhysicsEngine {
 
 			// Limit to C
 			const v = obj.getV();
-			if (v > C) {
-				obj.vx = C * (obj.vx / v);
-				obj.vy = C * (obj.vy / v);
+			if (v > PHYSICS.C) {
+				obj.vx = PHYSICS.C * (obj.vx / v);
+				obj.vy = PHYSICS.C * (obj.vy / v);
 			}
 		}
 	}
@@ -303,7 +299,7 @@ class SimulationController {
 
 		self.onmessage = this.handleMessage.bind(this);
 
-		setInterval(() => this.update(), 1000 / CALC_INTERVAL);
+		setInterval(() => this.update(), 1000 / SIMULATION.CALC_INTERVAL);
 	}
 
 	handleMessage(e) {
@@ -339,12 +335,12 @@ class SimulationController {
 		// Avoidance of div 0
 		if (elapsed <= 0) { return; }
 
-		const totalDt = elapsed * YEARS_PER_SECOND / TIME_SCALE * this.timeScale;
+		const totalDt = elapsed * PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE * this.timeScale;
 		this.lastTime = now;
 
 		// Calculate sub-step
-		let SUB_STEPS = Math.ceil(CALC_SUB_STEPS_BASE * this.timeScale);
-		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, CALC_SUB_STEPS_MAX));
+		let SUB_STEPS = Math.ceil(SIMULATION.CALC_SUB_STEPS_BASE * this.timeScale);
+		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, SIMULATION.CALC_SUB_STEPS_MAX));
 		const dt = totalDt / SUB_STEPS;
 
 		for (let i = 0; i < SUB_STEPS; i++) {
@@ -363,60 +359,59 @@ class SimulationController {
 	}
 
 	formatForMessage() {
-		const OBJ_ATTR_COUNT = 37;
-		const buffer = new Float64Array(this.engine.objects.length * OBJ_ATTR_COUNT);
+		const buffer = new Float64Array(this.engine.objects.length * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT);
 
 		for (let i = 0; i < this.engine.objects.length; i++) {
 			const obj = this.engine.objects[i];
-			const offset = i * OBJ_ATTR_COUNT;
+			const offset = i * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
 
-			buffer[offset + 0] = obj.id;
-			buffer[offset + 1] = obj.type;
-			buffer[offset + 2] = obj.x || 0;
-			buffer[offset + 3] = obj.y || 0;
-			buffer[offset + 4] = obj.vx || 0;
-			buffer[offset + 5] = obj.vy || 0;
-			buffer[offset + 6] = obj.ax || 0;
-			buffer[offset + 7] = obj.ay || 0;
+			buffer[offset + BUFFER_INDEX.ID] = obj.id;
+			buffer[offset + BUFFER_INDEX.TYPE] = obj.type;
+			buffer[offset + BUFFER_INDEX.X] = obj.x || 0;
+			buffer[offset + BUFFER_INDEX.Y] = obj.y || 0;
+			buffer[offset + BUFFER_INDEX.VX] = obj.vx || 0;
+			buffer[offset + BUFFER_INDEX.VY] = obj.vy || 0;
+			buffer[offset + BUFFER_INDEX.AX] = obj.ax || 0;
+			buffer[offset + BUFFER_INDEX.AY] = obj.ay || 0;
 			
 			if (obj.type === OBJECT_TYPES.ROCKET) {
-				buffer[offset + 8] = obj.dryMass;
-				buffer[offset + 9] = obj.fuelMass;
-				buffer[offset + 11] = obj.burnTime > 0 ? obj.burnTime : 0;
-				buffer[offset + 12] = obj._thrustRatio || 0;
+				buffer[offset + BUFFER_INDEX.MASS] = obj.dryMass;
+				buffer[offset + BUFFER_INDEX.FUEL_MASS] = obj.fuelMass;
+				buffer[offset + BUFFER_INDEX.BURN_TIME] = obj.burnTime > 0 ? obj.burnTime : 0;
+				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = obj._thrustRatio || 0;
 				
 				const tm = obj.flightComputer.getTelemetry();
-				buffer[offset + 20] = tm.status;
-				buffer[offset + 21] = tm.qAxialKpa;
-				buffer[offset + 22] = tm.qLateralKpa;
-				buffer[offset + 23] = tm.structRatio;
-				buffer[offset + 24] = tm.aoaDeg;
-				buffer[offset + 25] = tm.progradeAngle;
-				buffer[offset + 26] = tm.gravityAngle;
-				buffer[offset + 27] = tm.remDv;
-				buffer[offset + 28] = tm.twr;
-				buffer[offset + 29] = tm.altM;
-				buffer[offset + 30] = tm.vV;
-				buffer[offset + 31] = tm.vH;
-				buffer[offset + 32] = tm.aV;
-				buffer[offset + 33] = tm.aH;
-				buffer[offset + 34] = tm.currentG;
-				buffer[offset + 35] = obj.flightComputer.flightTime;
-				buffer[offset + 36] = obj.thrustAngle;
+				buffer[offset + BUFFER_INDEX.TM_STATUS] = tm.status;
+				buffer[offset + BUFFER_INDEX.TM_Q_AXIAL] = tm.qAxialKpa;
+				buffer[offset + BUFFER_INDEX.TM_Q_LATERAL] = tm.qLateralKpa;
+				buffer[offset + BUFFER_INDEX.TM_STRUCT_RATIO] = tm.structRatio;
+				buffer[offset + BUFFER_INDEX.TM_AOA_DEG] = tm.aoaDeg;
+				buffer[offset + BUFFER_INDEX.TM_PROGRADE_ANGLE] = tm.progradeAngle;
+				buffer[offset + BUFFER_INDEX.TM_GRAVITY_ANGLE] = tm.gravityAngle;
+				buffer[offset + BUFFER_INDEX.TM_REM_DV] = tm.remDv;
+				buffer[offset + BUFFER_INDEX.TM_TWR] = tm.twr;
+				buffer[offset + BUFFER_INDEX.TM_ALT_M] = tm.altM;
+				buffer[offset + BUFFER_INDEX.TM_VV] = tm.vV;
+				buffer[offset + BUFFER_INDEX.TM_VH] = tm.vH;
+				buffer[offset + BUFFER_INDEX.TM_AV] = tm.aV;
+				buffer[offset + BUFFER_INDEX.TM_AH] = tm.aH;
+				buffer[offset + BUFFER_INDEX.TM_CURRENT_G] = tm.currentG;
+				buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME] = obj.flightComputer.flightTime;
+				buffer[offset + BUFFER_INDEX.THRUST_ANGLE] = obj.thrustAngle;
 			} else {
-				buffer[offset + 8] = obj.mass;
-				buffer[offset + 9] = 0;
-				buffer[offset + 11] = 0;
-				buffer[offset + 12] = 0;
+				buffer[offset + BUFFER_INDEX.MASS] = obj.mass;
+				buffer[offset + BUFFER_INDEX.FUEL_MASS] = 0;
+				buffer[offset + BUFFER_INDEX.BURN_TIME] = 0;
+				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = 0;
 			}
-			buffer[offset + 10] = obj.radius || 1;
-			buffer[offset + 13] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0);
-			buffer[offset + 14] = obj.debrisMass || 0;
-			buffer[offset + 15] = obj.impactVx || 0;
-			buffer[offset + 16] = obj.impactVy || 0;
-			buffer[offset + 17] = obj.impactWinnerX || 0;
-			buffer[offset + 18] = obj.impactWinnerY || 0;
-			buffer[offset + 19] = obj.impactWinnerRadius || 0;
+			buffer[offset + BUFFER_INDEX.RADIUS] = obj.radius || 1;
+			buffer[offset + BUFFER_INDEX.FLAGS] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0);
+			buffer[offset + BUFFER_INDEX.DEBRIS_MASS] = obj.debrisMass || 0;
+			buffer[offset + BUFFER_INDEX.IMPACT_VX] = obj.impactVx || 0;
+			buffer[offset + BUFFER_INDEX.IMPACT_VY] = obj.impactVy || 0;
+			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_X] = obj.impactWinnerX || 0;
+			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_Y] = obj.impactWinnerY || 0;
+			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_RADIUS] = obj.impactWinnerRadius || 0;
 		}
 		return buffer;
 	}

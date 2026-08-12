@@ -1,7 +1,6 @@
 
 // gravsim_control_panel.js
 
-import { UI_DOUBLE_TAP_DURATION } from './gravsim_const.js';
 import { SystemTab } from './gravsim_tab_system.js';
 import { DeployTab } from './gravsim_tab_deploy.js';
 import { RocketTab } from './gravsim_tab_rocket.js';
@@ -73,9 +72,6 @@ export class ControlPanel {
 		});
 		canvas.addEventListener('mouseup', (e) => {
 			if (e.button === 1 || e.button === 2) {
-				if (this.isPanning) {
-					e.preventDefault();
-				}
 				this.isPanning = false;
 			}
 		});

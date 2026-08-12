@@ -1,7 +1,7 @@
 
 // gravsim_tab_system.js
 
-import { DISTANCE_SCALE, METERS_PER_AU, TIME_SCALE } from './gravsim_const.js';
+import { PHYSICS, RENDER, SIMULATION } from './gravsim_const.js';
 
 export class SystemTab {
 	constructor(universe) {
@@ -80,7 +80,7 @@ export class SystemTab {
 	updateTimeScaleIndicator(val) {
 		if (!this.ui.timeIndicator) { return; }
 
-		const yearsPerSec = (1000 / TIME_SCALE) * val;
+		const yearsPerSec = (1000 / SIMULATION.TIME_SCALE) * val;
 		let text = "";
 
 		if (yearsPerSec >= 1) {
@@ -105,8 +105,8 @@ export class SystemTab {
 	updateZoomScaleIndicator(val) {
 		if (!this.ui.zoomIndicator) { return; }
 
-		const auPer100Px = 100 / (val * DISTANCE_SCALE);
-		const kmPer100Px = auPer100Px * (METERS_PER_AU / 1000);
+		const auPer100Px = 100 / (val * RENDER.DISTANCE_SCALE);
+		const kmPer100Px = auPer100Px * (PHYSICS.METERS_PER_AU / 1000);
 		let text = "";
 
 		if (auPer100Px >= 0.1) {

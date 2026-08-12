@@ -2,10 +2,7 @@
 // gravsim_object.js
 
 import {
-	DISTANCE_SCALE, TARGET_TRAIL_LENGTH_AU, HISTORY_LENGTH,
-	OBJECT_STATE, METERS_PER_AU,
-	SPARKLE_ANIM_SPEED, SPARKLE_ROTATE_SPEED,
-	SPARKLE_STAR_SIZE_RATIO, SPARKLE_STAR_INNER_SIZE_RATIO, SPARKLE_MAX_SIZE_PX,
+	PHYSICS, RENDER, OBJECT_STATE,
 	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES
 } from './gravsim_const.js';
 
@@ -46,7 +43,7 @@ export class GravSimObject {
 			return;
 		}
 
-		if (this.history.length >= HISTORY_LENGTH) {
+		if (this.history.length >= RENDER.HISTORY_LENGTH) {
 			this.history.shift();
 		}
 		this.history.push({ x: this.x, y: this.y });
@@ -144,7 +141,7 @@ export class GravSimObject {
 
 	// Calculate switching between fixed size and real physical size
 	_getDrawRadius(zoomScale) {
-		const realRadiusPx = (this.radius / METERS_PER_AU) * DISTANCE_SCALE;
+		const realRadiusPx = (this.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 		const screenRadiusPx = realRadiusPx * zoomScale;
 
 		// this.size acts as the minimum visual radius on the screen
@@ -177,13 +174,13 @@ export class GravSimObject {
 
 	_drawEscapeSparkle(ctx, x, y, screenRadius) {
 		const now = Date.now();
-		const blink = Math.abs(Math.sin(now / SPARKLE_ANIM_SPEED + this.id)); 
+		const blink = Math.abs(Math.sin(now / RENDER.SPARKLE.ANIM_SPEED + this.id)); 
 
-		const rawStarSize = screenRadius * SPARKLE_STAR_SIZE_RATIO; 
-		const starSize = Math.min(rawStarSize, SPARKLE_MAX_SIZE_PX);
-		const innerSize = starSize * (SPARKLE_STAR_INNER_SIZE_RATIO / SPARKLE_STAR_SIZE_RATIO); 
+		const rawStarSize = screenRadius * RENDER.SPARKLE.STAR_SIZE_RATIO; 
+		const starSize = Math.min(rawStarSize, RENDER.SPARKLE.MAX_SIZE_PX);
+		const innerSize = starSize * (RENDER.SPARKLE.STAR_INNER_SIZE_RATIO / RENDER.SPARKLE.STAR_SIZE_RATIO); 
 
-		// Shift in the direction opposite to the direction of travel 
+		// Shift in the direction opposite to the direction of travel
 		const vAngle = Math.atan2(this.vy, this.vx);
 		const offsetDist = screenRadius + starSize * 0.8; // Space them out a little so they don't overlap.
 		const offsetX = x - Math.cos(vAngle) * offsetDist;
@@ -191,7 +188,7 @@ export class GravSimObject {
 
 		ctx.save();
 		ctx.translate(offsetX, offsetY);
-		ctx.rotate(now / SPARKLE_ROTATE_SPEED); 
+		ctx.rotate(now / RENDER.SPARKLE.ROTATE_SPEED); 
 
 		ctx.globalAlpha = blink;
 		ctx.fillStyle = "#FFFFFF"; 
@@ -211,7 +208,7 @@ export class GravSimObject {
 	}
 
 	_drawTrail(ctx, basis, zoomScale) {
-		const targetLength = TARGET_TRAIL_LENGTH_AU * DISTANCE_SCALE;
+		const targetLength = RENDER.TARGET_TRAIL_LENGTH_AU * RENDER.DISTANCE_SCALE;
 		let drawTrailCount = this.history.length;
 
 		if (this.history.length >= 2) {
@@ -276,7 +273,7 @@ export class CelestialBody extends GravSimObject {
 		const param = DEFAULT_OBJECT_PARAMS[this.name];
 		
 		if (param && param.ATM_COLOR && param.ATM_LIMIT_ALT) {
-			const atmThicknessPx = (param.ATM_LIMIT_ALT / METERS_PER_AU) * DISTANCE_SCALE;
+			const atmThicknessPx = (param.ATM_LIMIT_ALT / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 			const screenThicknessPx = atmThicknessPx * zoomScale;
 
 			if (screenThicknessPx >= 1) {

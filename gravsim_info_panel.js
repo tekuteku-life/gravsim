@@ -1,10 +1,7 @@
 
 // gravsim_info_panel.js
 
-import {
-	YEARS_PER_SECOND,
-	UI_INFO_PANEL_UPDATA_INTERVAL,
-} from './gravsim_const.js';
+import { PHYSICS, UI } from './gravsim_const.js';
 
 /*******************************************************************
  * InfoPanel class that manages the information panel.
@@ -35,7 +32,7 @@ export class InfoPanel {
 	}
 
 	updateElapsedTime(dt) {
-		this.elapsedTime += dt / YEARS_PER_SECOND;
+		this.elapsedTime += dt / PHYSICS.YEARS_PER_SECOND;
 		if (this.ui.elapsed) {
 			const y = Math.floor(this.elapsedTime);
 			const d = Math.floor((this.elapsedTime - y) * 365.25);
@@ -60,7 +57,7 @@ export class InfoPanel {
 		const now = new Date();
 		const elapsed = now - this.lastTime;
 		this.fpsCount++;
-		if (elapsed >= UI_INFO_PANEL_UPDATA_INTERVAL) {
+		if (elapsed >= UI.UPDATE_INTERVAL.INFO_PANEL) {
 			const fps = (this.fpsCount / (elapsed / 1e3)).toFixed(1);
 			if (this.ui.fps) {
 				this.ui.fps.textContent = fps;

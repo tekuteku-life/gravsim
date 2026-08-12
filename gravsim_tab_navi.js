@@ -1,11 +1,7 @@
 
 // gravsim_tab_navi.js
 
-import {
-	DEFAULT_OBJECT_PARAMS, G, G0,
-	UI_NAVI_UPDATE_UPDATE_INTERVAL,
-	OBJECT_TYPES,
-} from './gravsim_const.js';
+import { PHYSICS, UI, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 
 export class NaviTab {
 	constructor(universe) {
@@ -49,7 +45,7 @@ export class NaviTab {
 			if (this.ui.nvTab && this.ui.nvTab.classList.contains('active')) {
 				this._updateNaviStats();
 			}
-		}, UI_NAVI_UPDATE_UPDATE_INTERVAL);
+		}, UI.UPDATE_INTERVAL.NAVI);
 	}
 
 	update() {
@@ -87,10 +83,10 @@ export class NaviTab {
 		this.ui.nvMass.innerText = target.mass.toExponential(2) + " t";
 		this.ui.nvRadius.innerText = (target.radius/1000).toLocaleString('en-US') + " km";
 
-		const surfaceG_ms2 = (G * (target.mass*1e3)) / (target.radius * target.radius);
-		this.ui.nvSurfaceG.innerText = (surfaceG_ms2 / G0).toFixed(2) + " G (" + surfaceG_ms2.toFixed(2) + " m/s²)";
+		const surfaceG_ms2 = (PHYSICS.G * (target.mass*1e3)) / (target.radius * target.radius);
+		this.ui.nvSurfaceG.innerText = (surfaceG_ms2 / PHYSICS.G0).toFixed(2) + " G (" + surfaceG_ms2.toFixed(2) + " m/s²)";
 
-		const escapeV = Math.sqrt(2 * G * (target.mass*1e3) / target.radius);
+		const escapeV = Math.sqrt(2 * PHYSICS.G * (target.mass*1e3) / target.radius);
 		this.ui.nvEscapeV.innerText = (escapeV/1000).toFixed(2) + " km/s";
 
 		let refBody = null;

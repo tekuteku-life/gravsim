@@ -2,11 +2,9 @@
 // gravsim_object_manager.js
 
 import {
-	G, REMOVE_DISTANCE_AU, DEBRIS_MIN_FRAG,
-	DEBRIS_FRAG_DECAY_RATE, OBJECT_STATE,
-	DEBRIS_IMPACT_SCATTER_BASE, DEBRIS_IMPACT_SCATTER_VAR,
-	DEBRIS_SHATTER_SCATTER_BASE, DEBRIS_SHATTER_SCATTER_VAR,
-	DEBRIS_MASS_VAR_BASE, DEBRIS_MASS_VAR_RANGE, OBJECT_TYPES
+	PHYSICS, SIMULATION, DEBRIS,
+	OBJECT_STATE, OBJECT_TYPES,
+	CALC_BUFFER_CONFIG, BUFFER_INDEX
 } from './gravsim_const.js';
 import { GravSimObject, CelestialBody, Rocket } from './gravsim_object.js';
 
@@ -102,55 +100,54 @@ export class ObjectManager {
 
 	updateObjectParams(data) {
 		const buffer = new Float64Array(data.objectsData);
-		const OBJ_ATTR_COUNT = 37;
-		const objCount = buffer.length / OBJ_ATTR_COUNT;
+		const objCount = buffer.length / CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
 
 		for (let i = 0; i < objCount; i++) {
-			const offset = i * OBJ_ATTR_COUNT;
-			const id = buffer[offset + 0];
+			const offset = i * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
+			const id = buffer[offset + BUFFER_INDEX.ID];
 
 			const target = this.objects.find(t => t.id === id);
 			if (target) {
-				const type = buffer[offset + 1];
-				target.x = this.renderer.m2pix(buffer[offset + 2]);
-				target.y = this.renderer.m2pix(buffer[offset + 3]);
-				target.vx = this.renderer.m2pix(buffer[offset + 4]);
-				target.vy = this.renderer.m2pix(buffer[offset + 5]);
-				target.ax = this.renderer.m2pix(buffer[offset + 6]);
-				target.ay = this.renderer.m2pix(buffer[offset + 7]);
+				const type = buffer[offset + BUFFER_INDEX.TYPE];
+				target.x = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.X]);
+				target.y = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.Y]);
+				target.vx = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.VX]);
+				target.vy = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.VY]);
+				target.ax = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.AX]);
+				target.ay = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.AY]);
 
 				if (type === OBJECT_TYPES.ROCKET) {
-					target.dryMass = buffer[offset + 8] / 1e3;
-					target.fuelMass = buffer[offset + 9] / 1e3;
-					target.burnTime = buffer[offset + 11];
-					target.thrustRatio = buffer[offset + 12];
+					target.dryMass = buffer[offset + BUFFER_INDEX.MASS] / 1e3;
+					target.fuelMass = buffer[offset + BUFFER_INDEX.FUEL_MASS] / 1e3;
+					target.burnTime = buffer[offset + BUFFER_INDEX.BURN_TIME];
+					target.thrustRatio = buffer[offset + BUFFER_INDEX.THRUST_RATIO];
 
 					target.telemetry = {
-						status: buffer[offset + 20],
-						qAxialKpa: buffer[offset + 21],
-						qLateralKpa: buffer[offset + 22],
-						structRatio: buffer[offset + 23],
-						aoaDeg: buffer[offset + 24],
-						progradeAngle: buffer[offset + 25],
-						gravityAngle: buffer[offset + 26],
-						remDv: buffer[offset + 27],
-						twr: buffer[offset + 28],
-						altM: buffer[offset + 29],
-						vV: buffer[offset + 30],
-						vH: buffer[offset + 31],
-						aV: buffer[offset + 32],
-						aH: buffer[offset + 33],
-						currentG: buffer[offset + 34],
-						flightTime: buffer[offset + 35],
+						status: buffer[offset + BUFFER_INDEX.TM_STATUS],
+						qAxialKpa: buffer[offset + BUFFER_INDEX.TM_Q_AXIAL],
+						qLateralKpa: buffer[offset + BUFFER_INDEX.TM_Q_LATERAL],
+						structRatio: buffer[offset + BUFFER_INDEX.TM_STRUCT_RATIO],
+						aoaDeg: buffer[offset + BUFFER_INDEX.TM_AOA_DEG],
+						progradeAngle: buffer[offset + BUFFER_INDEX.TM_PROGRADE_ANGLE],
+						gravityAngle: buffer[offset + BUFFER_INDEX.TM_GRAVITY_ANGLE],
+						remDv: buffer[offset + BUFFER_INDEX.TM_REM_DV],
+						twr: buffer[offset + BUFFER_INDEX.TM_TWR],
+						altM: buffer[offset + BUFFER_INDEX.TM_ALT_M],
+						vV: buffer[offset + BUFFER_INDEX.TM_VV],
+						vH: buffer[offset + BUFFER_INDEX.TM_VH],
+						aV: buffer[offset + BUFFER_INDEX.TM_AV],
+						aH: buffer[offset + BUFFER_INDEX.TM_AH],
+						currentG: buffer[offset + BUFFER_INDEX.TM_CURRENT_G],
+						flightTime: buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME],
 					};
-					target.thrustAngle = buffer[offset + 36];
+					target.thrustAngle = buffer[offset + BUFFER_INDEX.THRUST_ANGLE];
 				} else {
-					target.mass = buffer[offset + 8] / 1e3;
+					target.mass = buffer[offset + BUFFER_INDEX.MASS] / 1e3;
 				}
-				target.radius = buffer[offset + 10];
+				target.radius = buffer[offset + BUFFER_INDEX.RADIUS];
 				target.addHistory();
 
-				const flags = buffer[offset + 13];
+				const flags = buffer[offset + BUFFER_INDEX.FLAGS];
 				const isCollided = (flags & 1) !== 0;
 				const isShattered = (flags & 2) !== 0;
 				const isImpact = (flags & 4) !== 0;
@@ -159,12 +156,12 @@ export class ObjectManager {
 					if (isImpact && target.state === OBJECT_STATE.ACTIVE) {
 						this._generateImpactDebris(
 							target, 
-							buffer[offset + 14] / 1e3,
-							this.renderer.m2pix(buffer[offset + 15]), 
-							this.renderer.m2pix(buffer[offset + 16]),
-							this.renderer.m2pix(buffer[offset + 17]),
-							this.renderer.m2pix(buffer[offset + 18]),
-							this.renderer.m2pix(buffer[offset + 19])
+							buffer[offset + BUFFER_INDEX.DEBRIS_MASS] / 1e3,
+							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_VX]), 
+							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_VY]),
+							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_WINNER_X]),
+							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_WINNER_Y]),
+							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_WINNER_RADIUS])
 						);
 					}
 					target.setCollided();
@@ -186,7 +183,7 @@ export class ObjectManager {
 	_spawnDebrisParticles(sourceObj, fragmentCount, baseMass, debrisColor, nextGen,
 		baseVx, baseVy, centerX, centerY, scatterBaseM, scatterVarM, impactData = null) {
 		for (let i = 0; i < fragmentCount; i++) {
-			const massVariation = DEBRIS_MASS_VAR_BASE + (Math.random() * DEBRIS_MASS_VAR_RANGE);
+			const massVariation = DEBRIS.MASS_VAR_BASE + (Math.random() * DEBRIS.MASS_VAR_RANGE);
 			const fragMass = baseMass * massVariation;
 			const fragRadius = sourceObj.radius * Math.cbrt(fragMass / sourceObj.mass);
 
@@ -225,9 +222,9 @@ export class ObjectManager {
 
 		if (totalDebrisMass <= 0) { return; }
 
-		const fragmentCount = Math.max(DEBRIS_MIN_FRAG, Math.floor(Math.log10(totalDebrisMass) * 1.5));
+		const fragmentCount = Math.max(DEBRIS.MIN_FRAG, Math.floor(Math.log10(totalDebrisMass) * 1.5));
 		const baseMass = totalDebrisMass / fragmentCount;
-		const debrisColor = this._mixWithGray(loserObj.color, 0.4);
+		const debrisColor = this._mixWithGray(loserObj.color, DEBRIS.GRAY_MIX_RATIO);
 
 		// Calculate winner -> loser vector
 		let dx = loserObj.x - winnerX;
@@ -241,7 +238,7 @@ export class ObjectManager {
 		this._spawnDebrisParticles(
 			loserObj, fragmentCount, baseMass, debrisColor, 1,
 			baseVx, baseVy, winnerX, winnerY,
-			DEBRIS_IMPACT_SCATTER_BASE, DEBRIS_IMPACT_SCATTER_VAR,
+			DEBRIS.IMPACT_SCATTER_BASE, DEBRIS.IMPACT_SCATTER_VAR,
 			{ nx, ny, baseAngle, winnerRadiusPx }
 		);
 	}
@@ -255,16 +252,16 @@ export class ObjectManager {
 
 		const nextGen = obj.generation + 1;
 		const baseCount = Math.floor(Math.log10(obj.mass));
-		const decay = Math.pow(DEBRIS_FRAG_DECAY_RATE, nextGen - 1);
-		const fragmentCount = Math.max(DEBRIS_MIN_FRAG, Math.floor(baseCount / decay));
+		const decay = Math.pow(DEBRIS.FRAG_DECAY_RATE, nextGen - 1);
+		const fragmentCount = Math.max(DEBRIS.MIN_FRAG, Math.floor(baseCount / decay));
 		const baseMass = obj.mass / fragmentCount;
-		const debrisColor = this._mixWithGray(obj.color, 0.6);
+		const debrisColor = this._mixWithGray(obj.color, DEBRIS.GRAY_MIX_RATIO);
 
 		// Generate debris
 		this._spawnDebrisParticles(
 			obj, fragmentCount, baseMass, debrisColor, nextGen,
 			obj.vx, obj.vy, obj.x, obj.y,
-			DEBRIS_SHATTER_SCATTER_BASE, DEBRIS_SHATTER_SCATTER_VAR,
+			DEBRIS.SHATTER_SCATTER_BASE, DEBRIS.SHATTER_SCATTER_VAR,
 			null
 		);
 	}
@@ -323,7 +320,7 @@ export class ObjectManager {
 				const v2 = dvx * dvx + dvy * dvy;
 				
 				const totalMassKg = (dominantBody.mass + obj.mass) * 1e3;
-				const escapeV2 = (2 * G * totalMassKg) / distToDominantM;
+				const escapeV2 = (2 * PHYSICS.G * totalMassKg) / distToDominantM;
 
 				// Check if the object is escaping the center object's gravity
 				obj.isEscaping = (v2 >= escapeV2);
@@ -335,7 +332,7 @@ export class ObjectManager {
 			if (obj.isEscaping && dominantBody && dominantBody.id === sun.id) {
 				const cx = obj.x - sun.x;
 				const cy = obj.y - sun.y;
-				if (this.renderer.pix2au(Math.sqrt(cx*cx + cy*cy)) > REMOVE_DISTANCE_AU) {
+				if (this.renderer.pix2au(Math.sqrt(cx*cx + cy*cy)) > SIMULATION.REMOVE_DISTANCE_AU) {
 					this.removeObject(obj);
 					console.debug(`${obj.name} (id:${obj.id}) got out from heliosphere`);
 				}

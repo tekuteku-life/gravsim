@@ -1,11 +1,7 @@
 
 // gravsim_tab_rocket.js
 
-import {
-	DEFAULT_OBJECT_PARAMS, ROCKET_FUELS,
-	DISTANCE_SCALE, METERS_PER_AU,
-	OBJECT_TYPES, G, G0,
-} from './gravsim_const.js';
+import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS } from './gravsim_const.js';
 
 export class RocketTab {
 	constructor(universe, systemTab) {
@@ -159,7 +155,7 @@ export class RocketTab {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		
 		const fuel = ROCKET_FUELS[rl.fuelType] || ROCKET_FUELS['liquid'];
-		const ve = fuel.isp * G0;
+		const ve = fuel.isp * PHYSICS.G0;
 		const m0 = (rl.dryMassT + rl.fuelAmountT) * 1e3;
 		const mf = rl.dryMassT * 1e3;
 		
@@ -204,7 +200,7 @@ export class RocketTab {
 			const hostMassKg = host.mass * 1e3;
 
 			// Calculate local gravity (g = GM / r^2)
-			const localG = (G * hostMassKg) / (rMeters * rMeters);
+			const localG = (PHYSICS.G * hostMassKg) / (rMeters * rMeters);
 			const weightN = (rl.dryMassT + rl.fuelAmountT) * 1e3 * localG;
 			const thrustN = rl.thrustKN * 1e3;
 
@@ -236,8 +232,10 @@ export class RocketTab {
 		const host = this.universe.objects.find(o => o.id === hostId);
 		if (!host) return;
 
-		this.universe.centerObject = host;
+		this.universe.ObjectManager.centerObject = host;
+		this.universe.cameraOffset = { x: 0, y: 0 };
 		this.systemTab.updateCenterOptions();
+		this.universe.InfoPanel.updateCamera(host.name);
 
 		if (this.systemTab.ui.timeScale) {
 			this.systemTab.ui.timeScale.value = this.systemTab.ui.timeScale.min;
@@ -246,7 +244,7 @@ export class RocketTab {
 
 		if (this.systemTab.ui.zoomScale) {
 			// Adjust zoom-level which the radius of the host is specific value
-			const realRadiusPx = (host.radius / METERS_PER_AU) * DISTANCE_SCALE;
+			const realRadiusPx = (host.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 2.2;
 			let idealExp = Math.log10(targetSize / realRadiusPx);
 

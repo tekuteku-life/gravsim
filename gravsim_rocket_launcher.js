@@ -1,10 +1,7 @@
 
 // gravsim_rocket_launcher.js
 
-import {
-	G0, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS,
-	DISTANCE_SCALE, METERS_PER_AU,
-} from './gravsim_const.js';
+import { PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS } from './gravsim_const.js';
 
 /*******************************************************************
  * RocketLauncher Class
@@ -62,10 +59,10 @@ export class RocketLauncher {
 		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
-		const ve = fuel.isp * G0; // Exhaust velocity
+		const ve = fuel.isp * PHYSICS.G0; // Exhaust velocity
 		const m0 = (this.dryMassT + this.fuelAmountT) * 1e3; // Initial mass in kg
 		const mf = this.dryMassT * 1e3; // Final mass in kg
-		
+
 		// Calculate Max Burn Time based on Thrust and Isp
 		const massFlowRateKgS = (this.thrustKN * 1e3) / ve;
 		this.calculatedBurnTime = massFlowRateKgS > 0 ? (this.fuelAmountT * 1e3) / massFlowRateKgS : 0;
@@ -116,7 +113,7 @@ export class RocketLauncher {
 		const relY = (transform.y - centerObject.y) * zoomScale;
 
 		ctx.save();
-		
+
 		// Draw Ghost Rocket
 		ctx.fillStyle = "rgba(50, 205, 50, 0.6)";
 		ctx.beginPath();
@@ -139,13 +136,13 @@ export class RocketLauncher {
 		ctx.beginPath();
 		ctx.moveTo(relX, relY);
 		ctx.lineTo(endX, endY);
-		
+
 		// Arrow head
 		const headlen = 10;
 		ctx.lineTo(endX - headlen * Math.cos(launchRad - Math.PI / 6), endY - headlen * Math.sin(launchRad - Math.PI / 6));
 		ctx.moveTo(endX, endY);
 		ctx.lineTo(endX - headlen * Math.cos(launchRad + Math.PI / 6), endY - headlen * Math.sin(launchRad + Math.PI / 6));
-		
+
 		ctx.stroke();
 
 		// Draw Target Reticle for Free Mode
@@ -169,7 +166,6 @@ export class RocketLauncher {
 
 		const t = this._calculateTransform();
 		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
-		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 
 		const initialMassTon = this.dryMassT + this.fuelAmountT;
 		const finalMassTon = this.dryMassT;
@@ -189,13 +185,15 @@ export class RocketLauncher {
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
 
 		// Set new rocket to center object
-		this.universe.centerObject = newRocket;
+		this.universe.ObjectManager.centerObject = newRocket;
+		this.universe.cameraOffset = { x: 0, y: 0 };
 		this.universe.ControlPanel.updateCenterOptions();
+		this.universe.InfoPanel.updateCamera(newRocket.name);
 
 		// Zoom the rocket
 		const systemTab = this.universe.ControlPanel.systemTab;
 		if (systemTab && systemTab.ui.zoomScale) {
-			const realRadiusPx = (newRocket.radius / METERS_PER_AU) * DISTANCE_SCALE;
+			const realRadiusPx = (newRocket.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 2.2;
 			let idealExp = Math.log10(targetSize / realRadiusPx);
 

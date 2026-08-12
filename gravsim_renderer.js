@@ -1,17 +1,13 @@
 
 // gravsim_renderer.js
 
-import {
-	METERS_PER_AU, DISTANCE_SCALE, SCALE_BAR_WIDTH,
-	DEBRIS_SHOCKWAVE_TIME, DEBRIS_SHOCKWAVE_RADIUS,
-	SCALE_BAR_RIGHT, SCALE_BAR_LINE_WIDTH, SCALE_BAR_BOTTOM
-} from './gravsim_const.js';
+import { PHYSICS, RENDER, DEBRIS } from './gravsim_const.js';
 
 function AU2M(au) {
-	return au * METERS_PER_AU;
+	return au * PHYSICS.METERS_PER_AU;
 }
 function M2AU(m) {
-	return m / METERS_PER_AU;
+	return m / PHYSICS.METERS_PER_AU;
 }
 
 /*******************************************************************
@@ -34,8 +30,8 @@ export class Renderer {
 		this.zoomScale = scale;
 	}
 
-	pix2au(px) { return px / DISTANCE_SCALE; }
-	au2pix(au) { return au * DISTANCE_SCALE; }
+	pix2au(px) { return px / RENDER.DISTANCE_SCALE; }
+	au2pix(au) { return au * RENDER.DISTANCE_SCALE; }
 	m2pix(m) { return this.au2pix(M2AU(m)); }
 	pix2m(px) { return AU2M(this.pix2au(px)); }
 
@@ -46,7 +42,7 @@ export class Renderer {
 			y: y,
 			color: color,
 			startTime: Date.now(),
-			duration: DEBRIS_SHOCKWAVE_TIME // Vanishes in 800 ms
+			duration: DEBRIS.SHOCKWAVE_TIME
 		});
 	}
 
@@ -72,7 +68,7 @@ export class Renderer {
 
 			if (progress >= 1) { return false; }
 
-			const radius = (progress * DEBRIS_SHOCKWAVE_RADIUS) * this.zoomScale;
+			const radius = (progress * DEBRIS.SHOCKWAVE_RADIUS) * this.zoomScale;
 			const alpha = 1.0 - progress;
 
 			this.ctx.save();
@@ -95,16 +91,15 @@ export class Renderer {
 	}
 
 	_drawScaleBar() {
-		const targetPx = SCALE_BAR_WIDTH;
-		const targetM = this.pix2m(targetPx / this.zoomScale);
+		const targetPx = RENDER.SCALE_BAR.WIDTH;
+		let val = this.pix2m(targetPx / this.zoomScale);
 
 		let unit = "m";
-		let val = targetM;
 
 		// Change unit depending the distance
-		if (val > METERS_PER_AU * 0.1) {
+		if (val > PHYSICS.METERS_PER_AU * 0.1) {
 			unit = "AU";
-			val = val / METERS_PER_AU;
+			val = val / PHYSICS.METERS_PER_AU;
 		} else if (val > 1000) {
 			unit = "km";
 			val = val / 1000;
@@ -122,7 +117,7 @@ export class Renderer {
 
 		// Re-calculate pix
 		let niceM = niceVal;
-		if (unit === "AU") { niceM = niceVal * METERS_PER_AU; }
+		if (unit === "AU") { niceM = niceVal * PHYSICS.METERS_PER_AU; }
 		else if (unit === "km") { niceM = niceVal * 1000; }
 		const drawPx = Math.round(this.m2pix(niceM) * this.zoomScale);
 
@@ -136,26 +131,26 @@ export class Renderer {
 		const label = `${textVal} ${unit}`;
 
 		// Calculate position
-		const rightX = Math.round(this.canvas.width - SCALE_BAR_RIGHT);
-		const bottomY = Math.round(this.canvas.height - SCALE_BAR_BOTTOM);
+		const rightX = Math.round(this.canvas.width - RENDER.SCALE_BAR.RIGHT);
+		const bottomY = Math.round(this.canvas.height - RENDER.SCALE_BAR.BOTTOM);
 
 		this.ctx.save();
 
 		// Draw text
-		this.ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-		this.ctx.font = "12px sans-serif";
-		this.ctx.textAlign = "right";
-		this.ctx.textBaseline = "bottom";
-		this.ctx.fillText(label, rightX, bottomY - 8);
+		this.ctx.fillStyle = RENDER.SCALE_BAR_TEXT.COLOR;
+		this.ctx.font = RENDER.SCALE_BAR_TEXT.FONT_FAMILY;
+		this.ctx.textAlign = RENDER.SCALE_BAR_TEXT.ALIGN;
+		this.ctx.textBaseline = RENDER.SCALE_BAR_TEXT.BASE_LINE;
+		this.ctx.fillText(label, rightX, bottomY - RENDER.SCALE_BAR_TEXT.BOTTOM_OFFSET);
 
 		// Draw scale bar
-		this.ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
-		this.ctx.lineWidth = 2;
+		this.ctx.strokeStyle = RENDER.SCALE_BAR.COLOR;
+		this.ctx.lineWidth = RENDER.SCALE_BAR.LINE_WIDTH;
 		this.ctx.beginPath();
-		this.ctx.moveTo(rightX - drawPx, bottomY - 5); // Left-side vertical line
+		this.ctx.moveTo(rightX - drawPx, bottomY - RENDER.SCALE_BAR.VERTICAL_LINE_WIDTH); // Left-side vertical line
 		this.ctx.lineTo(rightX - drawPx, bottomY);
 		this.ctx.lineTo(rightX, bottomY); // Bar
-		this.ctx.lineTo(rightX, bottomY - 5); // Right-side vertical line
+		this.ctx.lineTo(rightX, bottomY - RENDER.SCALE_BAR.VERTICAL_LINE_WIDTH); // Right-side vertical line
 		this.ctx.stroke();
 		
 		this.ctx.restore();

@@ -1,73 +1,136 @@
 
 // gravsim_const.js
 
-// Unit
-export const METERS_PER_AU = 149597870700;			// 1 AU in meters
-export const YEARS_PER_SECOND = 60*60*24*365.25;	// 1 year in seconds
+// Physics unit / constant
+export const PHYSICS = {
+	METERS_PER_AU: 149597870700,
+	YEARS_PER_SECOND: 60 * 60 * 24 * 365.25,
+	G: 6.67430e-11,
+	C: 2.99792458e8,
+	G0: 9.80665
+};
 
-// physical constant
-export const G = 6.67430e-11;						// Gravitational constant (m^3 kg^-1 s^-2)
-export const C = 2.99792458e8;						// speed of light (m/s)
-export const G0 = 9.80665;							// gravitational acceleration of the Earth (m/s^2)
+// Simulation base
+export const SIMULATION = {
+	TIME_SCALE: 1e3,
+	THROW_SCALE: 4e16,
+	REMOVE_DISTANCE_AU: 120,
+	CALC_INTERVAL: 60,
+	CALC_EXPAND_DIV_NUM: 20,
+	CALC_SUB_STEPS_BASE: 600,
+	CALC_SUB_STEPS_MAX: 480
+};
 
-// Roche limit physical thresholds
-export const ROCHE_MIN_MASS_TO_DESTROY = 1e15;		// ton: Minimum mass required to tear another object apart
-export const ROCHE_UNBREAKABLE_DENSITY = 1e10;		// ton/m^3: Objects with density higher than this cannot be destroyed (e.g., Black holes)
-export const ROCHE_RIGID_BODY_RADIUS = 10000;		// m: Objects smaller than this radius are considered rigid bodies
-export const ROCHE_RIGID_DESTROYER_MASS = 1e25;		// ton: Minimum mass required to tear apart rigid bodies (e.g., Stars, Black holes)
+// Shattering / Roche limit
+export const ROCHE_LIMIT = {
+	MIN_MASS_TO_DESTROY: 1e15,
+	UNBREAKABLE_DENSITY: 1e10,
+	RIGID_BODY_RADIUS: 10000,
+	RIGID_DESTROYER_MASS: 1e25
+};
 
-// UI setting
-export const UI_DOUBLE_TAP_DURATION = 400;			// Duration which double tap detected
+// Debris generation
+export const DEBRIS = {
+	MIN_FRAG: 3,
+	GRAY_MIX_RATIO: 0.6,
+	SHOCKWAVE_TIME: 800,
+	SHOCKWAVE_RADIUS: 100,
+	MAX_GENERATION: 3,
+	MIN_MASS_TO_SHATTER: 1e21,
+	FRAG_DECAY_RATE: 4,
+	IMPACT_SCATTER_BASE: 2000,
+	IMPACT_SCATTER_VAR: 3000,
+	SHATTER_SCATTER_BASE: 1000,
+	SHATTER_SCATTER_VAR: 2000,
+	MASS_VAR_BASE: 0.8,
+	MASS_VAR_RANGE: 0.4
+};
 
-export const UI_NAVI_UPDATE_UPDATE_INTERVAL = 500;	// Update interval for Navi tab (ms)
-export const UI_INFO_PANEL_UPDATA_INTERVAL = 500;	// Update interval for Info panel (ms)
+// Drawing / Visualization
+export const RENDER = {
+	DISTANCE_SCALE: 180,
+	TARGET_TRAIL_LENGTH_AU: 3,
+	HISTORY_LENGTH: 512,
+	SCALE_BAR: {
+		WIDTH: 150,
+		LINE_WIDTH: 2,
+		RIGHT: 20,
+		BOTTOM: 20,
+		COLOR: "rgba(255, 255, 255, 0.9)",
+		VERTICAL_LINE_WIDTH: 5,
+	},
+	SCALE_BAR_TEXT: {
+		COLOR: "rgba(255, 255, 255, 0.9)",
+		FONT_FAMILY: "12px sans-serif",
+		ALIGN: "right",
+		BASE_LINE: "bottom",
+		BOTTOM_OFFSET: 8,
+	},
+	SPARKLE: {
+		ANIM_SPEED: 80,
+		ROTATE_SPEED: 500,
+		STAR_SIZE_RATIO: 3.0,
+		STAR_INNER_SIZE_RATIO: 0.4,
+		MAX_SIZE_PX: 30
+	}
+};
 
-export const UI_TM_MAX_Q_TH = 80;					// Max-Q message indication threshold (%)
+// UI
+export const UI = {
+	DOUBLE_TAP_DURATION: 400,
+	UPDATE_INTERVAL: {
+		NAVI: 500,
+		INFO_PANEL: 500,
+		TELEMETRY: 100
+	}
+};
 
-// Program setting
-export const TIME_SCALE = 1e3;
-export const THROW_SCALE = 4e16;
+// Telemetry panel
+export const TELEMETRY = {
+	SUB_VIEW_TARGET_RADIUS: 20,
+	SUB_VIEW_MAX_ZOOM: 1e8,
+	MAX_Q_TH: 80,
+	STATUS_MAP: {
+		0: "PRE-LAUNCH",
+		1: "LIFTOFF",
+		2: "ASCENT",
+		3: "MAX-Q",
+		4: "MECO",
+		5: "COASTING",
+		6: "TRACKING"
+	}
+};
 
-export const REMOVE_DISTANCE_AU = 120;
+// Flight computer
+export const FLIGHT_COMPUTER_CONFIG = {
+	TOWER_CLEARANCE_TIME: 3.0,
+	TOWER_CLEARANCE_MIN_Q: 0.1,
+	TOWER_CLEARANCE_MAX_ALT: 1000,
+	MAX_TURN_RATE_PER_SEC: 0.1,
+	PITCH_KICK_TURN_RATE: 0.5,
+	THROTTLE_DOWN_Q_RATIO: 0.8,
+	THROTTLE_DOWN_MIN_Vv: 0,
+	ANTI_STALL_Vv_THRESHOLD: 100,
+	ANTI_STALL_MAX_PITCH_UP: 45,
+	LOAD_RELIEF_SAFE_MARGIN: 0.8
+};
 
-export const TARGET_TRAIL_LENGTH_AU = 3;			// Trail length (AU)
-export const HISTORY_LENGTH = 512;					// History length
-export const DISTANCE_SCALE = 180;					// AU/px
+// Communication buffer structure
+export const CALC_BUFFER_CONFIG = {
+	OBJ_ATTR_COUNT: 37
+};
 
-export const DEBRIS_MIN_FRAG = 3;					// The min number of fragment
-export const DEBRIS_GRAY_MIX_RATIO = 0.6;			// gray blending ratio of becoming debris (0.0=original, 1.0=gray)
-export const DEBRIS_SHOCKWAVE_TIME = 800;			// Duration of shock-wave when debris generated
-export const DEBRIS_SHOCKWAVE_RADIUS = 100;			// Max radius of shock-wave
-export const DEBRIS_MAX_GENERATION = 3;				// Max generation of shattering
-export const DEBRIS_MIN_MASS_TO_SHATTER = 1e21;		// minimum mass to shatter (kg) (Earth / 6)
-export const DEBRIS_FRAG_DECAY_RATE = 4;			// Decrease ratio per generation
-export const DEBRIS_IMPACT_SCATTER_BASE = 2000;		// Impact scatter base (m/s)
-export const DEBRIS_IMPACT_SCATTER_VAR = 3000;		// Impact scatter variation (m/s)
-export const DEBRIS_SHATTER_SCATTER_BASE = 1000;	// Shatter scatter base (m/s)
-export const DEBRIS_SHATTER_SCATTER_VAR = 2000;		// Shatter scatter variation (m/s)
-export const DEBRIS_MASS_VAR_BASE = 0.8;			// Debris's mass variation base
-export const DEBRIS_MASS_VAR_RANGE = 0.4;			// Debris's mass variation range
+export const BUFFER_INDEX = {
+	ID: 0, TYPE: 1, X: 2, Y: 3, VX: 4, VY: 5, AX: 6, AY: 7,
+	MASS: 8, FUEL_MASS: 9, RADIUS: 10, BURN_TIME: 11, THRUST_RATIO: 12,
+	FLAGS: 13, DEBRIS_MASS: 14, IMPACT_VX: 15, IMPACT_VY: 16,
+	IMPACT_WINNER_X: 17, IMPACT_WINNER_Y: 18, IMPACT_WINNER_RADIUS: 19,
+	TM_STATUS: 20, TM_Q_AXIAL: 21, TM_Q_LATERAL: 22, TM_STRUCT_RATIO: 23,
+	TM_AOA_DEG: 24, TM_PROGRADE_ANGLE: 25, TM_GRAVITY_ANGLE: 26,
+	TM_REM_DV: 27, TM_TWR: 28, TM_ALT_M: 29, TM_VV: 30, TM_VH: 31,
+	TM_AV: 32, TM_AH: 33, TM_CURRENT_G: 34, TM_FLIGHT_TIME: 35, THRUST_ANGLE: 36
+};
 
-export const SCALE_BAR_WIDTH = 150;					// scale bar width (px)
-export const SCALE_BAR_LINE_WIDTH = 2;				// scale bar line width (px)
-export const SCALE_BAR_RIGHT = 20;					// position from right-side (px)
-export const SCALE_BAR_BOTTOM = 20;					// position from bottom (px)
-
-export const CALC_EXPAND_DIV_NUM = 20;				// The number of division for expanding collision detection
-export const CALC_SUB_STEPS_BASE = 600;				// Base sub-step
-export const CALC_SUB_STEPS_MAX = 480;				// Max sub-step
-
-export const SPARKLE_ANIM_SPEED = 80;				// Sparkle blinking speed
-export const SPARKLE_ROTATE_SPEED = 500;			// Sparkle rotate speed
-export const SPARKLE_STAR_SIZE_RATIO = 3.0;			// Sparkle star size ration (based on object's radius)
-export const SPARKLE_STAR_INNER_SIZE_RATIO = 0.4;	// Sparkle star inner-size ration (based on object's radius)
-export const SPARKLE_MAX_SIZE_PX = 30;				// Sparkle max size (px)
-
-export const TELEMETRY_UPDATE_INTERVAL_MS = 100;	// Telemetry update interval（ms）
-export const TELEMETRY_SUB_VIEW_TARGET_RADIUS = 20;	// Target radius on sub-screen（px）
-export const TELEMETRY_SUB_VIEW_MAX_ZOOM = 1e8;		// Max zoom-level on sub-screen
-
-// constant definition
 export const OBJECT_STATE = {
 	"ACTIVE": 0,
 	"REMOVED": 1,
@@ -91,7 +154,7 @@ export const DEFAULT_OBJECT_PARAMS = {
 	},
 	"BlackHole": {
 		"NAME" : "BlackHole",
-		"MASS" : 1.9891e30 *20 / 1e3, // 20 times of the sun
+		"MASS" : 1.9891e30 * 20 / 1e3, // 20 times of the sun
 		"COLOR" : "#333333",
 		"RADIUS": 3e4,
 		"BORDER_COLOR": "#FF8C00",
@@ -224,6 +287,7 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"MASS" : 1e10 / 1e3,
 		"COLOR": "#808080",
 		"RADIUS": 90,
+		"MAX_DYNAMIC_PRESSURE": 5000000,
 	},
 	"Rocket": {
 		"NAME" : "Rocket",
@@ -234,7 +298,8 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"AERO_AREA_FRONT": 10,
 		"AERO_AREA_SIDE": 126,
 		"DRAG_COEF": 0.2,
-		"MAX_DYNAMIC_PRESSURE": 50000
+		"MAX_Q_AXIAL": 50000,
+		"MAX_Q_LATERAL": 5000,
 	},
 };
 
@@ -243,16 +308,6 @@ export const ROCKET_FUELS = {
 	"liquid": { name: "Liquid", isp: 320, density: 1.0 },
 	"hydro": { name: "Cryogenic", isp: 450, density: 0.3 },
 	"ion": { name: "Ion", isp: 3000, density: 0.5 }
-};
-
-export const MISSION_STATUS = {
-	PRE_LAUNCH: "PRE-LAUNCH",
-	LIFTOFF: "LIFTOFF",
-	ASCENT: "ASCENT",
-	MAX_Q: "MAX-Q",
-	MECO: "MECO",
-	COASTING: "COASTING",
-	TRACKING: "TRACKING"
 };
 
 export const OBJECT_TYPES = { CELESTIAL: 0, ROCKET: 1 };

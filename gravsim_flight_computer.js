@@ -49,7 +49,7 @@ export class FlightComputer {
 		// Decide mission status
 		let statusInt = 0; // PRE_LAUNCH
 		if (sensor.burnTime > 0) {
-			if (this.telemetryCache.structRatio > 80) {
+			if (this.telemetryCache.structRatio > TELEMETRY.MAX_Q_TH) {
 				statusInt = 3; // MAX_Q
 			} else {
 				statusInt = 2; // ASCENT
@@ -76,7 +76,7 @@ export class FlightComputer {
 		let localG_ms2 = 0;
 
 		if (sensor.refBody) {
-			localG_ms2 = (G * sensor.refBody.mass) / Math.pow(sensor.distToRefM, 2);
+			localG_ms2 = (PHYSICS.G * sensor.refBody.mass) / Math.pow(sensor.distToRefM, 2);
 			altM = sensor.distToRefM - sensor.refBody.radius;
 
 			const dx = sensor.x - sensor.refBody.x;
@@ -101,11 +101,11 @@ export class FlightComputer {
 		}
 
 		const totalAccel = Math.sqrt(sensor.ax * sensor.ax + sensor.ay * sensor.ay);
-		const currentG = totalAccel / G0;
+		const currentG = totalAccel / PHYSICS.G0;
 
 		let remDv = 0;
 		if (sensor.dryMass > 0) {
-			let ve = 320 * G0; 
+			let ve = 320 * PHYSICS.G0; 
 			if (sensor.thrustForce > 0 && sensor.massLossRate > 0) {
 				ve = sensor.thrustForce / sensor.massLossRate;
 			}
@@ -117,17 +117,21 @@ export class FlightComputer {
 		this.telemetryCache.aoaDeg = sensor.aoaDeg;
 		
 		let structRatio = 0;
-		if (this.config.maxQAxialLimit !== Infinity) {
-			const currentQPa = (sensor.qAxialKpa + sensor.qLateralKpa) * 1000;
-			structRatio = (currentQPa / this.config.maxQAxialLimit) * 100;
+		if (this.config.maxQAxialLimit !== Infinity && this.config.maxQLateralLimit !== Infinity) {
+			const isTailFirst = Math.cos(sensor.aoaDeg * Math.PI / 180) < 0;
+			const effectiveAxialLimit = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
+
+			const axialRatio = (sensor.qAxialKpa * 1000) / effectiveAxialLimit;
+			const lateralRatio = (sensor.qLateralKpa * 1000) / this.config.maxQLateralLimit;
+			structRatio = Math.max(axialRatio, lateralRatio) * 100;
 		}
 		this.telemetryCache.structRatio = structRatio;
 		
 		this.telemetryCache.altM = altM;
 		this.telemetryCache.vV = vV;
 		this.telemetryCache.vH = vH;
-		this.telemetryCache.aV = aV / G0;
-		this.telemetryCache.aH = aH / G0;
+		this.telemetryCache.aV = aV / PHYSICS.G0;
+		this.telemetryCache.aH = aH / PHYSICS.G0;
 		this.telemetryCache.progradeAngle = sensor.progradeAngle;
 		this.telemetryCache.gravityAngle = gravityAngle;
 		
@@ -147,7 +151,7 @@ export class FlightComputer {
 
 		// Max-G Limiter (Throttle down)
 		if (this.config.maxGLimit > 0) {
-			const maxAllowedThrust = this.config.maxGLimit * G0 * sensor.mass;
+			const maxAllowedThrust = this.config.maxGLimit * PHYSICS.G0 * sensor.mass;
 			if (sensor.thrustForce > maxAllowedThrust) {
 				throttle = Math.min(throttle, maxAllowedThrust / sensor.thrustForce);
 			}
@@ -155,14 +159,15 @@ export class FlightComputer {
 
 		// Max-Q Auto-Throttle (Flight Computer Feedback)
 		if (this.config.maxQAxialLimit !== Infinity) {
-			const maxQAxialKpa = this.config.maxQAxialLimit / 1000;
-			const qRatio = sensor.qAxialKpa / maxQAxialKpa;
+			const isTailFirst = Math.cos(sensor.aoaDeg * Math.PI / 180) < 0;
+			const effectiveAxialLimitPa = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
+			const qRatio = (sensor.qAxialKpa * 1000) / effectiveAxialLimitPa;
 			
-			if (qRatio > 0.65) {
-				let qThrottle = 1.0 - (qRatio - 0.65) * 4.0;
-				
+			if (!isTailFirst && qRatio > FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) {
+				let qThrottle = 1.0 - (qRatio - FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) * 5.0;
+
 				// Anti-stall
-				const minThrottle = this.telemetryCache.vV < 0 ? 0.7 : 0.1;
+				const minThrottle = this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_MIN_Vv ? 0.8 : 0.1;
 				qThrottle = Math.max(minThrottle, Math.min(1.0, qThrottle));
 				throttle = Math.min(throttle, qThrottle);
 			}
@@ -180,12 +185,12 @@ export class FlightComputer {
 		const Q = sensor.qAxialKpa + sensor.qLateralKpa;
 
 		// Tower Clearance
-		if (this.flightTime < 3.0 || (Q < 0.1 && this.telemetryCache.altM < 1000)) {
+		if (this.flightTime < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_TIME || (Q < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MIN_Q && this.telemetryCache.altM < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MAX_ALT)) {
 			let diff = this.initialThrustAngle - this.currentThrustAngle;
 			while (diff > Math.PI) diff -= 2 * Math.PI;
 			while (diff < -Math.PI) diff += 2 * Math.PI;
 			
-			const maxTurn = 0.5 * sensor.dt;
+			const maxTurn = FLIGHT_COMPUTER_CONFIG.PITCH_KICK_TURN_RATE * sensor.dt;
 			if (Math.abs(diff) > maxTurn) {
 				return this.currentThrustAngle + Math.sign(diff) * maxTurn;
 			}
@@ -195,10 +200,24 @@ export class FlightComputer {
 		let targetAngle = this.initialThrustAngle;
 
 		// Load Relief Control
+		if (Q > 0.05 && this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD) {
+			const stallFactor = Math.max(0, (FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD - this.telemetryCache.vV) / FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD);
+			const maxPitchUp = FLIGHT_COMPUTER_CONFIG.ANTI_STALL_MAX_PITCH_UP * (Math.PI / 180);
+			
+			const upAngle = this.telemetryCache.gravityAngle + Math.PI;
+			let angleToUp = upAngle - targetAngle;
+			while (angleToUp > Math.PI) angleToUp -= 2 * Math.PI;
+			while (angleToUp < -Math.PI) angleToUp += 2 * Math.PI;
+
+			targetAngle += Math.sign(angleToUp) * Math.min(Math.abs(angleToUp), maxPitchUp) * stallFactor;
+		}
+
+		// Load Relief Control
+		const Q_Pa = Q * 1000;
 		let maxAoA = Math.PI;
-		if (Q > 0.1 && this.config.maxQLateralLimit !== Infinity) {
-			const safeLateralLimit = this.config.maxQLateralLimit * 0.85; // Safety margin 15%
-			const sinSq = (safeLateralLimit / 1e3) / Q;
+		if (Q_Pa > 100 && this.config.maxQLateralLimit !== Infinity) {
+			const safeLateralLimit = this.config.maxQLateralLimit * FLIGHT_COMPUTER_CONFIG.LOAD_RELIEF_SAFE_MARGIN;
+			const sinSq = safeLateralLimit / Q_Pa;
 			if (sinSq < 1.0) {
 				maxAoA = Math.asin(Math.sqrt(sinSq));
 			}
@@ -208,18 +227,28 @@ export class FlightComputer {
 		while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
 		while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
 
-		// Clamp angle to max AoA
-		if (angleDiff > maxAoA) { angleDiff = maxAoA; }
-		if (angleDiff < -maxAoA) { angleDiff = -maxAoA; }
+		const isRetrogradeIntent = Math.abs(angleDiff) > Math.PI / 2;
 
-		const safeTargetAngle = sensor.progradeAngle + angleDiff;
+		let safeTargetAngle;
+		if (isRetrogradeIntent) {
+			let retroDiff = angleDiff > 0 ? angleDiff - Math.PI : angleDiff + Math.PI;
+			if (retroDiff > maxAoA) retroDiff = maxAoA;
+			if (retroDiff < -maxAoA) retroDiff = -maxAoA;
+			safeTargetAngle = sensor.progradeAngle + Math.PI + retroDiff;
+		} else {
+			// Clamp angle to max AoA
+			if (angleDiff > maxAoA) { angleDiff = maxAoA; }
+			if (angleDiff < -maxAoA) { angleDiff = -maxAoA; }
+
+			safeTargetAngle = sensor.progradeAngle + angleDiff;
+		}
 
 		let turnDiff = safeTargetAngle - this.currentThrustAngle;
-		while (turnDiff > Math.PI) { turnDiff -= 2 * Math.PI; }
-		while (turnDiff < -Math.PI) { turnDiff += 2 * Math.PI; }
+		while (turnDiff > Math.PI) turnDiff -= 2 * Math.PI;
+		while (turnDiff < -Math.PI) turnDiff += 2 * Math.PI;
 
 		// Limit pitch rate
-		const maxTurnRatePerSec = 0.1;
+		const maxTurnRatePerSec = FLIGHT_COMPUTER_CONFIG.MAX_TURN_RATE_PER_SEC; 
 		const maxTurn = maxTurnRatePerSec * sensor.dt;
 
 		if (Math.abs(turnDiff) > maxTurn) {

@@ -2,9 +2,8 @@
 // gravsim_calc_object.js
 
 import {
-	G, ROCHE_UNBREAKABLE_DENSITY,
-	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES,
-	CALC_EXPAND_DIV_NUM,
+	PHYSICS, ROCHE_LIMIT, DEFAULT_OBJECT_PARAMS,
+	OBJECT_TYPES, SIMULATION
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
 
@@ -51,7 +50,7 @@ class GravSimCalcObject {
 		const distSq = Math.max(dx * dx + dy * dy, radiusSum * radiusSum);
 		const dist = Math.sqrt(distSq);
 
-		const force = (G * this.mass * other.mass) / distSq;
+		const force = (PHYSICS.G * this.mass * other.mass) / distSq;
 		const accel = force / this.mass;
 
 		this.ax += accel * dx / dist;
@@ -73,7 +72,7 @@ class GravSimCalcObject {
 		const expandRadiusSum = radiusSum + (max_v1 + max_v2) * dt;
 		
 		if (distSq < expandRadiusSum * expandRadiusSum) {
-			const EXPAND_DIV_NUM = CALC_EXPAND_DIV_NUM;
+			const EXPAND_DIV_NUM = SIMULATION.CALC_EXPAND_DIV_NUM;
 			for( let i = 1; i < EXPAND_DIV_NUM; i++ ) {
 				const dts = dt / EXPAND_DIV_NUM * i;
 				const dxs = other.getXt(dts) - this.getXt(dts);
@@ -94,7 +93,7 @@ class GravSimCalcObject {
 		const massiveDensity = other.mass / Math.pow(other.radius, 3);
 
 		// Decrease calculation cost
-		if (fragileDensity > ROCHE_UNBREAKABLE_DENSITY) { return false; }
+		if (fragileDensity > ROCHE_LIMIT.UNBREAKABLE_DENSITY) { return false; }
 
 		const rocheLimitM = 2.44 * other.radius * Math.cbrt(massiveDensity / fragileDensity);
 		const dx = this.x - other.x;
@@ -146,7 +145,7 @@ class GravSimCalcObject {
 			area = objParam.AERO_AREA_FRONT * (1 - sinAoA) + objParam.AERO_AREA_SIDE * sinAoA;
 
 			if (this.type === OBJECT_TYPES.ROCKET) {
-				this._aoaDeg = Math.abs(angleDiff) * (180 / Math.PI);
+				this._aoaDeg = angleDiff * (180 / Math.PI);
 				const q = 0.5 * rho * vRelSq;
 				this._qAxialKpa = (q * Math.pow(Math.cos(angleDiff), 2)) / 1000;
 				this._qLateralKpa = (q * Math.pow(Math.sin(angleDiff), 2)) / 1000;
@@ -162,11 +161,9 @@ class GravSimCalcObject {
 		const q = 0.5 * rho * vRelSq;
 		this._currentQ = q;
 
-		// Max-Q structural check
-		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
-		if (q > maxQ) {
+		this._checkAerodynamicDestruction(q);
+		if (this.shattered) {
 			console.info(this.name + "(ID:" + this.id + ") was destructed by dynamic pressure");
-			this.shattered = true;
 			return;
 		}
 
@@ -175,6 +172,14 @@ class GravSimCalcObject {
 		
 		this.ax -= (vRelX / vRel) * accelDrag;
 		this.ay -= (vRelY / vRel) * accelDrag;
+	}
+
+	_checkAerodynamicDestruction(q) {
+		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
+		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
+		if (q > maxQ) {
+			this.shattered = true;
+		}
 	}
 }
 
@@ -207,13 +212,30 @@ export class CalcRocket extends GravSimCalcObject {
 
 		this.flightComputer = new FlightComputer({
 			maxGLimit: this.maxGLimit,
-			maxQAxialLimit: DEFAULT_OBJECT_PARAMS[name]?.MAX_DYNAMIC_PRESSURE || Infinity,
+			maxQAxialLimit: DEFAULT_OBJECT_PARAMS[name]?.MAX_Q_AXIAL || Infinity,
+			maxQLateralLimit: DEFAULT_OBJECT_PARAMS[name]?.MAX_Q_LATERAL || Infinity,
 			thrustAngle: this.thrustAngle
 		});
 	}
 
 	get mass() { return this.dryMass + this.fuelMass; }
 	set mass(val) {}
+
+	_checkAerodynamicDestruction(q) {
+		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
+		const maxQAxial = objParam?.MAX_Q_AXIAL || Infinity;
+		const maxQLateral = objParam?.MAX_Q_LATERAL || Infinity;
+
+		const isTailFirst = Math.cos(this._aoaDeg * Math.PI / 180) < 0;
+		const effectiveMaxQAxial = isTailFirst ? maxQLateral : maxQAxial;
+
+		const currentQAxialPa = this._qAxialKpa * 1000;
+		const currentQLateralPa = this._qLateralKpa * 1000;
+
+		if (currentQAxialPa > effectiveMaxQAxial || currentQLateralPa > maxQLateral) {
+			this.shattered = true;
+		}
+	}
 
 	flightControl(dt, refBody, distToRefM) {
 		let actualDt = 0;
