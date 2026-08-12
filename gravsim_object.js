@@ -5,6 +5,7 @@ import {
 	PHYSICS, RENDER, OBJECT_STATE,
 	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES
 } from './gravsim_const.js';
+import { ColorUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * GravSimObject class which is base class
@@ -234,7 +235,7 @@ export class GravSimObject {
 			const alpha = t * 0.4 + 0.2;
 			const width = this.size * (0.2 + 0.8 * t); // screen pixels
 
-			ctx.strokeStyle = this._hexToRgba(this.color, alpha);
+			ctx.strokeStyle = ColorUtils.hexToRgba(this.color, alpha);
 			ctx.lineWidth = width;
 			ctx.beginPath();
 			ctx.moveTo(this.getRelativeHistoryX(i - 1, basis) * zoomScale, this.getRelativeHistoryY(i - 1, basis) * zoomScale);
@@ -242,17 +243,6 @@ export class GravSimObject {
 			ctx.stroke();
 		}
 		ctx.lineWidth = 1;
-	}
-
-	// convert hex color to rgba
-	_hexToRgba(hex, alpha) {
-		let c = hex.replace('#', '');
-		if (c.length === 3) c = c.split('').map(x => x + x).join('');
-		const num = parseInt(c, 16);
-		const r = (num >> 16) & 255;
-		const g = (num >> 8) & 255;
-		const b = num & 255;
-		return `rgba(${r},${g},${b},${alpha})`;
 	}
 }
 

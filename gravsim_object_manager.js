@@ -7,6 +7,7 @@ import {
 	CALC_BUFFER_CONFIG, BUFFER_INDEX
 } from './gravsim_const.js';
 import { GravSimObject, CelestialBody, Rocket } from './gravsim_object.js';
+import { ColorUtils } from './gravsim_utils.js';
 
 export class ObjectManager {
 	constructor(renderer, workerManager) {
@@ -39,7 +40,6 @@ export class ObjectManager {
 					x: currentOffset.x + (oldCenter.x - nextCenter.x),
 					y: currentOffset.y + (oldCenter.y - nextCenter.y)
 				};
-				this.centerObject = nextCenter;
 				return { changed: true, newOffset, newCenter: nextCenter };
 			}
 		}
@@ -224,7 +224,7 @@ export class ObjectManager {
 
 		const fragmentCount = Math.max(DEBRIS.MIN_FRAG, Math.floor(Math.log10(totalDebrisMass) * 1.5));
 		const baseMass = totalDebrisMass / fragmentCount;
-		const debrisColor = this._mixWithGray(loserObj.color, DEBRIS.GRAY_MIX_RATIO);
+		const debrisColor = ColorUtils.mixWithGray(loserObj.color, DEBRIS.GRAY_MIX_RATIO);
 
 		// Calculate winner -> loser vector
 		let dx = loserObj.x - winnerX;
@@ -255,7 +255,7 @@ export class ObjectManager {
 		const decay = Math.pow(DEBRIS.FRAG_DECAY_RATE, nextGen - 1);
 		const fragmentCount = Math.max(DEBRIS.MIN_FRAG, Math.floor(baseCount / decay));
 		const baseMass = obj.mass / fragmentCount;
-		const debrisColor = this._mixWithGray(obj.color, DEBRIS.GRAY_MIX_RATIO);
+		const debrisColor = ColorUtils.mixWithGray(obj.color, DEBRIS.GRAY_MIX_RATIO);
 
 		// Generate debris
 		this._spawnDebrisParticles(
@@ -264,23 +264,6 @@ export class ObjectManager {
 			DEBRIS.SHATTER_SCATTER_BASE, DEBRIS.SHATTER_SCATTER_VAR,
 			null
 		);
-	}
-
-	// Mix with gray
-	_mixWithGray(hexColor, grayRatio) {
-		let c = hexColor.replace('#', '');
-		if (c.length === 3) c = c.split('').map(x => x + x).join('');
-		const num = parseInt(c, 16);
-		const r = (num >> 16) & 255;
-		const g = (num >> 8) & 255;
-		const b = num & 255;
-
-		const gray = 128; // #808080
-		const mixR = Math.round(r * (1 - grayRatio) + gray * grayRatio);
-		const mixG = Math.round(g * (1 - grayRatio) + gray * grayRatio);
-		const mixB = Math.round(b * (1 - grayRatio) + gray * grayRatio);
-
-		return '#' + ((1 << 24) + (mixR << 16) + (mixG << 8) + mixB).toString(16).slice(1).toUpperCase();
 	}
 
 	_checkEscapeAndRemove() {

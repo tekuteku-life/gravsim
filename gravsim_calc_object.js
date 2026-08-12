@@ -6,6 +6,7 @@ import {
 	OBJECT_TYPES, SIMULATION
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
+import { MathUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * Entity Class
@@ -135,10 +136,7 @@ class GravSimCalcObject {
 		if (objParam && objParam.AERO_AREA_FRONT) {
 			cd = objParam.DRAG_COEF || 0.2;
 			const velAngle = Math.atan2(vRelY, vRelX);
-			let angleDiff = Math.abs(this.thrustAngle - velAngle);
-			while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-			while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-			angleDiff = Math.abs(angleDiff);
+			const angleDiff = Math.abs(MathUtils.normalizeAngle(this.thrustAngle - velAngle));
 			
 			const aoa = Math.min(angleDiff, Math.PI - angleDiff);
 			const sinAoA = Math.sin(aoa);

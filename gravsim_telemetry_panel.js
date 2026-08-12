@@ -3,6 +3,7 @@
 
 import { Renderer } from './gravsim_renderer.js';
 import { UI, TELEMETRY, OBJECT_TYPES } from './gravsim_const.js';
+import { MathUtils } from './gravsim_utils.js';
 
 const TM_STYLE = {
 	missionStatusColor: { normal: '#00ffcc', max_q: '#ff5555' },
@@ -246,9 +247,7 @@ export class TelemetryPanel {
 
 	_updateFlightDirectorUI(thrustAngle, progradeAngle, gravityAngle) {
 		const getOffsetPct = (angle, refAngle) => {
-			let diff = angle - refAngle;
-			while(diff > Math.PI) { diff -= 2*Math.PI; }
-			while(diff < -Math.PI) { diff += 2*Math.PI; }
+			let diff = MathUtils.normalizeAngle(angle - refAngle);
 			return 50 + (diff / Math.PI) * 50; 
 		};
 

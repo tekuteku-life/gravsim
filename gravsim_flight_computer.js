@@ -1,14 +1,15 @@
 
 // gravsim_flight_computer.js
 
-import { G, G0 } from './gravsim_const.js';
+import { PHYSICS, FLIGHT_COMPUTER_CONFIG, TELEMETRY } from './gravsim_const.js';
+import { MathUtils } from './gravsim_utils.js';
 
 export class FlightComputer {
 	constructor(config = {}) {
 		this.config = {
 			maxGLimit: config.maxGLimit || Infinity,
 			maxQAxialLimit: config.maxQAxialLimit || Infinity, // Pa
-			maxQLateralLimit: config.maxQLateralLimit || 5000.0, // Pa
+			maxQLateralLimit: config.maxQLateralLimit || Infinity, // Pa
 		};
 
 		this.currentThrustAngle = config.thrustAngle || 0;
@@ -177,18 +178,13 @@ export class FlightComputer {
 	}
 
 	_computeThrustAngle(sensor) {
-		let currentAngle = this.currentThrustAngle;
-		while (currentAngle > Math.PI) currentAngle -= 2 * Math.PI;
-		while (currentAngle < -Math.PI) currentAngle += 2 * Math.PI;
-		this.currentThrustAngle = currentAngle;
+		this.currentThrustAngle = MathUtils.normalizeAngle(this.currentThrustAngle);
 
 		const Q = sensor.qAxialKpa + sensor.qLateralKpa;
 
 		// Tower Clearance
 		if (this.flightTime < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_TIME || (Q < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MIN_Q && this.telemetryCache.altM < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MAX_ALT)) {
-			let diff = this.initialThrustAngle - this.currentThrustAngle;
-			while (diff > Math.PI) diff -= 2 * Math.PI;
-			while (diff < -Math.PI) diff += 2 * Math.PI;
+			let diff = MathUtils.normalizeAngle(this.initialThrustAngle - this.currentThrustAngle);
 			
 			const maxTurn = FLIGHT_COMPUTER_CONFIG.PITCH_KICK_TURN_RATE * sensor.dt;
 			if (Math.abs(diff) > maxTurn) {
@@ -205,14 +201,11 @@ export class FlightComputer {
 			const maxPitchUp = FLIGHT_COMPUTER_CONFIG.ANTI_STALL_MAX_PITCH_UP * (Math.PI / 180);
 			
 			const upAngle = this.telemetryCache.gravityAngle + Math.PI;
-			let angleToUp = upAngle - targetAngle;
-			while (angleToUp > Math.PI) angleToUp -= 2 * Math.PI;
-			while (angleToUp < -Math.PI) angleToUp += 2 * Math.PI;
+			let angleToUp = MathUtils.normalizeAngle(upAngle - targetAngle);
 
 			targetAngle += Math.sign(angleToUp) * Math.min(Math.abs(angleToUp), maxPitchUp) * stallFactor;
 		}
 
-		// Load Relief Control
 		const Q_Pa = Q * 1000;
 		let maxAoA = Math.PI;
 		if (Q_Pa > 100 && this.config.maxQLateralLimit !== Infinity) {
@@ -223,9 +216,7 @@ export class FlightComputer {
 			}
 		}
 
-		let angleDiff = targetAngle - sensor.progradeAngle;
-		while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-		while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+		let angleDiff = MathUtils.normalizeAngle(targetAngle - sensor.progradeAngle);
 
 		const isRetrogradeIntent = Math.abs(angleDiff) > Math.PI / 2;
 
@@ -243,9 +234,7 @@ export class FlightComputer {
 			safeTargetAngle = sensor.progradeAngle + angleDiff;
 		}
 
-		let turnDiff = safeTargetAngle - this.currentThrustAngle;
-		while (turnDiff > Math.PI) turnDiff -= 2 * Math.PI;
-		while (turnDiff < -Math.PI) turnDiff += 2 * Math.PI;
+		let turnDiff = MathUtils.normalizeAngle(safeTargetAngle - this.currentThrustAngle);
 
 		// Limit pitch rate
 		const maxTurnRatePerSec = FLIGHT_COMPUTER_CONFIG.MAX_TURN_RATE_PER_SEC; 

@@ -2,6 +2,7 @@
 // gravsim_renderer.js
 
 import { PHYSICS, RENDER, DEBRIS } from './gravsim_const.js';
+import { ColorUtils } from './gravsim_utils.js';
 
 function AU2M(au) {
 	return au * PHYSICS.METERS_PER_AU;
@@ -75,7 +76,7 @@ export class Renderer {
 			const relX = (eff.x - centerObject.x) * this.zoomScale;
 			const relY = (eff.y - centerObject.y) * this.zoomScale;
 			
-			this.ctx.strokeStyle = this._hexToRgba(eff.color, alpha);
+			this.ctx.strokeStyle = ColorUtils.hexToRgba(eff.color, alpha);
 			this.ctx.lineWidth = 2;
 			this.ctx.beginPath();
 			this.ctx.arc(relX, relY, radius, 0, Math.PI * 2);
@@ -154,15 +155,5 @@ export class Renderer {
 		this.ctx.stroke();
 		
 		this.ctx.restore();
-	}
-
-	_hexToRgba(hex, alpha) {
-		let c = hex.replace('#', '');
-		if (c.length === 3) c = c.split('').map(x => x + x).join('');
-		const num = parseInt(c, 16);
-		const r = (num >> 16) & 255;
-		const g = (num >> 8) & 255;
-		const b = num & 255;
-		return `rgba(${r},${g},${b},${alpha})`;
 	}
 }
