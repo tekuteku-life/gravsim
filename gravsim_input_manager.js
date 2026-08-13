@@ -13,6 +13,7 @@ export class InputManager {
 		this.onPan = null;
 
 		this.onDragStart = null;
+		this.onDragMove = null;
 		this.onDragEnd = null;
 		this.onDragCancel = null;
 
@@ -69,6 +70,10 @@ export class InputManager {
 					this.onPan(dx, dy);
 				}
 				this.lastPanPos = { x: e.clientX, y: e.clientY };
+			} else if (this.isDragging) {
+				if (this.onDragMove) {
+					this.onDragMove(e.clientX, e.clientY);
+				}
 			}
 		});
 
@@ -153,6 +158,11 @@ export class InputManager {
 				
 				this.lastTouchDist = dist;
 				this.lastTouchCenter = { x: cx, y: cy };
+			} else if (e.touches.length === 1 && this.isDragging) {
+				const touch = e.touches[0];
+				if (this.onDragMove) {
+					this.onDragMove(touch.clientX, touch.clientY);
+				}
 			}
 		}, { passive: false });
 

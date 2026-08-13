@@ -171,6 +171,8 @@ export class Universe {
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
 		this.ctx.translate(-this.cameraOffset.x * this.zoomScale, -this.cameraOffset.y * this.zoomScale);
 		this.RocketLauncher.drawPreview(this.ctx, this.centerObject, this.zoomScale);
+		this.ObjectPlacer.drawPreview(this.ctx, this.centerObject, this.zoomScale);
+
 		this.ctx.restore();
 
 		this.TelemetryPanel.draw();

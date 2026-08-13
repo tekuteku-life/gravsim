@@ -14,18 +14,36 @@ function AU2M(au) {
 export class ObjectPlacer {
 	constructor(universe) {
 		this.universe = universe;
+
+		this.isSlingshotting = false;
+		this.startX = null;
+		this.startY = null;
+		this.currentX = null;
+		this.currentY = null;
 		
+		// Store screen coordinates for UI dragging calculation
+		this.startScreenX = null;
+		this.startScreenY = null;
+
+		this.screenCursorX = 0;
+		this.screenCursorY = 0;
+
 		// Register input events
 		this.universe.InputManager.onDragStart = this.setReadyForLaunch.bind(this);
+		this.universe.InputManager.onDragMove = this.updateDrag.bind(this);
 		this.universe.InputManager.onDragEnd = this.goLaunch.bind(this);
 		this.universe.InputManager.onDragCancel = () => {
+			this.isSlingshotting = false;
 			this.startX = null;
 			this.startY = null;
+			this.startScreenX = null;
+			this.startScreenY = null;
 		};
 	}
 
 	destroy() {
 		this.universe.InputManager.onDragStart = null;
+		this.universe.InputManager.onDragMove = null;
 		this.universe.InputManager.onDragEnd = null;
 		this.universe.InputManager.onDragCancel = null;
 	}
@@ -142,7 +160,7 @@ export class ObjectPlacer {
 		}
 		return this.placeAtOrbit(objName, sunObj);
 	}
-	
+
 	getLaunchPosition(clientX, clientY) {
 		const screenCenterX = this.universe.canvas.width / 2;
 		const screenCenterY = this.universe.canvas.height / 2;
@@ -164,45 +182,155 @@ export class ObjectPlacer {
 		return 'Earth'; // Default object name
 	}
 
+	_calculateSlingshotVelocity(startScreenX, startScreenY, currentScreenX, currentScreenY) {
+		// Initial velocity vector opposite to dragging direction using screen pixels
+		const dxPx = startScreenX - currentScreenX;
+		const dyPx = startScreenY - currentScreenY;
+
+		// Calculate velocity directly from screen delta to prevent light-speed issue
+		const rawVx = dxPx * SIMULATION.SLINGSHOT_POWER;
+		const rawVy = dyPx * SIMULATION.SLINGSHOT_POWER;
+
+		return { vx: rawVx, vy: rawVy };
+	}
+
 	setReadyForLaunch(clientX, clientY) {
 		if (this.universe.RocketLauncher && this.universe.RocketLauncher.isActive && this.universe.RocketLauncher.mode === 'free') {
 			const pos = this.getLaunchPosition(clientX, clientY);
 			this.universe.RocketLauncher.setFreePosition(pos.x, pos.y);
-			
+
 			document.dispatchEvent(new Event('rocket-preview-updated'));
 			return; 
 		}
 
+		this.isSlingshotting = true;
+		this.screenCursorX = clientX;
+		this.screenCursorY = clientY;
+		this.startScreenX = clientX;
+		this.startScreenY = clientY;
+
 		const pos = this.getLaunchPosition(clientX, clientY);
 		this.startX = pos.x;
 		this.startY = pos.y;
-		this.startTime = Date.now();
+		this.currentX = pos.x;
+		this.currentY = pos.y;
+	}
+
+	updateDrag(clientX, clientY) {
+		if (!this.isSlingshotting) return;
+		
+		this.screenCursorX = clientX;
+		this.screenCursorY = clientY;
+
+		const pos = this.getLaunchPosition(clientX, clientY);
+		this.currentX = pos.x;
+		this.currentY = pos.y;
 	}
 
 	goLaunch(clientX, clientY) {
-		if (this.startX == null || this.startY == null) {
+		if (!this.isSlingshotting || this.startX == null || this.startY == null) {
 			return;
 		}
 
 		const name = this.getLaunchObjectName();
-		const pos = this.getLaunchPosition(clientX, clientY);
-		const endX = pos.x;
-		const endY = pos.y;
-		const endTime = Date.now();
-		const dt = Math.max((endTime - this.startTime) / SIMULATION.TIME_SCALE, 0.01);
-
-		const vx = this.universe.pix2m((endX - this.startX) / dt / SIMULATION.THROW_SCALE);
-		const vy = this.universe.pix2m((endY - this.startY) / dt / SIMULATION.THROW_SCALE);
+		
+		const v = this._calculateSlingshotVelocity(this.startScreenX, this.startScreenY, clientX, clientY);
 		
 		this.placeObject(
 			name,
-			endX, endY,
-			vx + this.universe.centerObject.vx,
-			vy + this.universe.centerObject.vy,
-			{ angle: Math.atan2(vy, vx) }, // Set direction of dragging
+			this.startX, this.startY,
+			this.universe.Renderer.m2pix(v.vx) + this.universe.centerObject.vx,
+			this.universe.Renderer.m2pix(v.vy) + this.universe.centerObject.vy,
+			{ angle: Math.atan2(v.vy, v.vx) }
 		);
 		
+		this.isSlingshotting = false;
 		this.startX = null;
 		this.startY = null;
+		this.startScreenX = null;
+		this.startScreenY = null;
+	}
+
+	drawPreview(ctx, centerObject, zoomScale) {
+		if (!this.isSlingshotting || this.startX == null) return;
+
+		const v = this._calculateSlingshotVelocity(this.startScreenX, this.startScreenY, this.screenCursorX, this.screenCursorY);
+		const speed_kms = Math.sqrt(v.vx * v.vx + v.vy * v.vy) / 1000;
+		const angle_deg = Math.atan2(v.vy, v.vx) * (180 / Math.PI);
+		const displayAngle = angle_deg < 0 ? angle_deg + 360 : angle_deg;
+
+		const relStartX = (this.startX - centerObject.x) * zoomScale;
+		const relStartY = (this.startY - centerObject.y) * zoomScale;
+		
+		const relCurX = (this.currentX - centerObject.x) * zoomScale;
+		const relCurY = (this.currentY - centerObject.y) * zoomScale;
+
+		const lineLength = Math.sqrt(Math.pow(relStartX - relCurX, 2) + Math.pow(relStartY - relCurY, 2));
+		const endX = relStartX + Math.cos(Math.atan2(v.vy, v.vx)) * lineLength;
+		const endY = relStartY + Math.sin(Math.atan2(v.vy, v.vx)) * lineLength;
+
+		ctx.save();
+
+		ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+		ctx.lineWidth = 1;
+		ctx.setLineDash([5, 5]);
+		ctx.beginPath();
+		ctx.moveTo(relStartX, relStartY);
+		ctx.lineTo(relCurX, relCurY);
+		ctx.stroke();
+
+		// Vector of direction
+		ctx.strokeStyle = "rgba(255, 50, 50, 0.9)";
+		ctx.lineWidth = 2;
+		ctx.setLineDash([]);
+		ctx.beginPath();
+		ctx.moveTo(relStartX, relStartY);
+		ctx.lineTo(endX, endY);
+		
+		// Top of arrow
+		if (lineLength > 5) {
+			const headlen = 10;
+			const launchRad = Math.atan2(v.vy, v.vx);
+			ctx.lineTo(endX - headlen * Math.cos(launchRad - Math.PI / 6), endY - headlen * Math.sin(launchRad - Math.PI / 6));
+			ctx.moveTo(endX, endY);
+			ctx.lineTo(endX - headlen * Math.cos(launchRad + Math.PI / 6), endY - headlen * Math.sin(launchRad + Math.PI / 6));
+		}
+		ctx.stroke();
+
+		// Floating HUD
+		const objName = this.getLaunchObjectName();
+		const param = DEFAULT_OBJECT_PARAMS[objName];
+		const massText = param.MASS.toExponential(2) + " t";
+		
+		// Adjust center offset
+		const hudX = (this.screenCursorX - this.universe.canvas.width / 2) + 20;
+		const hudY = (this.screenCursorY - this.universe.canvas.height / 2) - 80;
+
+		// background
+		ctx.fillStyle = "rgba(10, 20, 30, 0.85)";
+		ctx.strokeStyle = "rgba(0, 255, 204, 0.6)";
+		ctx.lineWidth = 1;
+		ctx.beginPath();
+		ctx.roundRect(hudX, hudY, 130, 75, 5); // x, y, width, height, radii
+		ctx.fill();
+		ctx.stroke();
+
+		// Text
+		ctx.fillStyle = "#ffffff";
+		ctx.font = "bold 12px sans-serif";
+		ctx.textAlign = "left";
+		ctx.textBaseline = "top";
+
+		ctx.fillText(`[ ${objName} ]`, hudX + 8, hudY + 8);
+
+		ctx.font = "11px monospace";
+		ctx.fillStyle = "#aaddff";
+		ctx.fillText(`Mass: ${massText}`, hudX + 8, hudY + 26);
+
+		ctx.fillStyle = "#ffcc00";
+		ctx.fillText(`Vel : ${speed_kms.toFixed(2)} km/s`, hudX + 8, hudY + 42);
+		ctx.fillText(`Ang : ${displayAngle.toFixed(1)}°`, hudX + 8, hudY + 56);
+
+		ctx.restore();
 	}
 }
