@@ -14,23 +14,20 @@ function AU2M(au) {
 export class ObjectPlacer {
 	constructor(universe) {
 		this.universe = universe;
-		this.isDragging = false;
-		this.wasMultiTouch = false;
-
-		this.boundSetReady = this.setReadyForLaunch.bind(this);
-		this.boundGoLaunch = this.goLaunch.bind(this);
-
-		universe.canvas.addEventListener('mousedown', this.boundSetReady);
-		universe.canvas.addEventListener('touchstart', this.boundSetReady);
-		universe.canvas.addEventListener('mouseup', this.boundGoLaunch);
-		universe.canvas.addEventListener('touchend', this.boundGoLaunch);
+		
+		// Register input events
+		this.universe.InputManager.onDragStart = this.setReadyForLaunch.bind(this);
+		this.universe.InputManager.onDragEnd = this.goLaunch.bind(this);
+		this.universe.InputManager.onDragCancel = () => {
+			this.startX = null;
+			this.startY = null;
+		};
 	}
 
 	destroy() {
-		this.universe.canvas.removeEventListener('mousedown', this.boundSetReady);
-		this.universe.canvas.removeEventListener('touchstart', this.boundSetReady);
-		this.universe.canvas.removeEventListener('mouseup', this.boundGoLaunch);
-		this.universe.canvas.removeEventListener('touchend', this.boundGoLaunch);
+		this.universe.InputManager.onDragStart = null;
+		this.universe.InputManager.onDragEnd = null;
+		this.universe.InputManager.onDragCancel = null;
 	}
 
 	placeObject(objName, x, y, vx = 0, vy = 0, options = {}) {
@@ -146,31 +143,16 @@ export class ObjectPlacer {
 		return this.placeAtOrbit(objName, sunObj);
 	}
 	
-	getLaunchPosition(e) {
+	getLaunchPosition(clientX, clientY) {
 		const screenCenterX = this.universe.canvas.width / 2;
 		const screenCenterY = this.universe.canvas.height / 2;
 		const centerObjX = this.universe.centerObject.x;
 		const centerObjY = this.universe.centerObject.y;
 		const zoomScale = this.universe.zoomScale;
-		let x = 0, y = 0;
-
-		if (e.touches) {
-			if(e.changedTouches) {
-				x = e.changedTouches[0].clientX;
-				y = e.changedTouches[0].clientY;
-			}
-			else {
-				x = e.touches[0].clientX;
-				y = e.touches[0].clientY;
-			}
-		} else {
-			x = e.clientX;
-			y = e.clientY;
-		}
 		
 		return {
-			x: (x - screenCenterX) / zoomScale + centerObjX + this.universe.cameraOffset.x,
-			y: (y - screenCenterY) / zoomScale + centerObjY + this.universe.cameraOffset.y,
+			x: (clientX - screenCenterX) / zoomScale + centerObjX + this.universe.cameraOffset.x,
+			y: (clientY - screenCenterY) / zoomScale + centerObjY + this.universe.cameraOffset.y,
 		};
 	}
 
@@ -182,51 +164,28 @@ export class ObjectPlacer {
 		return 'Earth'; // Default object name
 	}
 
-	setReadyForLaunch(e) {
-		if (!e.touches && e.button !== 0) { 
-			return;
-		}
-
-		if (e.touches) {
-			if (e.touches.length > 1) {
-				this.isDragging = false;
-				this.wasMultiTouch = true;
-				return;
-			}
-			if (e.touches.length === 1) {
-				this.wasMultiTouch = false;
-			}
-		}
-
+	setReadyForLaunch(clientX, clientY) {
 		if (this.universe.RocketLauncher && this.universe.RocketLauncher.isActive && this.universe.RocketLauncher.mode === 'free') {
-			const pos = this.getLaunchPosition(e);
+			const pos = this.getLaunchPosition(clientX, clientY);
 			this.universe.RocketLauncher.setFreePosition(pos.x, pos.y);
 			
 			document.dispatchEvent(new Event('rocket-preview-updated'));
 			return; 
 		}
 
-		const pos = this.getLaunchPosition(e);
+		const pos = this.getLaunchPosition(clientX, clientY);
 		this.startX = pos.x;
 		this.startY = pos.y;
 		this.startTime = Date.now();
-		this.isDragging = true;
 	}
 
-	goLaunch(e) {
-		if (!e.touches && e.button !== 0) {
-			this.isDragging = false;
+	goLaunch(clientX, clientY) {
+		if (this.startX == null || this.startY == null) {
 			return;
 		}
-
-		if (!this.isDragging || this.wasMultiTouch) {
-			this.isDragging = false;
-			return;
-		}
-		this.isDragging = false;
 
 		const name = this.getLaunchObjectName();
-		const pos = this.getLaunchPosition(e);
+		const pos = this.getLaunchPosition(clientX, clientY);
 		const endX = pos.x;
 		const endY = pos.y;
 		const endTime = Date.now();

@@ -12,12 +12,6 @@ import { NaviTab } from './gravsim_tab_navi.js';
 export class ControlPanel {
 	constructor(universe) {
 		this.universe = universe;
-		this.lastTouchDist = null;
-		this.lastTouchCenter = null;
-		this.isPanning = false;
-		this.hasPanned = false;
-		this.lastPanPos = { x: 0, y: 0 };
-
 		this._initElements();
 		
 		this.systemTab = new SystemTab(universe);
@@ -39,46 +33,26 @@ export class ControlPanel {
 	}
 
 	_bindEvents() {
-		// Canvas Zoom Events (Wheel & Touch)
-		const canvas = this.universe.canvas;
-		canvas.addEventListener('wheel', (e) => this._handleWheelZoom(e));
-		canvas.addEventListener('touchmove', (e) => this._handleTouchZoom(e), { passive: false });
-		canvas.addEventListener('touchend', (e) => this._resetTouchDist(e));
-		canvas.addEventListener('touchcancel', () => this._resetTouchDist(null));
+		// Process by handling events from InputManager
+		this.universe.InputManager.onWheelZoom = (dir) => {
+			let step = this.systemTab.getZoomStep();
+			step = (dir > 0) ? step : -step;
+			this.systemTab.setZoomScaleByStep(step);
+		};
 
-		// Pan Events (Right click or Middle click)
-		canvas.addEventListener('mousedown', (e) => {
-			if (e.button === 1 || e.button === 2) {
-				this.isPanning = true;
-				this.hasPanned = false;
-				this.lastPanPos = { x: e.clientX, y: e.clientY };
-			}
-		});
-		canvas.addEventListener('mousemove', (e) => {
-			if (this.isPanning) {
-				const dx = e.clientX - this.lastPanPos.x;
-				const dy = e.clientY - this.lastPanPos.y;
-				
-				if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-					this.hasPanned = true;
-				}
-				
-				const zoomScale = this.universe.zoomScale;
-				this.universe.cameraOffset.x -= dx / zoomScale;
-				this.universe.cameraOffset.y -= dy / zoomScale;
-				
-				this.lastPanPos = { x: e.clientX, y: e.clientY };
-			}
-		});
-		canvas.addEventListener('mouseup', (e) => {
-			if (e.button === 1 || e.button === 2) {
-				this.isPanning = false;
-			}
-		});
-		canvas.addEventListener('mouseleave', () => {
-			this.isPanning = false;
-		});
+		this.universe.InputManager.onTouchZoom = (delta) => {
+			let step = this.systemTab.getZoomStep() || 0.1;
+			step = (delta > 0 ? step : -step) * Math.abs(delta) * 0.05;
+			this.systemTab.setZoomScaleByStep(step);
+		};
 
+		this.universe.InputManager.onPan = (dx, dy) => {
+			const zoomScale = this.universe.zoomScale;
+			this.universe.cameraOffset.x -= dx / zoomScale;
+			this.universe.cameraOffset.y -= dy / zoomScale;
+		};
+
+		// Events for UI
 		if (this.ui.mobileMenuToggle) {
 			this.ui.mobileMenuToggle.addEventListener('click', () => {
 				this.ui.ctrlPanel.classList.toggle('open');
@@ -109,58 +83,6 @@ export class ControlPanel {
 		} else {
 			// Close tab except for Rocket tab
 			this.rocketTab.close();
-		}
-	}
-
-	_handleWheelZoom(e) {
-		e.preventDefault();
-		let step = this.systemTab.getZoomStep();
-		step = (e.deltaY < 0) ? step : -step;
-		this.systemTab.setZoomScaleByStep(step);
-	}
-
-	_handleTouchZoom(e) {
-		if (e.touches.length === 2) {
-			e.preventDefault();
-			const touch1 = e.touches[0];
-			const touch2 = e.touches[1];
-			
-			const dx = touch1.clientX - touch2.clientX;
-			const dy = touch1.clientY - touch2.clientY;
-			const dist = Math.sqrt(dx * dx + dy * dy);
-
-			const cx = (touch1.clientX + touch2.clientX) / 2;
-			const cy = (touch1.clientY + touch2.clientY) / 2;
-
-			if (this.lastTouchDist !== null && this.lastTouchCenter !== null) {
-				// Zoom
-				const delta = dist - this.lastTouchDist;
-				let step = this.systemTab.getZoomStep() || 0.1;
-				step = (delta > 0 ? step : -step) * Math.abs(delta) * 0.05;
-				this.systemTab.setZoomScaleByStep(step);
-
-				// Pan
-				const panX = cx - this.lastTouchCenter.x;
-				const panY = cy - this.lastTouchCenter.y;
-				
-				if (Math.abs(panX) > 2 || Math.abs(panY) > 2) {
-					this.hasPanned = true;
-				}
-
-				const zoomScale = this.universe.zoomScale;
-				this.universe.cameraOffset.x -= panX / zoomScale;
-				this.universe.cameraOffset.y -= panY / zoomScale;
-			}
-			
-			this.lastTouchDist = dist;
-			this.lastTouchCenter = { x: cx, y: cy };
-		}
-	}
-
-	_resetTouchDist(e) {
-		if (!e || e.touches.length < 2) {
-			this.lastTouchDist = null;
-			this.lastTouchCenter = null;
 		}
 	}
 

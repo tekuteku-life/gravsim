@@ -1,7 +1,7 @@
 
 // gravsim_universe.js
 
-import { PHYSICS, SIMULATION, OBJECT_STATE, UI, OBJECT_TYPES } from './gravsim_const.js';
+import { PHYSICS, SIMULATION, OBJECT_STATE, OBJECT_TYPES } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
 import { InfoPanel } from './gravsim_info_panel.js';
 import { TelemetryPanel } from './gravsim_telemetry_panel.js';
@@ -10,12 +10,12 @@ import { ObjectManager } from './gravsim_object_manager.js';
 import { ObjectPlacer } from './gravsim_object_placer.js';
 import { RocketLauncher } from './gravsim_rocket_launcher.js';
 import { SaveManager } from './gravsim_save_manager.js';
+import { InputManager } from './gravsim_input_manager.js';
 
 const GRAVSIM_CALC_JS_FILE = './gravsim_calc.js';
 
 /*******************************************************************
  * CalcWorkerManager class that manages the calculation worker for physics simulation.
- * @property {Worker} worker - The Web Worker instance for handling calculations.
 *******************************************************************/
 class CalcWorkerManager {
 	constructor() {
@@ -61,6 +61,7 @@ export class Universe {
 		// Initialize Modules
 		this.Renderer = new Renderer(_canvas);
 		this.CalcWorkerManager = new CalcWorkerManager();
+		this.InputManager = new InputManager(this.canvas);
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
 
 		this.InfoPanel = new InfoPanel();
@@ -70,9 +71,10 @@ export class Universe {
 		this.RocketLauncher = new RocketLauncher(this);
 		this.SaveManager = new SaveManager(this);
 
+		this.InputManager.onReset = this.reset.bind(this);
+
 		this.timeScale = this.ControlPanel.getTimeScale();
 		
-		this._initInput();
 		this.reset();
 	}
 
@@ -107,39 +109,6 @@ export class Universe {
 	au2pix(au) { return this.Renderer.au2pix(au); }
 	m2pix(m) { return this.Renderer.m2pix(m); }
 	pix2m(px) { return this.Renderer.pix2m(px); }
-
-	// ------------------------------------------
-	// Core Loop & Control
-	// ------------------------------------------
-	_initInput() {
-		// Reset for PC
-		this.canvas.addEventListener('contextmenu', (e) => {
-			e.preventDefault();
-			// Reset when did not pan
-			if (this.ControlPanel && !this.ControlPanel.hasPanned) {
-				this.reset();
-			}
-			if (this.ControlPanel) {
-				this.ControlPanel.hasPanned = false;
-			}
-		});
-
-		// Reset for smart phone (double tap with 2 fingers)
-		let lastTwoFingerTapTime = 0;
-		this.canvas.addEventListener('touchstart', (e) => {
-			if (e.touches && e.touches.length === 2) {
-				const now = Date.now();
-
-				if (now - lastTwoFingerTapTime < UI.DOUBLE_TAP_DURATION) {
-					e.preventDefault();
-					this.reset();
-					lastTwoFingerTapTime = 0; 
-				} else {
-					lastTwoFingerTapTime = now;
-				}
-			}
-		}, { passive: false });
-	}
 
 	reset() {
 		this.ObjectManager.destroy();
