@@ -38,6 +38,10 @@ export class GravSimObject {
 			baseSize: size
 		};
 		this.trajectory = new Trajectory(id, rendering_config);
+
+		if (this.isDebris) {
+			this._generatePolygonVertices();
+		}
 	}
 
 	get mass() { return 1; }
@@ -117,6 +121,29 @@ export class GravSimObject {
 		this.trajectory.draw(renderContext);
 	}
 
+	_generatePolygonVertices() {
+		this.polygonVertices = [];
+		let seed = this.id;
+		const random = () => {
+			const x = Math.sin(seed++) * 10000;
+			return x - Math.floor(x);
+		};
+		
+		const vertexCount = 5 + Math.floor(random() * 4);
+		for (let i = 0; i < vertexCount; i++) {
+			const baseAngle = (i / vertexCount) * Math.PI * 2;
+			const angleOffset = (random() - 0.5) * 0.5;
+			const angle = baseAngle + angleOffset;
+
+			const distanceRatio = 0.6 + random() * 0.6;
+
+			this.polygonVertices.push({
+				x: Math.cos(angle) * distanceRatio,
+				y: Math.sin(angle) * distanceRatio
+			});
+		}
+	}
+
 	// Calculate switching between fixed size and real physical size
 	_getDrawRadius(zoomScale) {
 		const realRadiusPx = (this.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
@@ -129,22 +156,35 @@ export class GravSimObject {
 	_drawBody(ctx, x, y, screenRadius) {
 		ctx.fillStyle = this.color;
 		ctx.beginPath();
-		ctx.arc(x, y, screenRadius, 0, Math.PI * 2);
-		ctx.fill();
 
-		// Stroke border (if configured)
-		if (this.borderColor && this.borderWidth > 0) {
-			const screenLineWidthPx = Math.max(1, this.size * this.borderWidth);
-			ctx.lineWidth = screenLineWidthPx;
+		if (this.isDebris && this.polygonVertices) {
+			const first = this.polygonVertices[0];
+			ctx.moveTo(x + first.x * screenRadius, y + first.y * screenRadius);
+			for (let i = 1; i < this.polygonVertices.length; i++) {
+				const pt = this.polygonVertices[i];
+				ctx.lineTo(x + pt.x * screenRadius, y + pt.y * screenRadius);
+			}
+			ctx.closePath();
+			ctx.fill();
+		}
+		else {
+			ctx.arc(x, y, screenRadius, 0, Math.PI * 2);
+			ctx.fill();
 
-			const innerRadius = Math.max(1e-5, screenRadius - (ctx.lineWidth / 2));
+			// Stroke border (if configured)
+			if (this.borderColor && this.borderWidth > 0) {
+				const screenLineWidthPx = Math.max(1, this.size * this.borderWidth);
+				ctx.lineWidth = screenLineWidthPx;
 
-			ctx.strokeStyle = this.borderColor;
-			ctx.beginPath();
-			ctx.arc(x, y, innerRadius, 0, Math.PI * 2);
-			ctx.stroke();
+				const innerRadius = Math.max(1e-5, screenRadius - (ctx.lineWidth / 2));
 
-			ctx.lineWidth = 1;
+				ctx.strokeStyle = this.borderColor;
+				ctx.beginPath();
+				ctx.arc(x, y, innerRadius, 0, Math.PI * 2);
+				ctx.stroke();
+
+				ctx.lineWidth = 1;
+			}
 		}
 	}
 	
