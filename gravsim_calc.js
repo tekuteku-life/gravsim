@@ -405,7 +405,7 @@ class SimulationController {
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = 0;
 			}
 			buffer[offset + BUFFER_INDEX.RADIUS] = obj.radius || 1;
-			buffer[offset + BUFFER_INDEX.FLAGS] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0);
+			buffer[offset + BUFFER_INDEX.FLAGS] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0) | (obj.inAtmosphere ? 8 : 0);
 			buffer[offset + BUFFER_INDEX.DEBRIS_MASS] = obj.debrisMass || 0;
 			buffer[offset + BUFFER_INDEX.IMPACT_VX] = obj.impactVx || 0;
 			buffer[offset + BUFFER_INDEX.IMPACT_VY] = obj.impactVy || 0;

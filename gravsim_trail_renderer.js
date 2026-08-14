@@ -48,7 +48,7 @@ class BaseTrailRenderer {
 			pointsToDraw.push({ relX, relY, logicalIdx: i });
 			prevPt = { relX, relY };
 
-			if (drawnLength > targetLengthPx) break;
+			if (drawnLength > targetLengthPx) { break; }
 		}
 		
 		return pointsToDraw;
@@ -62,7 +62,7 @@ class SolidLineRenderer extends BaseTrailRenderer {
 	draw(trajectory, renderContext) {
 		const ctx = renderContext.ctx;
 		const pointsToDraw = this._getPointsToDraw(trajectory, renderContext);
-		if (pointsToDraw.length < 2) return;
+		if (pointsToDraw.length < 2) { return; }
 
 		const config = trajectory.rendering_config;
 		const color = config.color || '#FFFFFF';
@@ -169,8 +169,65 @@ class SparkRenderer extends BaseTrailRenderer {
 	}
 }
 
+/*******************************************************************
+ * TrailRenderer for Smoke trail
+ *******************************************************************/
+class SmokeRenderer extends BaseTrailRenderer {
+	draw(trajectory, renderContext) {
+		const ctx = renderContext.ctx;
+		const zoomScale = renderContext.zoomScale;
+		const pointsToDraw = this._getPointsToDraw(trajectory, renderContext);
+		if (pointsToDraw.length < 2) { return; }
+
+		const config = trajectory.rendering_config;
+		const bodyScreenRadius = config.bodyScreenRadius || 1;
+
+		const r = 220, g = 220, b = 220;
+
+		ctx.save();
+
+		const drawLen = Math.min(RENDER.SMOKE.DRAW_MAX_LEN, pointsToDraw.length);
+		for (let i = 0; i < drawLen; i++) {
+			const pt = pointsToDraw[i];
+
+			// Skip drawing to avoid overlapping
+			const latestPt = pointsToDraw[0];
+			const dx = pt.relX - latestPt.relX;
+			const dy = pt.relY - latestPt.relY;
+			const distSq = dx * dx + dy * dy;
+			if (distSq <= bodyScreenRadius) {
+				continue;
+			}
+
+			const t = i / drawLen;
+
+			const peakT = 0.15;
+			let alpha = 0;
+			if (t < peakT) {
+				alpha = (t / peakT) * RENDER.SMOKE.ALPHA_RATE + RENDER.SMOKE.ALPHA_BASE;
+			} else {
+				alpha = ((1.0 - t) / (1.0 - peakT)) * RENDER.SMOKE.ALPHA_RATE + RENDER.SMOKE.ALPHA_BASE;
+			}
+
+			const radius_atten = RENDER.SMOKE.RADIUS_BASE + t * RENDER.SMOKE.RADIUS_RATE;
+			const radius = Math.min(bodyScreenRadius * radius_atten, bodyScreenRadius);
+
+			const xDev = RENDER.SMOKE.DEVIATION_RATE * ((pt.relX + 1e5) % t);
+			const yDev = RENDER.SMOKE.DEVIATION_RATE * ((pt.relY + 1e5) % t);
+
+			ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+			ctx.beginPath();
+			ctx.arc(pt.relX + xDev, pt.relY + yDev, radius, 0, Math.PI * 2);
+			ctx.fill();
+		}
+		
+		ctx.restore();
+	}
+}
+
 // System common renderers
 export const TRAIL_RENDERERS = {
 	normal: new SolidLineRenderer(),
-	escape: new SparkRenderer()
+	escape: new SparkRenderer(),
+	atmosphere: new SmokeRenderer(),
 };

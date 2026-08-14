@@ -35,6 +35,7 @@ class GravSimCalcObject {
 		this.impactWinnerX = 0;
 		this.impactWinnerY = 0;
 		this.impactWinnerRadius = 0;
+		this.inAtmosphere = false;
 	}
 	get mass() { return 1; }
 	
@@ -105,6 +106,8 @@ class GravSimCalcObject {
 	}
 
 	applyAerodynamics(refBody, refParam, altM) {
+		this.inAtmosphere = true;
+
 		// Calculate Atmospheric Density
 		const rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / refParam.ATM_SCALE_HEIGHT);
 
@@ -170,6 +173,11 @@ class GravSimCalcObject {
 		
 		this.ax -= (vRelX / vRel) * accelDrag;
 		this.ay -= (vRelY / vRel) * accelDrag;
+	}
+
+	clearAerodynamicParameters() {
+		this.inAtmosphere = false;
+		this._currentQ = 0;
 	}
 
 	_checkAerodynamicDestruction(q) {
@@ -290,6 +298,7 @@ export class CalcRocket extends GravSimCalcObject {
 	}
 
 	clearAerodynamicParameters() {
+		this.inAtmosphere = false;
 		this._currentQ = 0;
 		this._qAxialKpa = 0;
 		this._qLateralKpa = 0;

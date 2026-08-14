@@ -154,6 +154,7 @@ export class ObjectManager {
 				const isCollided = (flags & 1) !== 0;
 				const isShattered = (flags & 2) !== 0;
 				const isImpact = (flags & 4) !== 0;
+				target.inAtmosphere = (flags & 8) !== 0;
 
 				if (isCollided) {
 					if (isImpact && target.state === OBJECT_STATE.ACTIVE) {

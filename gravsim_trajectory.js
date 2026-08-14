@@ -26,7 +26,7 @@ export class Trajectory {
 		this.frame[this.head] = frameNum;
 		
 		this.head = (this.head + 1) % this.capacity;
-		if (this.count < this.capacity) this.count++;
+		if (this.count < this.capacity) { this.count++; }
 	}
 
 	shrink(atten = 1) {
@@ -96,7 +96,7 @@ export class Trajectory {
 	}
 
 	draw(renderContext) {
-		if (this.count < 2) return;
+		if (this.count < 2) { return; }
 		TRAIL_RENDERERS[this.currentMode].draw(this, renderContext);
 	}
 }

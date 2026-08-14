@@ -30,6 +30,8 @@ export class GravSimObject {
 		this.borderColor = borderColor || null;
 		this.borderWidth = borderWidth || 0;
 		this.state = OBJECT_STATE.ACTIVE;
+		this.isEscaping = false;
+		this.inAtmosphere = false;
 
 		const rendering_config = {
 			color: color,
@@ -88,10 +90,6 @@ export class GravSimObject {
 		if (!renderContext) { return; }
 		if (!renderContext.basis) { return; }
 
-		// Draw trajectory even if state == dead
-		this.trajectory.setVisualMode(this.isEscaping ? 'escape' : 'normal');
-		this.trajectory.draw(renderContext);
-
 		// Draw main body and effects (Screen-space calculation)
 		if (this.state === OBJECT_STATE.ACTIVE) {
 			const basis = renderContext.basis;
@@ -102,10 +100,21 @@ export class GravSimObject {
 			const relY = this.getRelativeY(basis) * zoomScale;
 
 			const screenRadius = this._getDrawRadius(zoomScale);
+			renderContext.bodyScreenRadius = screenRadius
 
 			this._drawBody(ctx, relX, relY, screenRadius);
 			this._drawEffects(ctx, relX, relY, screenRadius, zoomScale);
 		}
+
+		// Draw trajectory even if state == dead
+		let mode = 'normal';
+		if (this.isEscaping) {
+			mode = 'escape';
+		} else if (this.inAtmosphere) {
+			mode = 'atmosphere';
+		}
+		this.trajectory.setVisualMode(mode);
+		this.trajectory.draw(renderContext);
 	}
 
 	// Calculate switching between fixed size and real physical size
