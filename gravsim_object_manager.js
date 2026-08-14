@@ -8,6 +8,7 @@ import {
 } from './gravsim_const.js';
 import { GravSimObject, CelestialBody, Rocket } from './gravsim_object.js';
 import { ColorUtils } from './gravsim_utils.js';
+import { WorkerBridge } from './gravsim_worker_bridge.js';
 
 export class ObjectManager {
 	constructor(renderer, workerManager) {
@@ -100,87 +101,76 @@ export class ObjectManager {
 	}
 
 	updateObjectParams(data) {
-		const buffer = new Float64Array(data.objectsData);
-		const objCount = buffer.length / CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
-
 		this.physicsSequence++;
 
-		for (let i = 0; i < objCount; i++) {
-			const offset = i * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
-			const id = buffer[offset + BUFFER_INDEX.ID];
-
-			const target = this.objects.find(t => t.id === id);
+		WorkerBridge.parseWorkerToMain(data.objectsData, (objData) => {
+			const target = this.objects.find(t => t.id === objData.id);
 			if (target) {
-				const type = buffer[offset + BUFFER_INDEX.TYPE];
-				target.x = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.X]);
-				target.y = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.Y]);
-				target.vx = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.VX]);
-				target.vy = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.VY]);
-				target.ax = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.AX]);
-				target.ay = this.renderer.m2pix(buffer[offset + BUFFER_INDEX.AY]);
+				target.x = this.renderer.m2pix(objData.x);
+				target.y = this.renderer.m2pix(objData.y);
+				target.vx = this.renderer.m2pix(objData.vx);
+				target.vy = this.renderer.m2pix(objData.vy);
+				target.ax = this.renderer.m2pix(objData.ax);
+				target.ay = this.renderer.m2pix(objData.ay);
 
-				if (type === OBJECT_TYPES.ROCKET) {
-					target.dryMass = buffer[offset + BUFFER_INDEX.MASS] / 1e3;
-					target.fuelMass = buffer[offset + BUFFER_INDEX.FUEL_MASS] / 1e3;
-					target.burnTime = buffer[offset + BUFFER_INDEX.BURN_TIME];
-					target.thrustRatio = buffer[offset + BUFFER_INDEX.THRUST_RATIO];
+				if (objData.type === OBJECT_TYPES.ROCKET) {
+					target.dryMass = objData.mass / 1e3;
+					target.fuelMass = objData.fuelMass / 1e3;
+					target.burnTime = objData.burnTime;
+					target.thrustRatio = objData.thrustRatio;
 
 					target.telemetry = {
-						status: buffer[offset + BUFFER_INDEX.TM_STATUS],
-						qAxialKpa: buffer[offset + BUFFER_INDEX.TM_Q_AXIAL],
-						qLateralKpa: buffer[offset + BUFFER_INDEX.TM_Q_LATERAL],
-						structRatio: buffer[offset + BUFFER_INDEX.TM_STRUCT_RATIO],
-						aoaDeg: buffer[offset + BUFFER_INDEX.TM_AOA_DEG],
-						progradeAngle: buffer[offset + BUFFER_INDEX.TM_PROGRADE_ANGLE],
-						gravityAngle: buffer[offset + BUFFER_INDEX.TM_GRAVITY_ANGLE],
-						remDv: buffer[offset + BUFFER_INDEX.TM_REM_DV],
-						twr: buffer[offset + BUFFER_INDEX.TM_TWR],
-						altM: buffer[offset + BUFFER_INDEX.TM_ALT_M],
-						vV: buffer[offset + BUFFER_INDEX.TM_VV],
-						vH: buffer[offset + BUFFER_INDEX.TM_VH],
-						aV: buffer[offset + BUFFER_INDEX.TM_AV],
-						aH: buffer[offset + BUFFER_INDEX.TM_AH],
-						currentG: buffer[offset + BUFFER_INDEX.TM_CURRENT_G],
-						flightTime: buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME],
+						status: objData.tmStatus,
+						qAxialKpa: objData.tmQAxial,
+						qLateralKpa: objData.tmQLateral,
+						structRatio: objData.tmStructRatio,
+						aoaDeg: objData.tmAoaDeg,
+						progradeAngle: objData.tmProgradeAngle,
+						gravityAngle: objData.tmGravityAngle,
+						remDv: objData.tmRemDv,
+						twr: objData.tmTwr,
+						altM: objData.tmAltM,
+						vV: objData.tmVv,
+						vH: objData.tmVh,
+						aV: objData.tmAv,
+						aH: objData.tmAh,
+						currentG: objData.tmCurrentG,
+						flightTime: objData.tmFlightTime,
 					};
-					target.thrustAngle = buffer[offset + BUFFER_INDEX.THRUST_ANGLE];
+					target.thrustAngle = objData.thrustAngle;
 				} else {
-					target.mass = buffer[offset + BUFFER_INDEX.MASS] / 1e3;
+					target.mass = objData.mass / 1e3;
 				}
-				target.radius = buffer[offset + BUFFER_INDEX.RADIUS];
+				
+				target.radius = objData.radius;
 				target.updateHistory(this.physicsSequence);
 
-				const flags = buffer[offset + BUFFER_INDEX.FLAGS];
-				const isCollided = (flags & 1) !== 0;
-				const isShattered = (flags & 2) !== 0;
-				const isImpact = (flags & 4) !== 0;
-				target.inAtmosphere = (flags & 8) !== 0;
-				target.isEscaping = (flags & 16) !== 0;
+				target.inAtmosphere = objData.inAtmosphere;
+				target.isEscaping = objData.isEscaping;
+				target.dominantBodyId = objData.dominantBodyId;
+				target.distToDominantM = objData.distToDominantM;
 
-				target.dominantBodyId = buffer[offset + BUFFER_INDEX.DOMINANT_BODY_ID];
-				target.distToDominantM = buffer[offset + BUFFER_INDEX.DIST_TO_DOMINANT];
-
-				if (isCollided) {
-					if (isImpact && target.state === OBJECT_STATE.ACTIVE) {
+				if (objData.isCollided) {
+					if (objData.isImpact && target.state === OBJECT_STATE.ACTIVE) {
 						this._generateImpactDebris(
 							target,
-							buffer[offset + BUFFER_INDEX.DEBRIS_MASS] / 1e3,
-							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_VX]),
-							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_VY]),
-							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_WINNER_X]),
-							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_WINNER_Y]),
-							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_WINNER_RADIUS])
+							objData.debrisMass / 1e3,
+							this.renderer.m2pix(objData.impactVx),
+							this.renderer.m2pix(objData.impactVy),
+							this.renderer.m2pix(objData.impactWinnerX),
+							this.renderer.m2pix(objData.impactWinnerY),
+							this.renderer.m2pix(objData.impactWinnerRadius)
 						);
 					}
 					target.setCollided();
 				}
 
 				// Handle object shattered by tidal force or Max-Q in the worker
-				if (isShattered && target.state === OBJECT_STATE.ACTIVE) {
+				if (objData.isShattered && target.state === OBJECT_STATE.ACTIVE) {
 					this._shatterObject(target);
 				}
 			}
-		}
+		});
 	}
 
 	cleanupObjects() {

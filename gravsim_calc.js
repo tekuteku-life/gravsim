@@ -9,6 +9,7 @@ import {
 
 import { CalcCelestialBody, CalcRocket } from './gravsim_calc_object.js'
 import { FlightComputer } from './gravsim_flight_computer.js';
+import { WorkerBridge } from './gravsim_worker_bridge.js';
 
 const CALC_INTERVAL = 60;
 
@@ -361,7 +362,7 @@ class SimulationController {
 		this.engine._updateEscapeStatus();
 
 		// Return result to main thread (Includes newly shattered objects before removal)
-		const buffer = this.formatForMessage();
+		const buffer = WorkerBridge.formatWorkerToMain(this.engine.objects);
 		self.postMessage({
 			cmd: 'update',
 			deltaTime: dt,
@@ -369,66 +370,6 @@ class SimulationController {
 		}, [buffer.buffer]);
 
 		this.engine.removeDeadObjects();
-	}
-
-	formatForMessage() {
-		const buffer = new Float64Array(this.engine.objects.length * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT);
-
-		for (let i = 0; i < this.engine.objects.length; i++) {
-			const obj = this.engine.objects[i];
-			const offset = i * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
-
-			buffer[offset + BUFFER_INDEX.ID] = obj.id;
-			buffer[offset + BUFFER_INDEX.TYPE] = obj.type;
-			buffer[offset + BUFFER_INDEX.X] = obj.x || 0;
-			buffer[offset + BUFFER_INDEX.Y] = obj.y || 0;
-			buffer[offset + BUFFER_INDEX.VX] = obj.vx || 0;
-			buffer[offset + BUFFER_INDEX.VY] = obj.vy || 0;
-			buffer[offset + BUFFER_INDEX.AX] = obj.ax || 0;
-			buffer[offset + BUFFER_INDEX.AY] = obj.ay || 0;
-			
-			if (obj.type === OBJECT_TYPES.ROCKET) {
-				buffer[offset + BUFFER_INDEX.MASS] = obj.dryMass;
-				buffer[offset + BUFFER_INDEX.FUEL_MASS] = obj.fuelMass;
-				buffer[offset + BUFFER_INDEX.BURN_TIME] = obj.burnTime > 0 ? obj.burnTime : 0;
-				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = obj._thrustRatio || 0;
-				
-				const tm = obj.flightComputer.getTelemetry();
-				buffer[offset + BUFFER_INDEX.TM_STATUS] = tm.status;
-				buffer[offset + BUFFER_INDEX.TM_Q_AXIAL] = tm.qAxialKpa;
-				buffer[offset + BUFFER_INDEX.TM_Q_LATERAL] = tm.qLateralKpa;
-				buffer[offset + BUFFER_INDEX.TM_STRUCT_RATIO] = tm.structRatio;
-				buffer[offset + BUFFER_INDEX.TM_AOA_DEG] = tm.aoaDeg;
-				buffer[offset + BUFFER_INDEX.TM_PROGRADE_ANGLE] = tm.progradeAngle;
-				buffer[offset + BUFFER_INDEX.TM_GRAVITY_ANGLE] = tm.gravityAngle;
-				buffer[offset + BUFFER_INDEX.TM_REM_DV] = tm.remDv;
-				buffer[offset + BUFFER_INDEX.TM_TWR] = tm.twr;
-				buffer[offset + BUFFER_INDEX.TM_ALT_M] = tm.altM;
-				buffer[offset + BUFFER_INDEX.TM_VV] = tm.vV;
-				buffer[offset + BUFFER_INDEX.TM_VH] = tm.vH;
-				buffer[offset + BUFFER_INDEX.TM_AV] = tm.aV;
-				buffer[offset + BUFFER_INDEX.TM_AH] = tm.aH;
-				buffer[offset + BUFFER_INDEX.TM_CURRENT_G] = tm.currentG;
-				buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME] = obj.flightComputer.flightTime;
-				buffer[offset + BUFFER_INDEX.THRUST_ANGLE] = obj.thrustAngle;
-			} else {
-				buffer[offset + BUFFER_INDEX.MASS] = obj.mass;
-				buffer[offset + BUFFER_INDEX.FUEL_MASS] = 0;
-				buffer[offset + BUFFER_INDEX.BURN_TIME] = 0;
-				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = 0;
-			}
-			buffer[offset + BUFFER_INDEX.RADIUS] = obj.radius || 1;
-			buffer[offset + BUFFER_INDEX.FLAGS] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0) | (obj.inAtmosphere ? 8 : 0) | (obj.isEscaping ? 16 : 0);
-			buffer[offset + BUFFER_INDEX.DEBRIS_MASS] = obj.debrisMass || 0;
-			buffer[offset + BUFFER_INDEX.IMPACT_VX] = obj.impactVx || 0;
-			buffer[offset + BUFFER_INDEX.IMPACT_VY] = obj.impactVy || 0;
-			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_X] = obj.impactWinnerX || 0;
-			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_Y] = obj.impactWinnerY || 0;
-			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_RADIUS] = obj.impactWinnerRadius || 0;
-			buffer[offset + BUFFER_INDEX.DOMINANT_BODY_ID] = obj.dominantBody ? obj.dominantBody.id : -1;
-			buffer[offset + BUFFER_INDEX.DIST_TO_DOMINANT] = obj.distToDominantM;
-		}
-		return buffer;
 	}
 }
 
