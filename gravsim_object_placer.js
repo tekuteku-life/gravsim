@@ -16,10 +16,10 @@ export class ObjectPlacer {
 		this.universe = universe;
 
 		this.isSlingshotting = false;
-		this.startX = null;
-		this.startY = null;
-		this.currentX = null;
-		this.currentY = null;
+
+		// Relative position to the center object
+		this.startRelX = null;
+		this.startRelY = null;
 		
 		// Store screen coordinates for UI dragging calculation
 		this.startScreenX = null;
@@ -34,8 +34,8 @@ export class ObjectPlacer {
 		this.universe.InputManager.onDragEnd = this.goLaunch.bind(this);
 		this.universe.InputManager.onDragCancel = () => {
 			this.isSlingshotting = false;
-			this.startX = null;
-			this.startY = null;
+			this.startRelX = null;
+			this.startRelY = null;
 			this.startScreenX = null;
 			this.startScreenY = null;
 		};
@@ -164,13 +164,12 @@ export class ObjectPlacer {
 	getLaunchPosition(clientX, clientY) {
 		const screenCenterX = this.universe.canvas.width / 2;
 		const screenCenterY = this.universe.canvas.height / 2;
-		const centerObjX = this.universe.centerObject.x;
-		const centerObjY = this.universe.centerObject.y;
+		const centerObj = this.universe.centerObject;
 		const zoomScale = this.universe.zoomScale;
 		
 		return {
-			x: (clientX - screenCenterX) / zoomScale + centerObjX + this.universe.cameraOffset.x,
-			y: (clientY - screenCenterY) / zoomScale + centerObjY + this.universe.cameraOffset.y,
+			x: (clientX - screenCenterX) / zoomScale + centerObj.x + this.universe.cameraOffset.x,
+			y: (clientY - screenCenterY) / zoomScale + centerObj.y + this.universe.cameraOffset.y,
 		};
 	}
 
@@ -210,60 +209,59 @@ export class ObjectPlacer {
 		this.startScreenY = clientY;
 
 		const pos = this.getLaunchPosition(clientX, clientY);
-		this.startX = pos.x;
-		this.startY = pos.y;
-		this.currentX = pos.x;
-		this.currentY = pos.y;
+
+		// Keep as relative position
+		this.startRelX = pos.x - this.universe.centerObject.x;
+		this.startRelY = pos.y - this.universe.centerObject.y;
 	}
 
 	updateDrag(clientX, clientY) {
 		if (!this.isSlingshotting) return;
-		
 		this.screenCursorX = clientX;
 		this.screenCursorY = clientY;
-
-		const pos = this.getLaunchPosition(clientX, clientY);
-		this.currentX = pos.x;
-		this.currentY = pos.y;
 	}
 
 	goLaunch(clientX, clientY) {
-		if (!this.isSlingshotting || this.startX == null || this.startY == null) {
+		if (!this.isSlingshotting || this.startRelX == null || this.startRelY == null) {
 			return;
 		}
 
 		const name = this.getLaunchObjectName();
-		
 		const v = this._calculateSlingshotVelocity(this.startScreenX, this.startScreenY, clientX, clientY);
+
+		const launchX = this.universe.centerObject.x + this.startRelX;
+		const launchY = this.universe.centerObject.y + this.startRelY;
 		
 		this.placeObject(
 			name,
-			this.startX, this.startY,
+			launchX, launchY,
 			this.universe.Renderer.m2pix(v.vx) + this.universe.centerObject.vx,
 			this.universe.Renderer.m2pix(v.vy) + this.universe.centerObject.vy,
 			{ angle: Math.atan2(v.vy, v.vx) }
 		);
 		
 		this.isSlingshotting = false;
-		this.startX = null;
-		this.startY = null;
+		this.startRelX = null;
+		this.startRelY = null;
 		this.startScreenX = null;
 		this.startScreenY = null;
 	}
 
 	drawPreview(ctx, centerObject, zoomScale) {
-		if (!this.isSlingshotting || this.startX == null) return;
+		if (!this.isSlingshotting || this.startRelX == null) { return; }
 
 		const v = this._calculateSlingshotVelocity(this.startScreenX, this.startScreenY, this.screenCursorX, this.screenCursorY);
 		const speed_kms = Math.sqrt(v.vx * v.vx + v.vy * v.vy) / 1000;
 		const angle_deg = Math.atan2(v.vy, v.vx) * (180 / Math.PI);
 		const displayAngle = angle_deg < 0 ? angle_deg + 360 : angle_deg;
 
-		const relStartX = (this.startX - centerObject.x) * zoomScale;
-		const relStartY = (this.startY - centerObject.y) * zoomScale;
-		
-		const relCurX = (this.currentX - centerObject.x) * zoomScale;
-		const relCurY = (this.currentY - centerObject.y) * zoomScale;
+		const relStartX = this.startRelX * zoomScale;
+		const relStartY = this.startRelY * zoomScale;
+
+		const screenCenterX = this.universe.canvas.width / 2;
+		const screenCenterY = this.universe.canvas.height / 2;
+		const relCurX = (this.screenCursorX - screenCenterX) + this.universe.cameraOffset.x * zoomScale;
+		const relCurY = (this.screenCursorY - screenCenterY) + this.universe.cameraOffset.y * zoomScale;
 
 		const lineLength = Math.sqrt(Math.pow(relStartX - relCurX, 2) + Math.pow(relStartY - relCurY, 2));
 		const endX = relStartX + Math.cos(Math.atan2(v.vy, v.vx)) * lineLength;
@@ -271,65 +269,80 @@ export class ObjectPlacer {
 
 		ctx.save();
 
-		ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+		// Guide circle
+		ctx.strokeStyle = "rgba(0, 255, 204, 0.4)";
 		ctx.lineWidth = 1;
-		ctx.setLineDash([5, 5]);
+		ctx.beginPath();
+		ctx.arc(relStartX, relStartY, 12, 0, Math.PI * 2);
+		ctx.moveTo(relStartX - 16, relStartY);
+		ctx.lineTo(relStartX + 16, relStartY);
+		ctx.moveTo(relStartX, relStartY - 16);
+		ctx.lineTo(relStartX, relStartY + 16);
+		ctx.stroke();
+
+		// Indicator opposite side to direction
+		ctx.strokeStyle = "rgba(0, 255, 204, 0.3)";
+		ctx.lineWidth = 1;
+		ctx.setLineDash([4, 4]);
 		ctx.beginPath();
 		ctx.moveTo(relStartX, relStartY);
 		ctx.lineTo(relCurX, relCurY);
 		ctx.stroke();
 
 		// Vector of direction
-		ctx.strokeStyle = "rgba(255, 50, 50, 0.9)";
-		ctx.lineWidth = 2;
 		ctx.setLineDash([]);
+		ctx.strokeStyle = "rgba(0, 255, 204, 0.9)";
+		ctx.lineWidth = 2;
 		ctx.beginPath();
 		ctx.moveTo(relStartX, relStartY);
 		ctx.lineTo(endX, endY);
-		
+		ctx.stroke();
+
 		// Top of arrow
 		if (lineLength > 5) {
-			const headlen = 10;
+			const headlen = 8;
 			const launchRad = Math.atan2(v.vy, v.vx);
-			ctx.lineTo(endX - headlen * Math.cos(launchRad - Math.PI / 6), endY - headlen * Math.sin(launchRad - Math.PI / 6));
+			ctx.fillStyle = "rgba(0, 255, 204, 0.9)";
+			ctx.beginPath();
 			ctx.moveTo(endX, endY);
+			ctx.lineTo(endX - headlen * Math.cos(launchRad - Math.PI / 6), endY - headlen * Math.sin(launchRad - Math.PI / 6));
+			ctx.lineTo(endX - (headlen * 0.6) * Math.cos(launchRad), endY - (headlen * 0.6) * Math.sin(launchRad));
 			ctx.lineTo(endX - headlen * Math.cos(launchRad + Math.PI / 6), endY - headlen * Math.sin(launchRad + Math.PI / 6));
+			ctx.closePath();
+			ctx.fill();
 		}
-		ctx.stroke();
 
 		// Floating HUD
 		const objName = this.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[objName];
 		const massText = param.MASS.toExponential(2) + " t";
-		
+
 		// Adjust center offset
 		const hudX = (this.screenCursorX - this.universe.canvas.width / 2) + 20;
 		const hudY = (this.screenCursorY - this.universe.canvas.height / 2) - 80;
 
-		// background
-		ctx.fillStyle = "rgba(10, 20, 30, 0.85)";
+		// HUD background
+		ctx.fillStyle = "rgba(0, 20, 0, 0.85)";
 		ctx.strokeStyle = "rgba(0, 255, 204, 0.6)";
 		ctx.lineWidth = 1;
 		ctx.beginPath();
-		ctx.roundRect(hudX, hudY, 130, 75, 5); // x, y, width, height, radii
+		ctx.roundRect(hudX, hudY, 140, 75, 4);
 		ctx.fill();
 		ctx.stroke();
 
-		// Text
-		ctx.fillStyle = "#ffffff";
-		ctx.font = "bold 12px sans-serif";
+		//Text
+		ctx.fillStyle = "#00ffcc";
+		ctx.font = "bold 12px 'Courier New', Courier, monospace";
 		ctx.textAlign = "left";
 		ctx.textBaseline = "top";
+		ctx.fillText(`[ LAUNCH: ${objName.toUpperCase()} ]`, hudX + 8, hudY + 8);
 
-		ctx.fillText(`[ ${objName} ]`, hudX + 8, hudY + 8);
-
-		ctx.font = "11px monospace";
-		ctx.fillStyle = "#aaddff";
-		ctx.fillText(`Mass: ${massText}`, hudX + 8, hudY + 26);
-
-		ctx.fillStyle = "#ffcc00";
-		ctx.fillText(`Vel : ${speed_kms.toFixed(2)} km/s`, hudX + 8, hudY + 42);
-		ctx.fillText(`Ang : ${displayAngle.toFixed(1)}°`, hudX + 8, hudY + 56);
+		ctx.font = "11px 'Courier New', Courier, monospace";
+		ctx.fillStyle = "#00aa88";
+		ctx.fillText(`MASS: ${massText}`, hudX + 8, hudY + 26);
+		ctx.fillStyle = "#00ffcc";
+		ctx.fillText(`VEL : ${speed_kms.toFixed(2)} km/s`, hudX + 8, hudY + 42);
+		ctx.fillText(`ANG : ${displayAngle.toFixed(1)}°`, hudX + 8, hudY + 56);
 
 		ctx.restore();
 	}
