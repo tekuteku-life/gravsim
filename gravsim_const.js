@@ -50,8 +50,8 @@ export const DEBRIS = {
 // Drawing / Visualization
 export const RENDER = {
 	DISTANCE_SCALE: 180,
+	TRAIL_HISTORY_LENGTH: 1500,
 	TARGET_TRAIL_LENGTH_AU: 3,
-	HISTORY_LENGTH: 512,
 	SCALE_BAR: {
 		WIDTH: 150,
 		LINE_WIDTH: 2,
@@ -67,12 +67,20 @@ export const RENDER = {
 		BASE_LINE: "bottom",
 		BOTTOM_OFFSET: 8,
 	},
+	TRAJECTORY: {
+		ALPHA_BASE: 0.2,
+		ALPHA_RATE: 0.4,
+		TAPER_BASE: 0.2,
+		TAPER_RATE: 0.8,
+	},
 	SPARKLE: {
+		COUNT: 10,
 		ANIM_SPEED: 80,
 		ROTATE_SPEED: 500,
 		STAR_SIZE_RATIO: 3.0,
 		STAR_INNER_SIZE_RATIO: 0.4,
-		MAX_SIZE_PX: 30
+		MAX_SIZE_PX: 30,
+		COLOR: "#FFFFFF"
 	}
 };
 

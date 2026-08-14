@@ -5,6 +5,7 @@ import {
 	PHYSICS, RENDER, OBJECT_STATE,
 	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES
 } from './gravsim_const.js';
+import { Trajectory } from './gravsim_trajectory.js';
 import { ColorUtils } from './gravsim_utils.js';
 
 /*******************************************************************
@@ -29,8 +30,12 @@ export class GravSimObject {
 		this.borderColor = borderColor || null;
 		this.borderWidth = borderWidth || 0;
 		this.state = OBJECT_STATE.ACTIVE;
-		this.history = [];
-		this.deadFrames = 0;
+
+		const rendering_config = {
+			color: color,
+			baseSize: size
+		};
+		this.trajectory = new Trajectory(id, rendering_config);
 	}
 
 	get mass() { return 1; }
@@ -39,38 +44,26 @@ export class GravSimObject {
 		return window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id;
 	}
 
-	addHistory() {
-		if (this.state !== OBJECT_STATE.ACTIVE) {
-			return;
-		}
-
-		if (this.history.length >= RENDER.HISTORY_LENGTH) {
-			this.history.shift();
-		}
-		this.history.push({ x: this.x, y: this.y });
-	}
-
-	updateHistory() {
-		if (this.state === OBJECT_STATE.ACTIVE) {
-			return;
-		}
-
-		this.deadFrames = this.deadFrames + 1;
-
-		if (this.history.length > 0) {
-			this.history.shift();
-		}
+	updateHistory(currentFrame) {
+		this.trajectory.addPoint(this.x, this.y, currentFrame);
 	}
 
 	clearHistory() {
-		this.history = [];
+		if (this.trajectory) {
+			this.trajectory.clear();
+		}
 	}
 
-	finished() { return this.state === OBJECT_STATE.REMOVED && this.history.length === 0; }
+	finished() {
+		if (this.state === OBJECT_STATE.REMOVED) {
+			this.trajectory.shrink(2);
+			return this.trajectory.count <= 0;
+		}
+		return false;
+	}
 
 	setCollided() {
 		this.state = OBJECT_STATE.REMOVED;
-		this.deadFrames = 0;
 	}
 
 	setPosition(x, y) {
@@ -91,40 +84,20 @@ export class GravSimObject {
 	getRelativeX(basis) { return basis ? this.x - basis.x : this.x; }
 	getRelativeY(basis) { return basis ? this.y - basis.y : this.y; }
 
-	getRelativeHistoryX(i, basis) {
-		if( basis ) {
-			const deadOffset = this.deadFrames;
-			const basisIdx = basis.history.length - (this.history.length - i) - deadOffset;
-			if (basisIdx >= 0 && basisIdx < basis.history.length) {
-				return this.history[i].x - basis.history[basisIdx].x;
-			}
-			else {
-				return this.history[i].x - basis.x;
-			}
-		} else {
-			return this.history[i].x;
-		}
-	}
-	getRelativeHistoryY(i, basis) {
-		if( basis ) {
-			const deadOffset = this.deadFrames;
-			const basisIdx = basis.history.length - (this.history.length - i) - deadOffset;
-			if (basisIdx >= 0 && basisIdx < basis.history.length) {
-				return this.history[i].y - basis.history[basisIdx].y;
-			}
-			else {
-				return this.history[i].y - basis.y;
-			}
-		} else {
-			return this.history[i].y;
-		}
-	}
+	draw(renderContext) {
+		if (!renderContext) { return; }
+		if (!renderContext.basis) { return; }
 
-	draw(ctx, basis, zoomScale) {
-		if (!basis) { return; }
+		// Draw trajectory even if state == dead
+		this.trajectory.setVisualMode(this.isEscaping ? 'escape' : 'normal');
+		this.trajectory.draw(renderContext);
 
 		// Draw main body and effects (Screen-space calculation)
 		if (this.state === OBJECT_STATE.ACTIVE) {
+			const basis = renderContext.basis;
+			const ctx = renderContext.ctx;
+			const zoomScale = renderContext.zoomScale;
+
 			const relX = this.getRelativeX(basis) * zoomScale;
 			const relY = this.getRelativeY(basis) * zoomScale;
 
@@ -132,11 +105,6 @@ export class GravSimObject {
 
 			this._drawBody(ctx, relX, relY, screenRadius);
 			this._drawEffects(ctx, relX, relY, screenRadius, zoomScale);
-		}
-
-		// Draw trail (Skip for center object)
-		if (this.id !== basis.id) {
-			this._drawTrail(ctx, basis, zoomScale);
 		}
 	}
 
@@ -172,78 +140,6 @@ export class GravSimObject {
 	}
 	
 	_drawEffects(ctx, x, y, screenRadius, zoomScale) {}
-
-	_drawEscapeSparkle(ctx, x, y, screenRadius) {
-		const now = Date.now();
-		const blink = Math.abs(Math.sin(now / RENDER.SPARKLE.ANIM_SPEED + this.id)); 
-
-		const rawStarSize = screenRadius * RENDER.SPARKLE.STAR_SIZE_RATIO; 
-		const starSize = Math.min(rawStarSize, RENDER.SPARKLE.MAX_SIZE_PX);
-		const innerSize = starSize * (RENDER.SPARKLE.STAR_INNER_SIZE_RATIO / RENDER.SPARKLE.STAR_SIZE_RATIO); 
-
-		// Shift in the direction opposite to the direction of travel
-		const vAngle = Math.atan2(this.vy, this.vx);
-		const offsetDist = screenRadius + starSize * 0.8; // Space them out a little so they don't overlap.
-		const offsetX = x - Math.cos(vAngle) * offsetDist;
-		const offsetY = y - Math.sin(vAngle) * offsetDist;
-
-		ctx.save();
-		ctx.translate(offsetX, offsetY);
-		ctx.rotate(now / RENDER.SPARKLE.ROTATE_SPEED); 
-
-		ctx.globalAlpha = blink;
-		ctx.fillStyle = "#FFFFFF"; 
-
-		ctx.beginPath();
-		ctx.moveTo(0, -starSize);
-		ctx.lineTo(innerSize, -innerSize);
-		ctx.lineTo(starSize, 0);
-		ctx.lineTo(innerSize, innerSize);
-		ctx.lineTo(0, starSize);
-		ctx.lineTo(-innerSize, innerSize);
-		ctx.lineTo(-starSize, 0);
-		ctx.lineTo(-innerSize, -innerSize);
-		ctx.fill();
-
-		ctx.restore();
-	}
-
-	_drawTrail(ctx, basis, zoomScale) {
-		const targetLength = RENDER.TARGET_TRAIL_LENGTH_AU * RENDER.DISTANCE_SCALE;
-		let drawTrailCount = this.history.length;
-
-		if (this.history.length >= 2) {
-			const lastIdx = this.history.length - 1;
-			const dx = this.history[lastIdx].x - this.history[lastIdx - 1].x;
-			const dy = this.history[lastIdx].y - this.history[lastIdx - 1].y;
-			
-			const distPerFrame = Math.sqrt(dx * dx + dy * dy);
-
-			if (distPerFrame > 0.0001) {
-				drawTrailCount = Math.floor(targetLength / distPerFrame);
-			}
-		}
-
-		drawTrailCount = Math.min(Math.max(drawTrailCount, 2), this.history.length);
-
-		let trailStaIdx = this.history.length - drawTrailCount;
-		if (trailStaIdx < 0) trailStaIdx = 0;
-
-		// Draw history with fading color and thinning line
-		for (let i = trailStaIdx + 1; i < this.history.length; i++) {
-			const t = (i - trailStaIdx) / drawTrailCount;
-			const alpha = t * 0.4 + 0.2;
-			const width = this.size * (0.2 + 0.8 * t); // screen pixels
-
-			ctx.strokeStyle = ColorUtils.hexToRgba(this.color, alpha);
-			ctx.lineWidth = width;
-			ctx.beginPath();
-			ctx.moveTo(this.getRelativeHistoryX(i - 1, basis) * zoomScale, this.getRelativeHistoryY(i - 1, basis) * zoomScale);
-			ctx.lineTo(this.getRelativeHistoryX(i, basis) * zoomScale, this.getRelativeHistoryY(i, basis) * zoomScale);
-			ctx.stroke();
-		}
-		ctx.lineWidth = 1;
-	}
 }
 
 GravSimObject._idCounter = 0;
@@ -283,10 +179,6 @@ export class CelestialBody extends GravSimObject {
 				ctx.restore();
 			}
 		}
-
-		if (this.isEscaping) {
-			this._drawEscapeSparkle(ctx, x, y, screenRadius);
-		}
 	}
 }
 
@@ -324,10 +216,6 @@ export class Rocket extends GravSimObject {
 	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
 		if (this.burnTime > 0) {
 			this._drawFlame(ctx, x, y, screenRadius);
-		}
-
-		if (this.isEscaping) {
-			this._drawEscapeSparkle(ctx, x, y, screenRadius);
 		}
 	}
 

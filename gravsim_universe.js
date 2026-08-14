@@ -151,9 +151,6 @@ export class Universe {
 		}
 		this.InfoPanel.updateObjectCount(this.objects.length);
 		this.InfoPanel.updateFPS();
-
-		// Object Update
-		this.objects.forEach(obj => obj.updateHistory());
 		
 		this.updateZoomScale();
 		this.ObjectManager.cleanupObjects();

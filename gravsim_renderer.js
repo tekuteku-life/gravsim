@@ -21,6 +21,12 @@ export class Renderer {
 		this.zoomScale = 1;
 		this.visualEffects = [];
 		this.rotation = 0;
+
+		this.renderContext = {
+			ctx: this.ctx,
+			basis: null,
+			zoomScale: 1
+		};
 	}
 
 	setRotation(angle) {
@@ -60,7 +66,9 @@ export class Renderer {
 		if (this.rotation !== undefined) { this.ctx.rotate(this.rotation); }
 
 		// draw object
-		objects.forEach(obj => obj.draw(this.ctx, centerObject, this.zoomScale));
+		this.renderContext.basis = centerObject;
+		this.renderContext.zoomScale = this.zoomScale;
+		objects.forEach(obj => obj.draw(this.renderContext));
 		
 		// draw visual effect
 		const now = Date.now();

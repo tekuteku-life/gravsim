@@ -15,6 +15,7 @@ export class ObjectManager {
 		this.workerManager = workerManager;
 		this.objects = [];
 		this.centerObject = null;
+		this.physicsSequence = 0;
 	}
 
 	ensureCenterObject(currentOffset = {x: 0, y: 0}) {
@@ -102,6 +103,8 @@ export class ObjectManager {
 		const buffer = new Float64Array(data.objectsData);
 		const objCount = buffer.length / CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
 
+		this.physicsSequence++;
+
 		for (let i = 0; i < objCount; i++) {
 			const offset = i * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
 			const id = buffer[offset + BUFFER_INDEX.ID];
@@ -145,7 +148,7 @@ export class ObjectManager {
 					target.mass = buffer[offset + BUFFER_INDEX.MASS] / 1e3;
 				}
 				target.radius = buffer[offset + BUFFER_INDEX.RADIUS];
-				target.addHistory();
+				target.updateHistory(this.physicsSequence);
 
 				const flags = buffer[offset + BUFFER_INDEX.FLAGS];
 				const isCollided = (flags & 1) !== 0;
@@ -155,9 +158,9 @@ export class ObjectManager {
 				if (isCollided) {
 					if (isImpact && target.state === OBJECT_STATE.ACTIVE) {
 						this._generateImpactDebris(
-							target, 
+							target,
 							buffer[offset + BUFFER_INDEX.DEBRIS_MASS] / 1e3,
-							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_VX]), 
+							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_VX]),
 							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_VY]),
 							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_WINNER_X]),
 							this.renderer.m2pix(buffer[offset + BUFFER_INDEX.IMPACT_WINNER_Y]),
