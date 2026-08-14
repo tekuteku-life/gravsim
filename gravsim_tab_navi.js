@@ -90,21 +90,10 @@ export class NaviTab {
 		this.ui.nvEscapeV.innerText = (escapeV/1000).toFixed(2) + " km/s";
 
 		let refBody = null;
-		let maxG = -1;
 		let distToRefM = 0;
-		for (const obj of this.universe.objects) {
-			if (obj.id === target.id) { continue; }
-			const dx = target.x - obj.x;
-			const dy = target.y - obj.y;
-			const distSqPx = dx * dx + dy * dy;
-			const distSqM = Math.pow(this.universe.pix2m(Math.sqrt(distSqPx)), 2);
-			if (distSqM === 0) { continue; }
-			const gForce = obj.mass / distSqM;
-			if (gForce > maxG) {
-				maxG = gForce;
-				refBody = obj;
-				distToRefM = Math.sqrt(distSqM);
-			}
+		if (target.dominantBodyId !== undefined && target.dominantBodyId !== -1) {
+			refBody = this.universe.objects.find(o => o.id === target.dominantBodyId);
+			distToRefM = target.distToDominantM || 0;
 		}
 
 		if (refBody) {

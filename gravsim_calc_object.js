@@ -36,6 +36,10 @@ class GravSimCalcObject {
 		this.impactWinnerY = 0;
 		this.impactWinnerRadius = 0;
 		this.inAtmosphere = false;
+		this.isEscaping = false;
+		this.maxGForce = -1;
+		this.dominantBody = null;
+		this.distToDominantM = 0;
 	}
 	get mass() { return 1; }
 	
@@ -57,6 +61,16 @@ class GravSimCalcObject {
 
 		this.ax += accel * dx / dist;
 		this.ay += accel * dy / dist;
+
+		// Keep the largest gravity object
+		if (other.type === OBJECT_TYPES.CELESTIAL) {
+			const gForce = other.mass / distSq;
+			if (gForce > this.maxGForce) {
+				this.maxGForce = gForce;
+				this.dominantBody = other;
+				this.distToDominantM = dist;
+			}
+		}
 	}
 	
 	applyThrust() {}

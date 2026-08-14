@@ -178,6 +178,32 @@ class PhysicsEngine {
 		}
 	}
 
+	_updateEscapeStatus() {
+		const massiveBodies = this.objects.filter(o => o.type === OBJECT_TYPES.CELESTIAL && !o.collided && !o.shattered);
+		if (massiveBodies.length === 0) { return; }
+		const sun = massiveBodies.reduce((max, obj) => obj.mass > max.mass ? obj : max, massiveBodies[0]);
+
+		for (const obj of this.objects) {
+			if (obj.id === sun.id || obj.collided || obj.shattered) {
+				obj.isEscaping = false;
+				continue;
+			}
+
+			if (obj.dominantBody && obj.distToDominantM > 0) {
+				const dvx = obj.vx - obj.dominantBody.vx;
+				const dvy = obj.vy - obj.dominantBody.vy;
+				const v2 = dvx * dvx + dvy * dvy;
+
+				const totalMassKg = obj.dominantBody.mass + obj.mass;
+				const escapeV2 = (2 * PHYSICS.G * totalMassKg) / obj.distToDominantM;
+
+				obj.isEscaping = (v2 >= escapeV2);
+			} else {
+				obj.isEscaping = false;
+			}
+		}
+	}
+
 	_updateAerodynamicsFor(obj) {
 		if (obj.collided || obj.shattered) { return; }
 
@@ -226,25 +252,7 @@ class PhysicsEngine {
 			if (obj.collided || obj.shattered) { continue; }
 
 			if (obj.type === OBJECT_TYPES.ROCKET) {
-				let refBody = null;
-				let maxG = -1;
-				let distToRefM = 0;
-				for (const p of this.objects) {
-					if (p.id === obj.id || p.collided || p.shattered || p.type === OBJECT_TYPES.ROCKET) { continue; }
-					const dx = obj.x - p.x;
-					const dy = obj.y - p.y;
-					const distSq = dx * dx + dy * dy;
-					if (distSq === 0) continue;
-					
-					const gForce = p.mass / distSq;
-					if (gForce > maxG) {
-						maxG = gForce;
-						refBody = p;
-						distToRefM = Math.sqrt(distSq);
-					}
-				}
-
-				obj.flightControl(dt, refBody, distToRefM);
+				obj.flightControl(dt, obj.dominantBody, obj.distToDominantM);
 			}
 
 			// Apply gravity, aerodynamics and thrust (Velocity Verlet integration Step 1)
@@ -277,6 +285,9 @@ class PhysicsEngine {
 	_updateGravityFor(obj) {
 		obj.ax = 0;
 		obj.ay = 0;
+		obj.maxGForce = -1;
+		obj.dominantBody = null;
+		obj.distToDominantM = 0;
 		for (const other of this.objects) {
 			if (obj.id !== other.id && !other.collided && !other.shattered) {
 				obj.applyGravity(other);
@@ -347,6 +358,8 @@ class SimulationController {
 			this.engine.step(dt);
 		}
 
+		this.engine._updateEscapeStatus();
+
 		// Return result to main thread (Includes newly shattered objects before removal)
 		const buffer = this.formatForMessage();
 		self.postMessage({
@@ -405,13 +418,15 @@ class SimulationController {
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = 0;
 			}
 			buffer[offset + BUFFER_INDEX.RADIUS] = obj.radius || 1;
-			buffer[offset + BUFFER_INDEX.FLAGS] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0) | (obj.inAtmosphere ? 8 : 0);
+			buffer[offset + BUFFER_INDEX.FLAGS] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0) | (obj.inAtmosphere ? 8 : 0) | (obj.isEscaping ? 16 : 0);
 			buffer[offset + BUFFER_INDEX.DEBRIS_MASS] = obj.debrisMass || 0;
 			buffer[offset + BUFFER_INDEX.IMPACT_VX] = obj.impactVx || 0;
 			buffer[offset + BUFFER_INDEX.IMPACT_VY] = obj.impactVy || 0;
 			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_X] = obj.impactWinnerX || 0;
 			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_Y] = obj.impactWinnerY || 0;
 			buffer[offset + BUFFER_INDEX.IMPACT_WINNER_RADIUS] = obj.impactWinnerRadius || 0;
+			buffer[offset + BUFFER_INDEX.DOMINANT_BODY_ID] = obj.dominantBody ? obj.dominantBody.id : -1;
+			buffer[offset + BUFFER_INDEX.DIST_TO_DOMINANT] = obj.distToDominantM;
 		}
 		return buffer;
 	}

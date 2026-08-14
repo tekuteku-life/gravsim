@@ -155,6 +155,10 @@ export class ObjectManager {
 				const isShattered = (flags & 2) !== 0;
 				const isImpact = (flags & 4) !== 0;
 				target.inAtmosphere = (flags & 8) !== 0;
+				target.isEscaping = (flags & 16) !== 0;
+
+				target.dominantBodyId = buffer[offset + BUFFER_INDEX.DOMINANT_BODY_ID];
+				target.distToDominantM = buffer[offset + BUFFER_INDEX.DIST_TO_DOMINANT];
 
 				if (isCollided) {
 					if (isImpact && target.state === OBJECT_STATE.ACTIVE) {
@@ -277,46 +281,11 @@ export class ObjectManager {
 
 		for (const obj of this.objects) {
 			if (obj.id === sun.id || obj.state !== OBJECT_STATE.ACTIVE) {
-				obj.isEscaping = false;
 				continue;
 			}
 
-			let dominantBody = null;
-			let maxG = -1;
-			let distToDominantM = 0;
-
-			for (const mBody of massiveBodies) {
-				if (obj.id === mBody.id) { continue; }
-				const dx = obj.x - mBody.x;
-				const dy = obj.y - mBody.y;
-				const distSqPx = dx * dx + dy * dy;
-				const distSqM = Math.pow(this.renderer.pix2m(Math.sqrt(distSqPx)), 2);
-				if (distSqM === 0) { continue; }
-				
-				const gForce = mBody.mass / distSqM;
-				if (gForce > maxG) {
-					maxG = gForce;
-					dominantBody = mBody;
-					distToDominantM = Math.sqrt(distSqM);
-				}
-			}
-
-			if (dominantBody && distToDominantM > 0) {
-				const dvx = this.renderer.pix2m(obj.vx - dominantBody.vx);
-				const dvy = this.renderer.pix2m(obj.vy - dominantBody.vy);
-				const v2 = dvx * dvx + dvy * dvy;
-				
-				const totalMassKg = (dominantBody.mass + obj.mass) * 1e3;
-				const escapeV2 = (2 * PHYSICS.G * totalMassKg) / distToDominantM;
-
-				// Check if the object is escaping the center object's gravity
-				obj.isEscaping = (v2 >= escapeV2);
-			} else {
-				obj.isEscaping = false;
-			}
-
 			// Remove the object if it is escaping and far enough
-			if (obj.isEscaping && dominantBody && dominantBody.id === sun.id) {
+			if (obj.isEscaping) {
 				const cx = obj.x - sun.x;
 				const cy = obj.y - sun.y;
 				if (this.renderer.pix2au(Math.sqrt(cx*cx + cy*cy)) > SIMULATION.REMOVE_DISTANCE_AU) {
