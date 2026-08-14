@@ -7,7 +7,6 @@ export class InputManager {
 	constructor(canvas) {
 		this.canvas = canvas;
 
-		this.onReset = null;
 		this.onWheelZoom = null;
 		this.onTouchZoom = null;
 		this.onPan = null;
@@ -24,18 +23,19 @@ export class InputManager {
 
 		this.lastTouchDist = null;
 		this.lastTouchCenter = null;
-		this.lastTwoFingerTapTime = 0;
 
 		this._bindEvents();
+	}
+
+	_isDeployTabActive() {
+		const deployTab = document.getElementById('tab-deploy');
+		return deployTab && deployTab.classList.contains('active');
 	}
 
 	_bindEvents() {
 		// --- Events for PC (Mouse) ---
 		this.canvas.addEventListener('contextmenu', (e) => {
 			e.preventDefault();
-			if (!this.hasPanned && this.onReset) {
-				this.onReset();
-			}
 			this.hasPanned = false;
 		});
 
@@ -52,9 +52,11 @@ export class InputManager {
 				this.hasPanned = false;
 				this.lastPanPos = { x: e.clientX, y: e.clientY };
 			} else if (e.button === 0) {
-				this.isDragging = true;
-				if (this.onDragStart) {
-					this.onDragStart(e.clientX, e.clientY);
+				if (this._isDeployTabActive()) {
+					this.isDragging = true;
+					if (this.onDragStart) {
+						this.onDragStart(e.clientX, e.clientY);
+					}
 				}
 			}
 		});
@@ -108,20 +110,13 @@ export class InputManager {
 					this.isDragging = false;
 					if (this.onDragCancel) { this.onDragCancel(); }
 				}
-				// double tap with two fingers
-				const now = Date.now();
-				if (now - this.lastTwoFingerTapTime < UI.DOUBLE_TAP_DURATION) {
-					e.preventDefault();
-					if (this.onReset) { this.onReset(); }
-					this.lastTwoFingerTapTime = 0;
-				} else {
-					this.lastTwoFingerTapTime = now;
-				}
 			} else if (e.touches.length === 1) {
-				this.isDragging = true;
-				const touch = e.touches[0];
-				if (this.onDragStart) {
-					this.onDragStart(touch.clientX, touch.clientY);
+				if (this._isDeployTabActive()) {
+					this.isDragging = true;
+					const touch = e.touches[0];
+					if (this.onDragStart) {
+						this.onDragStart(touch.clientX, touch.clientY);
+					}
 				}
 			}
 		}, { passive: false });

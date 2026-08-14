@@ -71,8 +71,6 @@ export class Universe {
 		this.RocketLauncher = new RocketLauncher(this);
 		this.SaveManager = new SaveManager(this);
 
-		this.InputManager.onReset = this.reset.bind(this);
-
 		this.timeScale = this.ControlPanel.getTimeScale();
 		
 		this.reset();
