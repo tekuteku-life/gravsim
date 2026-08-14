@@ -180,6 +180,18 @@ export class FlightComputer {
 	_computeThrustAngle(sensor) {
 		this.currentThrustAngle = MathUtils.normalizeAngle(this.currentThrustAngle);
 
+		// Track prograde direction after thrust stops
+		if (sensor.burnTime <= 0) {
+			const turnDiff = MathUtils.normalizeAngle(sensor.progradeAngle - this.currentThrustAngle);
+			const maxTurn = FLIGHT_COMPUTER_CONFIG.MAX_TURN_RATE_PER_SEC * sensor.dt;
+
+			if (Math.abs(turnDiff) > maxTurn) {
+				return this.currentThrustAngle + Math.sign(turnDiff) * maxTurn;
+			} else {
+				return sensor.progradeAngle;
+			}
+		}
+
 		const Q = sensor.qAxialKpa + sensor.qLateralKpa;
 
 		// Tower Clearance
