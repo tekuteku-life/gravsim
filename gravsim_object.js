@@ -287,7 +287,10 @@ export class Debris extends GravSimObject {
 			const x = Math.sin(seed++) * 10000;
 			return x - Math.floor(x);
 		};
-		
+
+		// Set random rotation speed (-0.0025 to 0.0025 rad/ms)
+		this.rotationSpeed = (random() - 0.5) * 0.005;
+
 		const vertexCount = 5 + Math.floor(random() * 4);
 		for (let i = 0; i < vertexCount; i++) {
 			const baseAngle = (i / vertexCount) * Math.PI * 2;
@@ -308,14 +311,23 @@ export class Debris extends GravSimObject {
 		ctx.beginPath();
 
 		if (this.polygonVertices) {
+			ctx.save();
+			ctx.translate(x, y);
+
+			// Apply continuous rotation based on time
+			const angle = (Date.now() * this.rotationSpeed) % (Math.PI * 2);
+			ctx.rotate(angle);
+
 			const first = this.polygonVertices[0];
-			ctx.moveTo(x + first.x * screenRadius, y + first.y * screenRadius);
+			ctx.moveTo(first.x * screenRadius, first.y * screenRadius);
 			for (let i = 1; i < this.polygonVertices.length; i++) {
 				const pt = this.polygonVertices[i];
-				ctx.lineTo(x + pt.x * screenRadius, y + pt.y * screenRadius);
+				ctx.lineTo(pt.x * screenRadius, pt.y * screenRadius);
 			}
 			ctx.closePath();
 			ctx.fill();
+
+			ctx.restore();
 		} else {
 			ctx.arc(x, y, screenRadius, 0, Math.PI * 2);
 			ctx.fill();
