@@ -259,6 +259,9 @@ export class RocketTab {
 	}
 
 	open() {
+		// Pause simulation while setting up rocket
+		this.universe.pauseSimulation();
+
 		this.universe.RocketLauncher.togglePreview(true);
 
 		// Save time & zoom scale & camera target
@@ -282,6 +285,9 @@ export class RocketTab {
 	}
 
 	close() {
+		// Resume simulation when leaving rocket tab
+		this.universe.resumeSimulation();
+
 		this.universe.RocketLauncher.togglePreview(false);
 
 		// Restore time & zoom scale & camera target

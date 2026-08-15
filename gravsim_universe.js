@@ -116,6 +116,16 @@ export class Universe {
 		this.centerObject = this.objects[0];
 	}
 
+	// Send pause command to worker
+	pauseSimulation() {
+		this.CalcWorkerManager.postMessage({ cmd: 'pause', value: true });
+	}
+
+	// Send resume command to worker
+	resumeSimulation() {
+		this.CalcWorkerManager.postMessage({ cmd: 'pause', value: false });
+	}
+
 	updateZoomScale() {
 		this.Renderer.setZoomScale(this.ControlPanel.getZoomScale());
 	}

@@ -33,6 +33,7 @@ export class ObjectPlacer {
 		this.universe.InputManager.onDragMove = this.updateDrag.bind(this);
 		this.universe.InputManager.onDragEnd = this.goLaunch.bind(this);
 		this.universe.InputManager.onDragCancel = () => {
+			this.universe.resumeSimulation();
 			this.isSlingshotting = false;
 			this.startRelX = null;
 			this.startRelY = null;
@@ -202,6 +203,9 @@ export class ObjectPlacer {
 			return; 
 		}
 
+		// Pause simulation during slingshot dragging
+		this.universe.pauseSimulation();
+
 		this.isSlingshotting = true;
 		this.screenCursorX = clientX;
 		this.screenCursorY = clientY;
@@ -245,6 +249,9 @@ export class ObjectPlacer {
 		this.startRelY = null;
 		this.startScreenX = null;
 		this.startScreenY = null;
+
+		// Resume simulation after launching
+		this.universe.resumeSimulation();
 	}
 
 	drawPreview(ctx, centerObject, zoomScale) {
