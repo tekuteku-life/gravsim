@@ -1,8 +1,7 @@
 
 // gravsim_calc.js
 
-import {
-	PHYSICS, SIMULATION, ROCHE_LIMIT, DEBRIS,
+import { PHYSICS, SIMULATION, ROCHE_LIMIT, DEBRIS,
 	CALC_BUFFER_CONFIG, BUFFER_INDEX,
 	OBJECT_TYPES, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js'
@@ -12,6 +11,93 @@ import { FlightComputer } from './gravsim_flight_computer.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 
 const CALC_INTERVAL = 60;
+
+// QuadTree Data Structures for Spatial Partitioning
+class Rectangle {
+	constructor(x, y, w, h) {
+		this.x = x;
+		this.y = y;
+		this.w = w;
+		this.h = h;
+	}
+
+	contains(obj) {
+		return (obj.x >= this.x - this.w &&
+				obj.x <= this.x + this.w &&
+				obj.y >= this.y - this.h &&
+				obj.y <= this.y + this.h);
+	}
+
+	intersects(range) {
+		return !(range.x - range.w > this.x + this.w ||
+				 range.x + range.w < this.x - this.w ||
+				 range.y - range.h > this.y + this.h ||
+				 range.y + range.h < this.y - this.h);
+	}
+}
+
+class QuadTree {
+	constructor(boundary, capacity) {
+		this.boundary = boundary;
+		this.capacity = capacity;
+		this.objects = [];
+		this.divided = false;
+	}
+
+	subdivide() {
+		const x = this.boundary.x;
+		const y = this.boundary.y;
+		const w = this.boundary.w / 2;
+		const h = this.boundary.h / 2;
+
+		this.ne = new QuadTree(new Rectangle(x + w, y - h, w, h), this.capacity);
+		this.nw = new QuadTree(new Rectangle(x - w, y - h, w, h), this.capacity);
+		this.se = new QuadTree(new Rectangle(x + w, y + h, w, h), this.capacity);
+		this.sw = new QuadTree(new Rectangle(x - w, y + h, w, h), this.capacity);
+		this.divided = true;
+	}
+
+	insert(obj) {
+		if (!this.boundary.contains(obj)) {
+			return false;
+		}
+
+		if (this.objects.length < this.capacity) {
+			this.objects.push(obj);
+			return true;
+		} else {
+			if (!this.divided) {
+				this.subdivide();
+			}
+			if (this.ne.insert(obj)) return true;
+			if (this.nw.insert(obj)) return true;
+			if (this.se.insert(obj)) return true;
+			if (this.sw.insert(obj)) return true;
+		}
+		return false;
+	}
+
+	query(range, found = []) {
+		if (!this.boundary.intersects(range)) {
+			return found;
+		}
+
+		for (let p of this.objects) {
+			if (range.contains(p)) {
+				found.push(p);
+			}
+		}
+
+		if (this.divided) {
+			this.nw.query(range, found);
+			this.ne.query(range, found);
+			this.sw.query(range, found);
+			this.se.query(range, found);
+		}
+
+		return found;
+	}
+}
 
 /*******************************************************************
  * Physics Engine Class
@@ -83,19 +169,66 @@ class PhysicsEngine {
 	}
 
 	step(dt) {
+		this._buildQuadTree(dt);
 		this._checkCollisions(dt);
 		this._checkRocheLimit();
 		this._moveObjects(dt);
 	}
 
+	_buildQuadTree(dt) {
+		if (this.objects.length === 0) {
+			this.qtree = null;
+			return;
+		}
+
+		let minX = Infinity, minY = Infinity;
+		let maxX = -Infinity, maxY = -Infinity;
+
+		for (const obj of this.objects) {
+			if (obj.collided || obj.shattered) { continue; }
+			
+			// Calculate bounds including predicted movement
+			const max_v = Math.max(Math.abs(obj.vx), Math.abs(obj.vy)) * dt;
+			const margin = obj.radius + max_v;
+
+			if (obj.x - margin < minX) minX = obj.x - margin;
+			if (obj.y - margin < minY) minY = obj.y - margin;
+			if (obj.x + margin > maxX) maxX = obj.x + margin;
+			if (obj.y + margin > maxY) maxY = obj.y + margin;
+		}
+
+		const cx = (minX + maxX) / 2;
+		const cy = (minY + maxY) / 2;
+		const hw = (maxX - minX) / 2;
+		const hh = (maxY - minY) / 2;
+
+		const boundary = new Rectangle(cx, cy, hw, hh);
+		this.qtree = new QuadTree(boundary, 4);
+
+		for (const obj of this.objects) {
+			if (obj.collided || obj.shattered) { continue; }
+			this.qtree.insert(obj);
+		}
+	}
+
 	_checkCollisions(dt) {
+		if (!this.qtree) { return; }
+
 		for (let i = 0; i < this.objects.length; i++) {
 			const obj = this.objects[i];
-			if (obj.collided || obj.shattered) continue;
+			if (obj.collided || obj.shattered) { continue; }
 
-			for (let j = i + 1; j < this.objects.length; j++) {
-				const other = this.objects[j];
-				if (other.collided || other.shattered) continue;
+			// Define search range based on maximum possible movement and size
+			const max_v = Math.max(Math.abs(obj.vx), Math.abs(obj.vy)) * dt;
+			const searchRadius = obj.radius + max_v;
+			const searchRange = new Rectangle(obj.x, obj.y, searchRadius * 2, searchRadius * 2);
+
+			const candidates = this.qtree.query(searchRange);
+
+			for (const other of candidates) {
+				// Prevent duplicate checks and self-checking (using id comparison)
+				if (obj.id >= other.id) { continue; }
+				if (other.collided || other.shattered) { continue; }
 
 				if (obj.isColliding(other, dt)) {
 					// Winner is bigger one, loser is smaller one
@@ -163,15 +296,25 @@ class PhysicsEngine {
 	}
 
 	_checkRocheLimit() {
+		if (!this.qtree) { return; }
+
 		for (let i = 0; i < this.objects.length; i++) {
 			const massiveObj = this.objects[i];
 
 			if (massiveObj.collided || massiveObj.shattered) { continue; }
 			if (massiveObj.mass < ROCHE_LIMIT.MIN_MASS_TO_DESTROY) { continue; }
 
-			for (let j = 0; j < this.objects.length; j++) {
-				if (i === j) { continue; }
-				const fragileObj = this.objects[j];
+			// Calculate maximum Roche limit radius for spatial query
+			const massiveDensity = massiveObj.mass / Math.pow(massiveObj.radius, 3);
+			// Assume worst-case fragile density is 1e3 (approx water/ice) to define the search bounds
+			const minFragileDensity = 1e3;
+			const maxRocheLimitM = 2.44 * massiveObj.radius * Math.cbrt(massiveDensity / minFragileDensity);
+
+			const searchRange = new Rectangle(massiveObj.x, massiveObj.y, maxRocheLimitM, maxRocheLimitM);
+			const candidates = this.qtree.query(searchRange);
+
+			for (const fragileObj of candidates) {
+				if (massiveObj.id === fragileObj.id) { continue; }
 
 				if (fragileObj.collided || fragileObj.shattered) { continue; }
 
