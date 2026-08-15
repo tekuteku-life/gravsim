@@ -34,8 +34,8 @@ class CalcWorkerManager {
 		}
 	}
 
-	postMessage(msg) {
-		this.worker.postMessage(msg);
+	postMessage(msg, transferables = []) {
+		this.worker.postMessage(msg, transferables);
 	}
 
 	setTimeScale(timeScale) {

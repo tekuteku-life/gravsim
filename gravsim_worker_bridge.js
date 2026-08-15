@@ -5,10 +5,33 @@ import { CALC_BUFFER_CONFIG, BUFFER_INDEX, OBJECT_TYPES } from './gravsim_const.
 
 export class WorkerBridge {
 	static _cache = {};
+	static _bufferPool = [];
+	
+	// Reusable buffer pool
+
+	// Get an ArrayBuffer from the pool or create a new one
+	static _getBuffer(requiredLength) {
+		const byteLength = requiredLength * 8; // Float64 uses 8 bytes per element
+		for (let i = 0; i < this._bufferPool.length; i++) {
+			if (this._bufferPool[i].byteLength >= byteLength) {
+				const arrayBuffer = this._bufferPool.splice(i, 1)[0];
+				return new Float64Array(arrayBuffer, 0, requiredLength);
+			}
+		}
+		return new Float64Array(requiredLength);
+	}
+
+	// Recycle buffer back to the pool
+	static recycleBuffer(buffer) {
+		if (buffer && buffer.byteLength > 0) {
+			this._bufferPool.push(buffer);
+		}
+	}
 
 	// Generate buffer Worker -> Main
 	static formatWorkerToMain(objects) {
-		const buffer = new Float64Array(objects.length * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT);
+		const requiredLength = objects.length * CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
+		const buffer = this._getBuffer(requiredLength);
 
 		for (let i = 0; i < objects.length; i++) {
 			const obj = objects[i];
@@ -71,8 +94,8 @@ export class WorkerBridge {
 	}
 
 	// Parse received buffer at main-side
-	static parseWorkerToMain(bufferData, callback) {
-		const buffer = new Float64Array(bufferData);
+	static parseWorkerToMain(bufferData, validLength, callback) {
+		const buffer = new Float64Array(bufferData, 0, validLength);
 		const objCount = buffer.length / CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT;
 
 		for (let i = 0; i < objCount; i++) {

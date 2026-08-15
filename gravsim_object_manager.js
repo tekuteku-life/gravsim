@@ -109,7 +109,7 @@ export class ObjectManager {
 	updateObjectParams(data) {
 		this.physicsSequence++;
 
-		WorkerBridge.parseWorkerToMain(data.objectsData, (objData) => {
+		WorkerBridge.parseWorkerToMain(data.objectsData, data.validLength, (objData) => {
 			const target = this.objects.find(t => t.id === objData.id);
 			if (target) {
 				target.x = this.renderer.m2pix(objData.x);
@@ -198,6 +198,12 @@ export class ObjectManager {
 				}
 			}
 		});
+
+		// Return the buffer to the worker using Transferable Objects
+		this.workerManager.postMessage(
+			{ cmd: 'returnBuffer', buffer: data.objectsData },
+			[data.objectsData]
+		);
 	}
 
 	cleanupObjects() {

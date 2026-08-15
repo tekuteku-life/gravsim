@@ -344,6 +344,9 @@ class SimulationController {
 				this.isPaused = data.value;
 				if (!this.isPaused) this.lastTime = Date.now();
 				break;
+			case 'returnBuffer':
+				WorkerBridge.recycleBuffer(data.buffer);
+				break;
 		}
 	}
 
@@ -375,7 +378,8 @@ class SimulationController {
 		self.postMessage({
 			cmd: 'update',
 			deltaTime: dt,
-			objectsData: buffer.buffer 
+			objectsData: buffer.buffer,
+			validLength: buffer.length
 		}, [buffer.buffer]);
 
 		this.engine.removeDeadObjects();
