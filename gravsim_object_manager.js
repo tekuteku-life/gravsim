@@ -6,9 +6,10 @@ import {
 	OBJECT_STATE, OBJECT_TYPES,
 	CALC_BUFFER_CONFIG, BUFFER_INDEX
 } from './gravsim_const.js';
-import { GravSimObject, CelestialBody, Rocket } from './gravsim_object.js';
+import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.js';
 import { ColorUtils } from './gravsim_utils.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
+import { DebrisGenerator } from './gravsim_debris_generator.js';
 
 export class ObjectManager {
 	constructor(renderer, workerManager) {
@@ -17,6 +18,11 @@ export class ObjectManager {
 		this.objects = [];
 		this.centerObject = null;
 		this.physicsSequence = 0;
+	}
+
+	destroy() {
+		this.objects.forEach(obj => this.removeObject(obj));
+		this.objects = [];
 	}
 
 	ensureCenterObject(currentOffset = {x: 0, y: 0}) {
@@ -152,22 +158,43 @@ export class ObjectManager {
 
 				if (objData.isCollided) {
 					if (objData.isImpact && target.state === OBJECT_STATE.ACTIVE) {
-						this._generateImpactDebris(
+						// Generate debris and effects via DebrisGenerator
+						const debrisData = DebrisGenerator.generateFromImpact(
 							target,
 							objData.debrisMass / 1e3,
 							this.renderer.m2pix(objData.impactVx),
 							this.renderer.m2pix(objData.impactVy),
 							this.renderer.m2pix(objData.impactWinnerX),
 							this.renderer.m2pix(objData.impactWinnerY),
-							this.renderer.m2pix(objData.impactWinnerRadius)
+							this.renderer.m2pix(objData.impactWinnerRadius),
+							(m) => this.renderer.m2pix(m),
+							() => this.getNextId()
 						);
+
+						if (debrisData.shockwave) {
+							this.renderer.addShockwave(debrisData.shockwave.x, debrisData.shockwave.y, debrisData.shockwave.color);
+						}
+						debrisData.debrisList.forEach(debris => this.addObject(debris));
 					}
 					target.setCollided();
 				}
 
 				// Handle object shattered by tidal force or Max-Q in the worker
 				if (objData.isShattered && target.state === OBJECT_STATE.ACTIVE) {
-					this._shatterObject(target);
+					console.debug(`${target.name} (id:${target.id}) shattered.`);
+					this.removeObject(target);
+
+					// Generate debris and effects via DebrisGenerator
+					const debrisData = DebrisGenerator.generateFromShatter(
+						target,
+						(m) => this.renderer.m2pix(m),
+						() => this.getNextId()
+					);
+
+					if (debrisData.shockwave) {
+						this.renderer.addShockwave(debrisData.shockwave.x, debrisData.shockwave.y, debrisData.shockwave.color);
+					}
+					debrisData.debrisList.forEach(debris => this.addObject(debris));
 				}
 			}
 		});
@@ -176,92 +203,6 @@ export class ObjectManager {
 	cleanupObjects() {
 		this._checkEscapeAndRemove();
 		this.objects = this.objects.filter(obj => !obj.finished());
-	}
-
-	_spawnDebrisParticles(sourceObj, fragmentCount, baseMass, debrisColor, nextGen,
-		baseVx, baseVy, centerX, centerY, scatterBaseM, scatterVarM, impactData = null) {
-		for (let i = 0; i < fragmentCount; i++) {
-			const massVariation = DEBRIS.MASS_VAR_BASE + (Math.random() * DEBRIS.MASS_VAR_RANGE);
-			const fragMass = baseMass * massVariation;
-			const fragRadius = sourceObj.radius * Math.cbrt(fragMass / sourceObj.mass);
-
-			let angle, fragX, fragY;
-			if (impactData) {
-				const marginPx = this.renderer.m2pix(fragRadius * 2);
-				const spawnRadiusPx = impactData.winnerRadiusPx + Math.max(marginPx, 2);
-				const spreadAngle = (Math.random() - 0.5) * Math.PI;
-				angle = impactData.baseAngle + spreadAngle;
-				fragX = centerX + impactData.nx * spawnRadiusPx + Math.cos(angle) * (Math.random() * 5);
-				fragY = centerY + impactData.ny * spawnRadiusPx + Math.sin(angle) * (Math.random() * 5);
-			} else {
-				const spreadPx = this.renderer.m2pix(sourceObj.radius * 2);
-				angle = (i / fragmentCount) * Math.PI * 2;
-				fragX = centerX + Math.cos(angle) * spreadPx;
-				fragY = centerY + Math.sin(angle) * spreadPx;
-			}
-
-			const scatterPx = this.renderer.m2pix(scatterBaseM + (Math.random() * scatterVarM));
-			const fragVx = baseVx + (Math.cos(angle) * scatterPx);
-			const fragVy = baseVy + (Math.sin(angle) * scatterPx);
-
-			const fragName = sourceObj.name.endsWith(' Debris') ? sourceObj.name : `${sourceObj.name} Debris`;
-
-			const nextId = this.getNextId();
-			const fragment = new CelestialBody(
-				nextId, fragName, fragX, fragY, fragVx, fragVy, fragMass, debrisColor, 
-				Math.log10(fragRadius * 8) / 2.5, fragRadius, nextGen, null, 0
-			);
-			this.addObject(fragment);
-		}
-	}
-
-	_generateImpactDebris(loserObj, totalDebrisMass, baseVx, baseVy, winnerX, winnerY, winnerRadiusPx) {
-		this.renderer.addShockwave(loserObj.x, loserObj.y, loserObj.color);
-
-		if (totalDebrisMass <= 0) { return; }
-
-		const fragmentCount = Math.max(DEBRIS.MIN_FRAG, Math.floor(Math.log10(totalDebrisMass) * 1.5));
-		const baseMass = totalDebrisMass / fragmentCount;
-		const debrisColor = ColorUtils.mixWithGray(loserObj.color, DEBRIS.GRAY_MIX_RATIO);
-
-		// Calculate winner -> loser vector
-		let dx = loserObj.x - winnerX;
-		let dy = loserObj.y - winnerY;
-		let dist = Math.sqrt(dx * dx + dy * dy);
-		if (dist === 0) { dx = 1; dy = 0; dist = 1; }
-		const nx = dx / dist;
-		const ny = dy / dist;
-		const baseAngle = Math.atan2(ny, nx);
-
-		this._spawnDebrisParticles(
-			loserObj, fragmentCount, baseMass, debrisColor, 1,
-			baseVx, baseVy, winnerX, winnerY,
-			DEBRIS.IMPACT_SCATTER_BASE, DEBRIS.IMPACT_SCATTER_VAR,
-			{ nx, ny, baseAngle, winnerRadiusPx }
-		);
-	}
-
-	// Vanish target object and create debris
-	_shatterObject(obj) {
-		console.debug(`${obj.name} (id:${obj.id}) shattered.`);
-
-		this.removeObject(obj);
-		this.renderer.addShockwave(obj.x, obj.y, obj.color);
-
-		const nextGen = obj.generation + 1;
-		const baseCount = Math.floor(Math.log10(obj.mass));
-		const decay = Math.pow(DEBRIS.FRAG_DECAY_RATE, nextGen - 1);
-		const fragmentCount = Math.max(DEBRIS.MIN_FRAG, Math.floor(baseCount / decay));
-		const baseMass = obj.mass / fragmentCount;
-		const debrisColor = ColorUtils.mixWithGray(obj.color, DEBRIS.GRAY_MIX_RATIO);
-
-		// Generate debris
-		this._spawnDebrisParticles(
-			obj, fragmentCount, baseMass, debrisColor, nextGen,
-			obj.vx, obj.vy, obj.x, obj.y,
-			DEBRIS.SHATTER_SCATTER_BASE, DEBRIS.SHATTER_SCATTER_VAR,
-			null
-		);
 	}
 
 	_checkEscapeAndRemove() {
@@ -326,6 +267,11 @@ export class ObjectManager {
 					obj.thrustAngle = o.thrustAngle || 0;
 					obj.massLossRate = o.massLossRate || 0;
 					obj.maxGLimit = o.maxGLimit || 0;
+				} else if (o.type === OBJECT_TYPES.DEBRIS) {
+					obj = new Debris(
+						o.id, o.name, o.x, o.y, o.vx, o.vy, o.mass, o.color, o.size, o.radius,
+						o.generation, o.borderColor, o.borderWidth
+					);
 				} else {
 					obj = new CelestialBody(
 						o.id, o.name, o.x, o.y, o.vx, o.vy, o.mass, o.color, o.size, o.radius,
@@ -337,10 +283,5 @@ export class ObjectManager {
 			});
 			GravSimObject._idCounter = maxId + 1;
 		}
-	}
-
-	destroy() {
-		this.objects.forEach(obj => this.removeObject(obj));
-		this.objects = [];
 	}
 }

@@ -328,4 +328,4 @@ export const ROCKET_FUELS = {
 	"ion": { name: "Ion", isp: 3000, density: 0.5 }
 };
 
-export const OBJECT_TYPES = { CELESTIAL: 0, ROCKET: 1 };
+export const OBJECT_TYPES = { CELESTIAL: 0, ROCKET: 1, DEBRIS: 2 };

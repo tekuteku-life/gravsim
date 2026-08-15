@@ -7,7 +7,7 @@ import {
 	OBJECT_TYPES, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js'
 
-import { CalcCelestialBody, CalcRocket } from './gravsim_calc_object.js'
+import { CalcCelestialBody, CalcRocket, CalcDebris } from './gravsim_calc_object.js'
 import { FlightComputer } from './gravsim_flight_computer.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 
@@ -38,6 +38,15 @@ class PhysicsEngine {
 					massLossRate: data.massLossRate,
 					autoControl: data.autoControl
 				}
+			));
+		} else if (data.type === OBJECT_TYPES.DEBRIS) {
+			this.objects.push(new CalcDebris(
+				data.id, data.name,
+				data.x, data.y,
+				data.vx || 0, data.vy || 0,
+				data.ax || 0, data.ay || 0,
+				data.radius || 1, data.generation || 0,
+				data.mass || 1
 			));
 		} else {
 			this.objects.push(new CalcCelestialBody(
@@ -132,7 +141,7 @@ class PhysicsEngine {
 					const oldWinnerMass = winner.mass;
 					winner.mass += absorbedMass;
 					winner.radius = winner.radius * Math.cbrt(winner.mass / oldWinnerMass);
-					
+
 					winner.vx = newVx;
 					winner.vy = newVy;
 

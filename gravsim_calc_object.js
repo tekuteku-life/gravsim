@@ -9,7 +9,7 @@ import { FlightComputer } from './gravsim_flight_computer.js';
 import { MathUtils } from './gravsim_utils.js';
 
 /*******************************************************************
- * Entity Class
+ * Calculation Object Class for Base
 *******************************************************************/
 class GravSimCalcObject {
 	constructor(id, name, type, x, y, vx, vy, ax, ay, radius, generation) {
@@ -203,6 +203,9 @@ class GravSimCalcObject {
 	}
 }
 
+/*******************************************************************
+ * Calculation Object Class for Celestial
+*******************************************************************/
 export class CalcCelestialBody extends GravSimCalcObject {
 	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass) {
 		super(id, name, OBJECT_TYPES.CELESTIAL, x, y, vx, vy, ax, ay, radius, generation);
@@ -212,6 +215,9 @@ export class CalcCelestialBody extends GravSimCalcObject {
 	set mass(val) { this._mass = val; }
 }
 
+/*******************************************************************
+ * Calculation Object Class for Rocket
+*******************************************************************/
 export class CalcRocket extends GravSimCalcObject {
 	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, dryMass, fuelMass, thrustData) {
 		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, ax, ay, radius, generation);
@@ -319,4 +325,16 @@ export class CalcRocket extends GravSimCalcObject {
 		this._aoaDeg = 0;
 		this._progradeAngle = Math.atan2(this.vy, this.vx);
 	}
+}
+
+/*******************************************************************
+ * Calculation Object Class for Debris
+*******************************************************************/
+export class CalcDebris extends GravSimCalcObject {
+	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass) {
+		super(id, name, OBJECT_TYPES.DEBRIS, x, y, vx, vy, ax, ay, radius, generation);
+		this._mass = mass; // kg
+	}
+	get mass() { return this._mass; }
+	set mass(val) { this._mass = val; }
 }
