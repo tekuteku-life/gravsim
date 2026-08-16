@@ -2,7 +2,7 @@
 // gravsim_info_panel.js
 
 import { PHYSICS, UI } from './gravsim_const.js';
-import { DOMUtils } from './gravsim_utils.js';
+import { DOMUtils, FormatUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * InfoPanel class that manages the information panel.
@@ -41,9 +41,7 @@ export class InfoPanel {
 
 	updateElapsedTime(dt) {
 		this.elapsedTime += dt / PHYSICS.YEARS_PER_SECOND;
-		const y = Math.floor(this.elapsedTime);
-		const d = Math.floor((this.elapsedTime - y) * 365.25);
-		DOMUtils.setText(this.ui.elapsed, `${y} yr, ${String(d).padStart(3, '0')} d`);
+		DOMUtils.setText(this.ui.elapsed, FormatUtils.timeYearsDays(this.elapsedTime));
 	}
 
 	updateTimeScale(text) {

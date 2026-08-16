@@ -81,3 +81,51 @@ export const MathUtils = {
 		return angle;
 	}
 };
+
+/*******************************************************************
+ * Format Utility class for text and numbers
+ *******************************************************************/
+export class FormatUtils {
+	// Parse total seconds into time components
+	static parseSeconds(totalSec) {
+		const sec = Math.floor(totalSec || 0);
+		const SEC_PER_DAY = 86400;
+		const SEC_PER_YEAR = 31557600; // 365.25 * 86400
+
+		const years = Math.floor(sec / SEC_PER_YEAR);
+		let rem = sec % SEC_PER_YEAR;
+
+		const days = Math.floor(rem / SEC_PER_DAY);
+		rem %= SEC_PER_DAY;
+
+		const hours = Math.floor(rem / 3600);
+		rem %= 3600;
+
+		const minutes = Math.floor(rem / 60);
+		const seconds = rem % 60;
+
+		return { years, days, hours, minutes, seconds };
+	}
+
+	// Format elapsed years to "Y yr, DDD d"
+	static timeYearsDays(totalYears) {
+		const totalSec = totalYears * 31557600; // Convert years back to seconds for unified parsing
+		const t = this.parseSeconds(totalSec);
+		return `${t.years} yr, ${String(t.days).padStart(3, '0')} d`;
+	}
+
+	// Format total seconds to "T+ YYYy DDDd HH:MM:SS"
+	static timeMission(totalSec) {
+		const t = this.parseSeconds(totalSec);
+		const pad = (n, len = 2) => String(n).padStart(len, '0');
+		return `T+ ${pad(t.years, 3)}y ${pad(t.days, 3)}d ${pad(t.hours)}:${pad(t.minutes)}:${pad(t.seconds)}`;
+	}
+
+	// Format number with fixed fraction digits and left padding
+	static numFixPad(val, fractionDigits, totalLength) {
+		if (val === undefined || val === null || isNaN(val)) {
+			return "---".padStart(totalLength, ' ');
+		}
+		return Number(val).toFixed(fractionDigits).padStart(totalLength, ' ');
+	}
+}

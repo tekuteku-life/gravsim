@@ -3,7 +3,7 @@
 
 import { PHYSICS, UI, OBJECT_TYPES, TELEMETRY } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
-import { MathUtils, DOMUtils } from './gravsim_utils.js';
+import { MathUtils, DOMUtils, FormatUtils } from './gravsim_utils.js';
 
 export class TelemetryPanel {
 	constructor(universe) {
@@ -133,29 +133,29 @@ export class TelemetryPanel {
 		const tm = target.telemetry;
 
 		DOMUtils.setText(this.ui.mass, target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' '));
-		DOMUtils.setText(this.ui.twr, tm.twr.toFixed(2).padStart(6, ' '));
-		DOMUtils.setText(this.ui.remDv, (tm.remDv / 1e3).toFixed(2).padStart(6, ' '));
+		DOMUtils.setText(this.ui.twr, FormatUtils.numFixPad(tm.twr, 2, 6));
+		DOMUtils.setText(this.ui.remDv, FormatUtils.numFixPad(tm.remDv / 1e3, 2, 6));
 
 		DOMUtils.setText(this.ui.alt, (tm.altM / 1000).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' '));
-		DOMUtils.setText(this.ui.velV, (tm.vV / 1e3).toFixed(2).padStart(7, ' '));
-		DOMUtils.setText(this.ui.velH, (tm.vH / 1e3).toFixed(2).padStart(7, ' '));
-		DOMUtils.setText(this.ui.accV, tm.aV.toFixed(2).padStart(7, ' '));
-		DOMUtils.setText(this.ui.accH, tm.aH.toFixed(2).padStart(7, ' '));
+		DOMUtils.setText(this.ui.velV, FormatUtils.numFixPad(tm.vV / 1e3, 2, 7));
+		DOMUtils.setText(this.ui.velH, FormatUtils.numFixPad(tm.vH / 1e3, 2, 7));
+		DOMUtils.setText(this.ui.accV, FormatUtils.numFixPad(tm.aV, 2, 7));
+		DOMUtils.setText(this.ui.accH, FormatUtils.numFixPad(tm.aH, 2, 7));
 
 		let pitchDeg = (target.thrustAngle * 180 / Math.PI) % 360;
 		if (pitchDeg < 0) { pitchDeg += 360; }
-		DOMUtils.setText(this.ui.pitch, pitchDeg.toFixed(1).padStart(6, ' '));
-		DOMUtils.setText(this.ui.aoa, tm.aoaDeg.toFixed(1).padStart(5, ' '));
-		DOMUtils.setText(this.ui.dyn, tm.structRatio.toFixed(1).padStart(5, ' '));
-		DOMUtils.setText(this.ui.dynAx, tm.qAxialKpa.toFixed(1).padStart(6, ' '));
-		DOMUtils.setText(this.ui.dynLat, tm.qLateralKpa.toFixed(1).padStart(6, ' '));
+		DOMUtils.setText(this.ui.pitch, FormatUtils.numFixPad(pitchDeg, 1, 6));
+		DOMUtils.setText(this.ui.aoa, FormatUtils.numFixPad(tm.aoaDeg, 1, 5));
+		DOMUtils.setText(this.ui.dyn, FormatUtils.numFixPad(tm.structRatio, 1, 5));
+		DOMUtils.setText(this.ui.dynAx, FormatUtils.numFixPad(tm.qAxialKpa, 1, 6));
+		DOMUtils.setText(this.ui.dynLat, FormatUtils.numFixPad(tm.qLateralKpa, 1, 6));
 
 		const thrtlPercent = (target.thrustRatio || 0) * 100;
-		DOMUtils.setText(this.ui.thrtl, thrtlPercent.toFixed(1).padStart(6, ' '));
+		DOMUtils.setText(this.ui.thrtl, FormatUtils.numFixPad(thrtlPercent, 1, 6));
 
 		const propRem = target.fuelMass;
 		const displayProp = propRem < 0.01 ? 0 : propRem;
-		DOMUtils.setText(this.ui.prop, displayProp.toFixed(2).padStart(6, ' '));
+		DOMUtils.setText(this.ui.prop, FormatUtils.numFixPad(displayProp, 2, 6));
 
 		if (!this.maxProp[target.id] || propRem > this.maxProp[target.id]) this.maxProp[target.id] = propRem;
 		let pct = this.maxProp[target.id] > 0 ? (propRem / this.maxProp[target.id]) * 100 : 0;
@@ -171,7 +171,7 @@ export class TelemetryPanel {
 			DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.NORMAL_COLOR);
 		}
 
-		this._updateMissionTimeUI(tm.flightTime);
+		DOMUtils.setText(this.ui.missionTime, FormatUtils.timeMission(tm.flightTime));
 		this._updateFlightDirectorUI(target.thrustAngle, tm.progradeAngle, tm.gravityAngle);
 	}
 
@@ -202,28 +202,6 @@ export class TelemetryPanel {
 		DOMUtils.setText(this.ui.missionTime, "T+ ---y ---d --:--:--");
 		DOMUtils.setStyle(this.ui.navPrograde, 'left', `50%`);
 		DOMUtils.setStyle(this.ui.navGravity, 'left', `50%`);
-	}
-
-	_updateMissionTimeUI(flightTime) {
-		const totalSec = Math.floor(flightTime || 0);
-		const SEC_PER_DAY = 86400;
-		const SEC_PER_YEAR = 365.25 * SEC_PER_DAY;
-
-		const years = Math.floor(totalSec / SEC_PER_YEAR);
-		let remSec = totalSec % SEC_PER_YEAR;
-
-		const days = Math.floor(remSec / SEC_PER_DAY);
-		remSec %= SEC_PER_DAY;
-
-		const hours = Math.floor(remSec / 3600);
-		remSec %= 3600;
-
-		const mins = Math.floor(remSec / 60);
-		const secs = remSec % 60;
-
-		const pad = (num, len = 2) => String(num).padStart(len, '0');
-		const timeStr = `T+ ${pad(years, 3)}y ${pad(days, 3)}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
-		DOMUtils.setText(this.ui.missionTime, timeStr);
 	}
 
 	_updateFlightDirectorUI(thrustAngle, progradeAngle, gravityAngle) {
