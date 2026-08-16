@@ -356,3 +356,9 @@ export const ROCKET_FUELS = {
 };
 
 export const OBJECT_TYPES = { CELESTIAL: 0, ROCKET: 1, DEBRIS: 2 };
+
+export const TRAIL_MODE = {
+	NORMAL: 0,
+	ATMOSPHERE: 1,
+	ESCAPE: 2
+};

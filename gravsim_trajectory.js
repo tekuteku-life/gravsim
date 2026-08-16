@@ -2,28 +2,29 @@
 // gravsim_trajectory.js
 
 import { RENDER } from './gravsim_const.js';
-import { TRAIL_RENDERERS } from './gravsim_trail_renderer.js';
+import { TrailRenderer } from './gravsim_trail_renderer.js';
 
 export class Trajectory {
 	constructor(id, config) {
 		this.id = id;
 		this.rendering_config = config || {};
-		this.currentMode = 'normal';
 
 		// Ring buffer
 		this.capacity = RENDER.TRAIL_HISTORY_LENGTH || 1500;
 		this.x = new Float64Array(this.capacity);
 		this.y = new Float64Array(this.capacity);
 		this.frame = new Float64Array(this.capacity);
+		this.mode = new Uint8Array(this.capacity);
 		
 		this.head = 0;
 		this.count = 0;
 	}
 
-	addPoint(x, y, frameNum) {
+	addPoint(x, y, frameNum, mode = 0) {
 		this.x[this.head] = x;
 		this.y[this.head] = y;
 		this.frame[this.head] = frameNum;
+		this.mode[this.head] = mode;
 		
 		this.head = (this.head + 1) % this.capacity;
 		if (this.count < this.capacity) { this.count++; }
@@ -43,17 +44,11 @@ export class Trajectory {
 		this.count = 0;
 	}
 
-	setVisualMode(modeStr) {
-		if (TRAIL_RENDERERS[modeStr]) {
-			this.currentMode = modeStr;
-		}
-	}
-
 	// Get point data by logical index (0 = oldest, count-1 = new)
 	getPoint(logicalIndex) {
 		if (logicalIndex < 0 || logicalIndex >= this.count) { return null; }
 		const idx = (this.head - this.count + logicalIndex + this.capacity) % this.capacity;
-		return { x: this.x[idx], y: this.y[idx], frame: this.frame[idx] };
+		return { x: this.x[idx], y: this.y[idx], frame: this.frame[idx], mode: this.mode[idx] };
 	}
 
 	// Get point by specified target frame
@@ -97,6 +92,6 @@ export class Trajectory {
 
 	draw(renderContext) {
 		if (this.count < 2) { return; }
-		TRAIL_RENDERERS[this.currentMode].draw(this, renderContext);
+		TrailRenderer.draw(this, renderContext);
 	}
 }

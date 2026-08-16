@@ -3,7 +3,7 @@
 
 import {
 	PHYSICS, RENDER, OBJECT_STATE,
-	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES
+	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE
 } from './gravsim_const.js';
 import { Trajectory } from './gravsim_trajectory.js';
 import { ColorUtils } from './gravsim_utils.js';
@@ -47,7 +47,13 @@ export class GravSimObject {
 	}
 
 	updateHistory(currentFrame) {
-		this.trajectory.addPoint(this.x, this.y, currentFrame);
+		let mode = TRAIL_MODE.NORMAL;
+		if (this.inAtmosphere) {
+			mode = TRAIL_MODE.ATMOSPHERE;
+		} else if (this.isEscaping) {
+			mode = TRAIL_MODE.ESCAPE;
+		}
+		this.trajectory.addPoint(this.x, this.y, currentFrame, mode);
 	}
 
 	clearHistory() {
@@ -107,13 +113,6 @@ export class GravSimObject {
 		}
 
 		// Draw trajectory even if state == dead
-		let mode = 'normal';
-		if (this.isEscaping) {
-			mode = 'escape';
-		} else if (this.inAtmosphere) {
-			mode = 'atmosphere';
-		}
-		this.trajectory.setVisualMode(mode);
 		this.trajectory.draw(renderContext);
 	}
 
