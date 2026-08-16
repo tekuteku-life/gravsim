@@ -1,13 +1,9 @@
 
 // gravsim_telemetry_panel.js
 
+import { PHYSICS, UI, OBJECT_TYPES, TELEMETRY } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
-import { UI, TELEMETRY, OBJECT_TYPES } from './gravsim_const.js';
-import { MathUtils } from './gravsim_utils.js';
-
-const TM_STYLE = {
-	missionStatusColor: { normal: '#00ffcc', max_q: '#ff5555' },
-};
+import { MathUtils, DOMUtils } from './gravsim_utils.js';
 
 export class TelemetryPanel {
 	constructor(universe) {
@@ -46,6 +42,7 @@ export class TelemetryPanel {
 			navGravity: document.getElementById('tm-nav-gravity'),
 			subCanvas: document.getElementById('sub-canvas'),
 		};
+		DOMUtils.verifyElements(this.ui, 'TelemetryPanel');
 		
 		if (this.ui.subCanvas) {
 			this.subRenderer = new Renderer(this.ui.subCanvas);
@@ -55,24 +52,18 @@ export class TelemetryPanel {
 	}
 
 	_bindEvents() {
-		if (this.ui.toggleBtn) {
-			this.ui.toggleBtn.addEventListener('click', () => {
-				if (!this.isOpen) { this.open(); }
-				else { this.close(); }
-			});
-		}
+		this.ui.toggleBtn.addEventListener('click', () => {
+			if (!this.isOpen) { this.open(); }
+			else { this.close(); }
+		});
 
-		if (this.ui.targetSelect) {
-			this.ui.targetSelect.addEventListener('change', (e) => {
-				this.targetId = parseInt(e.target.value, 10);
-				this.lastUpdate = 0;
-			});
-		}
+		this.ui.targetSelect.addEventListener('change', (e) => {
+			this.targetId = parseInt(e.target.value, 10);
+			this.lastUpdate = 0;
+		});
 	}
 
 	_updateTargetOptions() {
-		if (!this.ui.targetSelect) { return; }
-		
 		this.ui.targetSelect.innerHTML = '';
 		for (const obj of this.universe.objects) {
 			if (obj.type === OBJECT_TYPES.CELESTIAL) { continue; }
@@ -145,72 +136,76 @@ export class TelemetryPanel {
 	_updateUIFromTelemetry(target) {
 		const tm = target.telemetry;
 
-		this.ui.mass.innerText = target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' ');
-		this.ui.twr.innerText = tm.twr.toFixed(2).padStart(6, ' ');
-		this.ui.remDv.innerText = (tm.remDv / 1e3).toFixed(2).padStart(6, ' ');
+		DOMUtils.setText(this.ui.mass, target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' '));
+		DOMUtils.setText(this.ui.twr, tm.twr.toFixed(2).padStart(6, ' '));
+		DOMUtils.setText(this.ui.remDv, (tm.remDv / 1e3).toFixed(2).padStart(6, ' '));
 
-		this.ui.alt.innerText = (tm.altM / 1000).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' ');
-		this.ui.velV.innerText = (tm.vV / 1e3).toFixed(2).padStart(7, ' ');
-		this.ui.velH.innerText = (tm.vH / 1e3).toFixed(2).padStart(7, ' ');
-		this.ui.accV.innerText = tm.aV.toFixed(2).padStart(7, ' ');
-		this.ui.accH.innerText = tm.aH.toFixed(2).padStart(7, ' ');
+		DOMUtils.setText(this.ui.alt, (tm.altM / 1000).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' '));
+		DOMUtils.setText(this.ui.velV, (tm.vV / 1e3).toFixed(2).padStart(7, ' '));
+		DOMUtils.setText(this.ui.velH, (tm.vH / 1e3).toFixed(2).padStart(7, ' '));
+		DOMUtils.setText(this.ui.accV, tm.aV.toFixed(2).padStart(7, ' '));
+		DOMUtils.setText(this.ui.accH, tm.aH.toFixed(2).padStart(7, ' '));
 
 		let pitchDeg = (target.thrustAngle * 180 / Math.PI) % 360;
 		if (pitchDeg < 0) { pitchDeg += 360; }
-		this.ui.pitch.innerText = pitchDeg.toFixed(1).padStart(6, ' ');
-		this.ui.aoa.innerText = tm.aoaDeg.toFixed(1).padStart(5, ' ');
-		this.ui.dyn.innerText = tm.structRatio.toFixed(1).padStart(5, ' ');
-		if (this.ui.dynAx) { this.ui.dynAx.innerText = tm.qAxialKpa.toFixed(1).padStart(6, ' '); }
-		if (this.ui.dynLat) { this.ui.dynLat.innerText = tm.qLateralKpa.toFixed(1).padStart(6, ' '); }
+		DOMUtils.setText(this.ui.pitch, pitchDeg.toFixed(1).padStart(6, ' '));
+		DOMUtils.setText(this.ui.aoa, tm.aoaDeg.toFixed(1).padStart(5, ' '));
+		DOMUtils.setText(this.ui.dyn, tm.structRatio.toFixed(1).padStart(5, ' '));
+		DOMUtils.setText(this.ui.dynAx, tm.qAxialKpa.toFixed(1).padStart(6, ' '));
+		DOMUtils.setText(this.ui.dynLat, tm.qLateralKpa.toFixed(1).padStart(6, ' '));
 
 		const thrtlPercent = (target.thrustRatio || 0) * 100;
-		this.ui.thrtl.innerText = thrtlPercent.toFixed(1).padStart(6, ' ');
+		DOMUtils.setText(this.ui.thrtl, thrtlPercent.toFixed(1).padStart(6, ' '));
 
 		const propRem = target.fuelMass;
 		const displayProp = propRem < 0.01 ? 0 : propRem;
-		this.ui.prop.innerText = displayProp.toFixed(2).padStart(6, ' ');
+		DOMUtils.setText(this.ui.prop, displayProp.toFixed(2).padStart(6, ' '));
 
 		if (!this.maxProp[target.id] || propRem > this.maxProp[target.id]) this.maxProp[target.id] = propRem;
 		let pct = this.maxProp[target.id] > 0 ? (propRem / this.maxProp[target.id]) * 100 : 0;
 		if (pct < 0.5) { pct = 0; }
-		this.ui.fuelBar.style.width = `${pct}%`;
+		DOMUtils.setStyle(this.ui.fuelBar, 'width', `${pct}%`);
 
 		const mStat = TELEMETRY.STATUS_MAP[tm.status] || TELEMETRY.STATUS_MAP[0];
-		this.ui.missionStatus.innerText = mStat;
-		if (mStat === TELEMETRY.STATUS_MAP[3]) { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.max_q; }
-		else { this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.normal; }
+		DOMUtils.setText(this.ui.missionStatus, mStat);
+		
+		if (mStat === TELEMETRY.STATUS_MAP[3]) { 
+			DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.MAX_Q_COLOR);
+		} else { 
+			DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.NORMAL_COLOR);
+		}
 
 		this._updateMissionTimeUI(tm.flightTime);
 		this._updateFlightDirectorUI(target.thrustAngle, tm.progradeAngle, tm.gravityAngle);
 	}
 
 	_resetUIForTracking(target) {
-		this.ui.mass.innerText = target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' ');
-		this.ui.twr.innerText = "---".padStart(6, ' ');
-		this.ui.remDv.innerText = "---".padStart(6, ' ');
+		DOMUtils.setText(this.ui.mass, target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' '));
+		DOMUtils.setText(this.ui.twr, "---".padStart(6, ' '));
+		DOMUtils.setText(this.ui.remDv, "---".padStart(6, ' '));
 
-		this.ui.alt.innerText = "---".padStart(10, ' ');
-		this.ui.velV.innerText = "---".padStart(7, ' ');
-		this.ui.velH.innerText = "---".padStart(7, ' ');
-		this.ui.accV.innerText = "---".padStart(7, ' ');
-		this.ui.accH.innerText = "---".padStart(7, ' ');
+		DOMUtils.setText(this.ui.alt, "---".padStart(10, ' '));
+		DOMUtils.setText(this.ui.velV, "---".padStart(7, ' '));
+		DOMUtils.setText(this.ui.velH, "---".padStart(7, ' '));
+		DOMUtils.setText(this.ui.accV, "---".padStart(7, ' '));
+		DOMUtils.setText(this.ui.accH, "---".padStart(7, ' '));
 
-		this.ui.pitch.innerText = "---".padStart(6, ' ');
-		this.ui.aoa.innerText = "---".padStart(5, ' ');
-		this.ui.dyn.innerText = "---".padStart(5, ' ');
-		if (this.ui.dynAx) { this.ui.dynAx.innerText = "---".padStart(6, ' '); }
-		if (this.ui.dynLat) { this.ui.dynLat.innerText = "---".padStart(6, ' '); }
+		DOMUtils.setText(this.ui.pitch, "---".padStart(6, ' '));
+		DOMUtils.setText(this.ui.aoa, "---".padStart(5, ' '));
+		DOMUtils.setText(this.ui.dyn, "---".padStart(5, ' '));
+		if (this.ui.dynAx) { DOMUtils.setText(this.ui.dynAx, "---".padStart(6, ' ')); }
+		if (this.ui.dynLat) { DOMUtils.setText(this.ui.dynLat, "---".padStart(6, ' ')); }
 
-		this.ui.thrtl.innerText = "---".padStart(6, ' ');
-		this.ui.prop.innerText = "---".padStart(6, ' ');
-		this.ui.fuelBar.style.width = `0%`;
+		DOMUtils.setText(this.ui.thrtl, "---".padStart(6, ' '));
+		DOMUtils.setText(this.ui.prop, "---".padStart(6, ' '));
+		DOMUtils.setStyle(this.ui.fuelBar, 'width', `0%`);
 
-		this.ui.missionStatus.innerText = TELEMETRY.STATUS_MAP[6];
-		this.ui.missionStatus.style.color = TM_STYLE.missionStatusColor.normal;
+		DOMUtils.setText(this.ui.missionStatus, TELEMETRY.STATUS_MAP[6]);
+		DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.NORMAL_COLOR);
 
-		this.ui.missionTime.innerText = "T+ ---y ---d --:--:--";
-		this.ui.navPrograde.style.left = `50%`;
-		this.ui.navGravity.style.left = `50%`;
+		DOMUtils.setText(this.ui.missionTime, "T+ ---y ---d --:--:--");
+		DOMUtils.setStyle(this.ui.navPrograde, 'left', `50%`);
+		DOMUtils.setStyle(this.ui.navGravity, 'left', `50%`);
 	}
 
 	_updateMissionTimeUI(flightTime) {
@@ -232,7 +227,7 @@ export class TelemetryPanel {
 
 		const pad = (num, len = 2) => String(num).padStart(len, '0');
 		const timeStr = `T+ ${pad(years, 3)}y ${pad(days, 3)}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
-		this.ui.missionTime.innerText = timeStr;
+		DOMUtils.setText(this.ui.missionTime, timeStr);
 	}
 
 	_updateFlightDirectorUI(thrustAngle, progradeAngle, gravityAngle) {
@@ -244,8 +239,8 @@ export class TelemetryPanel {
 		const progOffset = getOffsetPct(progradeAngle, thrustAngle);
 		const gravOffset = getOffsetPct(gravityAngle, thrustAngle);
 
-		this.ui.navPrograde.style.left = `${progOffset}%`;
-		this.ui.navGravity.style.left = `${gravOffset}%`;
+		DOMUtils.setStyle(this.ui.navPrograde, 'left', `${progOffset}%`);
+		DOMUtils.setStyle(this.ui.navGravity, 'left', `${gravOffset}%`);
 
 		this.subRenderer.setRotation(-Math.PI/2 - progradeAngle);
 	}

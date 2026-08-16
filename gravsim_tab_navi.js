@@ -2,6 +2,7 @@
 // gravsim_tab_navi.js
 
 import { PHYSICS, UI, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
+import { DOMUtils } from './gravsim_utils.js';
 
 export class NaviTab {
 	constructor(universe) {
@@ -27,18 +28,17 @@ export class NaviTab {
 			nvAtmRho: document.getElementById('nv-atm-rho'),
 			nvAtmScale: document.getElementById('nv-atm-scale'),
 		};
+		DOMUtils.verifyElements(this.ui, 'NaviTab');
 	}
 
 	_bindEvents() {
-		if (this.ui.nvTargetSelect) {
-			this.ui.nvTargetSelect.addEventListener('change', (e) => {
-				this.naviTargetId = parseInt(e.target.value, 10);
-				this._updateNaviStats();
-			});
-			this.ui.nvTargetSelect.addEventListener('focus', () => {
-				this.updateTargetOptions();
-			});
-		}
+		this.ui.nvTargetSelect.addEventListener('change', (e) => {
+			this.naviTargetId = parseInt(e.target.value, 10);
+			this._updateNaviStats();
+		});
+		this.ui.nvTargetSelect.addEventListener('focus', () => {
+			this.updateTargetOptions();
+		});
 
 		// Update Navi stats periodically if active
 		setInterval(() => {
@@ -54,8 +54,6 @@ export class NaviTab {
 	}
 
 	updateTargetOptions() {
-		if (!this.ui.nvTargetSelect) { return; }
-
 		const currentId = this.naviTargetId;
 		this.ui.nvTargetSelect.innerHTML = '';
 		for (const obj of this.universe.objects) {
@@ -80,14 +78,14 @@ export class NaviTab {
 			else { return; }
 		}
 
-		this.ui.nvMass.innerText = target.mass.toExponential(2) + " t";
-		this.ui.nvRadius.innerText = (target.radius/1000).toLocaleString('en-US') + " km";
+		DOMUtils.setText(this.ui.nvMass, target.mass.toExponential(2) + " t");
+		DOMUtils.setText(this.ui.nvRadius, (target.radius/1000).toLocaleString('en-US') + " km");
 
 		const surfaceG_ms2 = (PHYSICS.G * (target.mass*1e3)) / (target.radius * target.radius);
-		this.ui.nvSurfaceG.innerText = (surfaceG_ms2 / PHYSICS.G0).toFixed(2) + " G (" + surfaceG_ms2.toFixed(2) + " m/s²)";
+		DOMUtils.setText(this.ui.nvSurfaceG, (surfaceG_ms2 / PHYSICS.G0).toFixed(2) + " G (" + surfaceG_ms2.toFixed(2) + " m/s²)");
 
 		const escapeV = Math.sqrt(2 * PHYSICS.G * (target.mass*1e3) / target.radius);
-		this.ui.nvEscapeV.innerText = (escapeV/1000).toFixed(2) + " km/s";
+		DOMUtils.setText(this.ui.nvEscapeV, (escapeV/1000).toFixed(2) + " km/s");
 
 		let refBody = null;
 		let distToRefM = 0;
@@ -97,26 +95,26 @@ export class NaviTab {
 		}
 
 		if (refBody) {
-			this.ui.nvRefBody.innerText = refBody.name;
-			this.ui.nvAlt.innerText = ((distToRefM - refBody.radius)/1000).toLocaleString('en-US', {maximumFractionDigits:0}) + " km";
+			DOMUtils.setText(this.ui.nvRefBody, refBody.name);
+			DOMUtils.setText(this.ui.nvAlt, ((distToRefM - refBody.radius)/1000).toLocaleString('en-US', {maximumFractionDigits:0}) + " km");
 			const vx = this.universe.pix2m(target.vx - refBody.vx);
 			const vy = this.universe.pix2m(target.vy - refBody.vy);
-			this.ui.nvVel.innerText = (Math.sqrt(vx*vx + vy*vy)/1000).toFixed(2) + " km/s";
+			DOMUtils.setText(this.ui.nvVel, (Math.sqrt(vx*vx + vy*vy)/1000).toFixed(2) + " km/s");
 		} else {
-			this.ui.nvRefBody.innerText = "NONE";
-			this.ui.nvAlt.innerText = "--- km";
-			this.ui.nvVel.innerText = "--- km/s";
+			DOMUtils.setText(this.ui.nvRefBody, "NONE");
+			DOMUtils.setText(this.ui.nvAlt, "--- km");
+			DOMUtils.setText(this.ui.nvVel, "--- km/s");
 		}
 
 		const param = DEFAULT_OBJECT_PARAMS[target.name];
 		if (param && param.ATM_LIMIT_ALT) {
-			this.ui.nvAtmAlt.innerText = (param.ATM_LIMIT_ALT/1000).toLocaleString() + " km";
-			this.ui.nvAtmRho.innerText = param.ATM_DENSITY_0.toLocaleString() + " kg/m³";
-			this.ui.nvAtmScale.innerText = param.ATM_SCALE_HEIGHT.toLocaleString() + " m";
+			DOMUtils.setText(this.ui.nvAtmAlt, (param.ATM_LIMIT_ALT/1000).toLocaleString() + " km");
+			DOMUtils.setText(this.ui.nvAtmRho, param.ATM_DENSITY_0.toLocaleString() + " kg/m³");
+			DOMUtils.setText(this.ui.nvAtmScale, param.ATM_SCALE_HEIGHT.toLocaleString() + " m");
 		} else {
-			this.ui.nvAtmAlt.innerText = "--- km";
-			this.ui.nvAtmRho.innerText = "--- kg/m³";
-			this.ui.nvAtmScale.innerText = "--- m";
+			DOMUtils.setText(this.ui.nvAtmAlt, "--- km");
+			DOMUtils.setText(this.ui.nvAtmRho, "--- kg/m³");
+			DOMUtils.setText(this.ui.nvAtmScale, "--- m");
 		}
 	}
 }

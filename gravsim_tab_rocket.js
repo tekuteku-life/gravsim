@@ -2,6 +2,7 @@
 // gravsim_tab_rocket.js
 
 import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS } from './gravsim_const.js';
+import { DOMUtils } from './gravsim_utils.js';
 
 export class RocketTab {
 	constructor(universe, systemTab) {
@@ -47,41 +48,33 @@ export class RocketTab {
 			rlExecuteBtn: document.getElementById('rl-execute-btn'),
 			massSelect: document.getElementById('mass-select'),
 		};
+		DOMUtils.verifyElements(this.ui, 'RocketTab');
 	}
 
 	_bindEvents() {
-		if (this.ui.rlModeSelect) {
-			this.ui.rlModeSelect.addEventListener('change', (e) => {
-				this.universe.RocketLauncher.mode = e.target.value;
-				this.ui.rlHostOptions.style.display = e.target.value === 'host' ? 'block' : 'none';
-				if (e.target.value === 'host') { this._updateRocketHostOptions(); }
-				this._updateRocketStats();
-			});
-		}
-		if (this.ui.rlFuelType) {
-			this.ui.rlFuelType.addEventListener('change', (e) => {
-				this.universe.RocketLauncher.fuelType = e.target.value;
-				this._updateRocketStats();
-			});
-		}
-		if (this.ui.rlHostSelect) {
-			this.ui.rlHostSelect.addEventListener('change', (e) => {
-				const newHostId = parseInt(e.target.value, 10);
-				this.universe.RocketLauncher.hostId = newHostId;
-				this._setupLaunchEnvironment(newHostId);
-				this._updateRocketStats();
-			});
-			this.ui.rlHostSelect.addEventListener('focus', () => {
-				this._updateRocketHostOptions();
-				this._updateRocketStats();
-			});
-		}
-
-		if (this.ui.rlAutoControl) {
-			this.ui.rlAutoControl.addEventListener('change', (e) => {
-				this.universe.RocketLauncher.autoControl = e.target.checked;
-			});
-		}
+		this.ui.rlModeSelect.addEventListener('change', (e) => {
+			this.universe.RocketLauncher.mode = e.target.value;
+			this.ui.rlHostOptions.style.display = e.target.value === 'host' ? 'block' : 'none';
+			if (e.target.value === 'host') { this._updateRocketHostOptions(); }
+			this._updateRocketStats();
+		});
+		this.ui.rlFuelType.addEventListener('change', (e) => {
+			this.universe.RocketLauncher.fuelType = e.target.value;
+			this._updateRocketStats();
+		});
+		this.ui.rlHostSelect.addEventListener('change', (e) => {
+			const newHostId = parseInt(e.target.value, 10);
+			this.universe.RocketLauncher.hostId = newHostId;
+			this._setupLaunchEnvironment(newHostId);
+			this._updateRocketStats();
+		});
+		this.ui.rlHostSelect.addEventListener('focus', () => {
+			this._updateRocketHostOptions();
+			this._updateRocketStats();
+		});
+		this.ui.rlAutoControl.addEventListener('change', (e) => {
+			this.universe.RocketLauncher.autoControl = e.target.checked;
+		});
 
 		// Helper to bind range inputs to RocketLauncher properties
 		const bindSlider = (sliderId, valId, propName, isFloat = false) => {
@@ -106,29 +99,23 @@ export class RocketTab {
 		bindSlider('rlLaunchThrust', 'rlLaunchThrustVal', 'thrustKN');
 		bindSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', 'maxGLimit', true);
 
-		if (this.ui.massSelect) {
-			this.ui.massSelect.addEventListener('change', () => this._updateRocketStats());
-		}
+		this.ui.massSelect.addEventListener('change', () => this._updateRocketStats());
 
 		document.addEventListener('rocket-preview-updated', () => {
 			this._updateRocketStats();
 		});
 
-		if (this.ui.rlExecuteBtn) {
-			this.ui.rlExecuteBtn.addEventListener('click', () => {
-				this.universe.RocketLauncher.executeLaunch();
+		this.ui.rlExecuteBtn.addEventListener('click', () => {
+			this.universe.RocketLauncher.executeLaunch();
 
-				const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
-				if (sysTabBtn) {
-					sysTabBtn.click();
-				}
-			});
-		}
+			const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
+			if (sysTabBtn) {
+				sysTabBtn.click();
+			}
+		});
 	}
 
 	_updateRocketHostOptions() {
-		if (!this.ui.rlHostSelect) { return; }
-
 		const currentHostId = this.universe.RocketLauncher.hostId;
 		this.ui.rlHostSelect.innerHTML = '';
 
@@ -148,8 +135,6 @@ export class RocketTab {
 	}
 
 	_updateRocketStats() {
-		if (!this.ui.rlStatDv || !this.ui.rlStatTwrY) { return; }
-
 		const rl = this.universe.RocketLauncher;
 		const objName = this.universe.ObjectPlacer.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
@@ -344,7 +329,7 @@ export class RocketTab {
 
 	loadState(rlState) {
 		if (!rlState) { return; }
-		if (rlState.mode && this.ui.rlModeSelect) {
+		if (rlState.mode) {
 			this.ui.rlModeSelect.value = rlState.mode;
 			this.ui.rlHostOptions.style.display = rlState.mode === 'host' ? 'block' : 'none';
 		}
@@ -363,10 +348,10 @@ export class RocketTab {
 		updateSlider('rlLaunchMass', 'rlLaunchMassVal', rlState.dryMassT);
 		updateSlider('rlLaunchThrust', 'rlLaunchThrustVal', rlState.thrustKN);
 		updateSlider('rlFuelAmount', 'rlFuelAmountVal', rlState.fuelAmountT);
-		if (this.ui.rlFuelType && rlState.fuelType) { this.ui.rlFuelType.value = rlState.fuelType; }
+		if (rlState.fuelType) { this.ui.rlFuelType.value = rlState.fuelType; }
 		updateSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', rlState.maxGLimit);
 
-		if (rlState.autoControl !== undefined && this.ui.rlAutoControl) {
+		if (rlState.autoControl !== undefined) {
 			this.ui.rlAutoControl.checked = rlState.autoControl;
 			this.universe.RocketLauncher.autoControl = rlState.autoControl;
 		}

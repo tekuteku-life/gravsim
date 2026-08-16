@@ -2,6 +2,7 @@
 // gravsim_tab_deploy.js
 
 import { DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
+import { DOMUtils } from './gravsim_utils.js';
 
 export class DeployTab {
 	constructor(universe) {
@@ -26,6 +27,7 @@ export class DeployTab {
 			massSelect: document.getElementById('mass-select'),
 			moonBtn: document.getElementById('put-moon-btn')
 		};
+		DOMUtils.verifyElements(this.ui, 'DeployTab');
 	}
 
 	_bindEvents() {
@@ -36,9 +38,7 @@ export class DeployTab {
 				btn.addEventListener('click', () => this.universe.ObjectPlacer.placeAtOrbitAroundSun(objName));
 			}
 		}
-		if (this.ui.moonBtn) {
-			this.ui.moonBtn.addEventListener('click', () => this._deployMoon());
-		}
+		this.ui.moonBtn.addEventListener('click', () => this._deployMoon());
 	}
 
 	_deployMoon() {
@@ -51,8 +51,6 @@ export class DeployTab {
 	}
 
 	generateMassSelect() {
-		if(!this.ui.massSelect) { return; }
-
 		this.ui.massSelect.innerHTML = '';
 		for (const key in DEFAULT_OBJECT_PARAMS) {
 			const param = DEFAULT_OBJECT_PARAMS[key];

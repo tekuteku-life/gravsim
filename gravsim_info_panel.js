@@ -2,6 +2,7 @@
 // gravsim_info_panel.js
 
 import { PHYSICS, UI } from './gravsim_const.js';
+import { DOMUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * InfoPanel class that manages the information panel.
@@ -25,6 +26,7 @@ export class InfoPanel {
 			fps: document.getElementById('info-fps'),
 			count: document.getElementById('info-count')
 		};
+		DOMUtils.verifyElements(this.ui, 'InfoPanel');
 	}
 
 	resetElapsedTime() {
@@ -33,24 +35,22 @@ export class InfoPanel {
 
 	updateElapsedTime(dt) {
 		this.elapsedTime += dt / PHYSICS.YEARS_PER_SECOND;
-		if (this.ui.elapsed) {
-			const y = Math.floor(this.elapsedTime);
-			const d = Math.floor((this.elapsedTime - y) * 365.25);
-			this.ui.elapsed.textContent = `${y} yr, ${String(d).padStart(3, '0')} d`;
-		}
+		const y = Math.floor(this.elapsedTime);
+		const d = Math.floor((this.elapsedTime - y) * 365.25);
+		DOMUtils.setText(this.ui.elapsed, `${y} yr, ${String(d).padStart(3, '0')} d`);
 	}
 
 	updateTimeScale(text) {
-		if (this.ui.time) { this.ui.time.textContent = text; }
+		DOMUtils.setText(this.ui.time, text);
 	}
 	updateZoomScale(text) {
-		if (this.ui.zoom) { this.ui.zoom.textContent = text; }
+		DOMUtils.setText(this.ui.zoom, text);
 	}
 	updateCamera(name) {
-		if (this.ui.camera) { this.ui.camera.textContent = name; }
+		DOMUtils.setText(this.ui.camera, name);
 	}
 	updateObjectCount(counts) {
-		if (this.ui.count) { this.ui.count.textContent = counts; }
+		DOMUtils.setText(this.ui.count, counts.toString());
 	}
 
 	updateFPS() {
@@ -59,9 +59,7 @@ export class InfoPanel {
 		this.fpsCount++;
 		if (elapsed >= UI.UPDATE_INTERVAL.INFO_PANEL) {
 			const fps = (this.fpsCount / (elapsed / 1e3)).toFixed(1);
-			if (this.ui.fps) {
-				this.ui.fps.textContent = fps;
-			}
+			DOMUtils.setText(this.ui.fps, fps);
 			this.lastTime = now;
 			this.fpsCount = 0;
 		}

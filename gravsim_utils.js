@@ -1,6 +1,44 @@
 
 // gravsim_utils.js
 
+/*******************************************************************
+ * DOM Utility class for Dirty Checking (Differential Update)
+ *******************************************************************/
+export class DOMUtils {
+	// Update DOM text only if changed
+	static setText(element, text) {
+		if (!element) return;
+		if (element._cachedText !== text) {
+			element.textContent = text;
+			element._cachedText = text;
+		}
+	}
+
+	// Update DOM style only if changed
+	static setStyle(element, prop, value) {
+		if (!element) return;
+		if (!element._cachedStyle) {
+			element._cachedStyle = {};
+		}
+		if (element._cachedStyle[prop] !== value) {
+			element.style[prop] = value;
+			element._cachedStyle[prop] = value;
+		}
+	}
+
+	// Verify if all elements in the given UI object exist
+	static verifyElements(uiObject, panelName) {
+		for (const [key, element] of Object.entries(uiObject)) {
+			if (!element) {
+				console.error(`[${panelName}] DOM element missing: ${key}`);
+			}
+		}
+	}
+}
+
+/*******************************************************************
+ * Color Utility class
+ *******************************************************************/
 export const ColorUtils = {
 	// Translate hex to RGBA
 	hexToRgba(hex, alpha) {
@@ -31,6 +69,9 @@ export const ColorUtils = {
 	}
 };
 
+/*******************************************************************
+ * Math Utility class
+ *******************************************************************/
 export const MathUtils = {
 	// Normalize angle
 	normalizeAngle(radians) {

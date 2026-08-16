@@ -107,6 +107,12 @@ export const TELEMETRY = {
 	SUB_VIEW_TARGET_RADIUS: 20,
 	SUB_VIEW_MAX_ZOOM: 1e8,
 	MAX_Q_TH: 80,
+	STYLE: {
+		MISSION_STATUS: {
+			NORMAL_COLOR: '#00ffcc',
+			MAX_Q_COLOR: '#ff5555'
+		},
+	},
 	STATUS_MAP: {
 		0: "PRE-LAUNCH",
 		1: "LIFTOFF",

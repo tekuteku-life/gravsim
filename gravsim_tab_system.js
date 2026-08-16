@@ -2,6 +2,7 @@
 // gravsim_tab_system.js
 
 import { PHYSICS, RENDER, SIMULATION } from './gravsim_const.js';
+import { DOMUtils } from './gravsim_utils.js';
 
 export class SystemTab {
 	constructor(universe) {
@@ -21,20 +22,15 @@ export class SystemTab {
 			zoomIndicator: document.getElementById('zoom-scale-indicator'),
 			centerSelect: document.getElementById('center-select')
 		};
+		DOMUtils.verifyElements(this.ui, 'SystemTab');
 	}
 
 	_bindEvents() {
-		if (this.ui.timeScale) {
-			this.ui.timeScale.addEventListener('input', () => this.updateTimeScaleIndicator(this.getTimeScale()));
-		}
-		if (this.ui.zoomScale) {
-			this.ui.zoomScale.addEventListener('input', () => this.updateZoomScaleIndicator(this.getZoomScale()));
-		}
-		if (this.ui.centerSelect) {
-			this.ui.centerSelect.addEventListener('focus', () => this.updateCenterOptions());
-			this.ui.centerSelect.addEventListener('change', (e) => this._onCenterChanged(e));
-			setTimeout(() => this.updateCenterOptions(), 100);
-		}
+		this.ui.timeScale.addEventListener('input', () => this.updateTimeScaleIndicator(this.getTimeScale()));
+		this.ui.zoomScale.addEventListener('input', () => this.updateZoomScaleIndicator(this.getZoomScale()));
+		this.ui.centerSelect.addEventListener('focus', () => this.updateCenterOptions());
+		this.ui.centerSelect.addEventListener('change', (e) => this._onCenterChanged(e));
+		setTimeout(() => this.updateCenterOptions(), 100);
 	}
 
 	_onCenterChanged(e) {
@@ -46,7 +42,7 @@ export class SystemTab {
 	}
 
 	updateCenterOptions() {
-		if (!this.ui.centerSelect || !this.universe.centerObject) { return; }
+		if (!this.universe.centerObject) { return; }
 
 		this.ui.centerSelect.innerHTML = '';
 		for (const obj of this.universe.objects) {
@@ -78,8 +74,6 @@ export class SystemTab {
 	}
 
 	updateTimeScaleIndicator(val) {
-		if (!this.ui.timeIndicator) { return; }
-
 		const yearsPerSec = (1000 / SIMULATION.TIME_SCALE) * val;
 		let text = "";
 
@@ -98,13 +92,11 @@ export class SystemTab {
 			text = `${secPerSec >= 10 ? Math.round(secPerSec).toLocaleString('en-US') : secPerSec.toFixed(2)} sec/sec`;
 		}
 
-		this.ui.timeIndicator.textContent = text;
+		DOMUtils.setText(this.ui.timeIndicator, text);
 		this.universe.InfoPanel.updateTimeScale(text);
 	}
 
 	updateZoomScaleIndicator(val) {
-		if (!this.ui.zoomIndicator) { return; }
-
 		const auPer100Px = 100 / (val * RENDER.DISTANCE_SCALE);
 		const kmPer100Px = auPer100Px * (PHYSICS.METERS_PER_AU / 1000);
 		let text = "";
@@ -118,24 +110,18 @@ export class SystemTab {
 			text = `${mPer100Px >= 10 ? Math.round(mPer100Px).toLocaleString('en-US') : mPer100Px.toFixed(2)} m/100px`;
 		}
 
-		this.ui.zoomIndicator.textContent = text;
+		DOMUtils.setText(this.ui.zoomIndicator, text);
 		this.universe.InfoPanel.updateZoomScale(text);
 	}
 
 	getTimeScale() {
-		if (this.ui.timeScale) {
-			const exp = parseFloat(this.ui.timeScale.value);
-			return Math.pow(10, exp);
-		}
-		return 0.1;
+		const exp = parseFloat(this.ui.timeScale.value);
+		return Math.pow(10, exp);
 	}
 
 	getZoomScale() {
-		if (this.ui.zoomScale) {
-			const exp = parseFloat(this.ui.zoomScale.value);
-			return Math.pow(10, exp);
-		}
-		return 1;
+		const exp = parseFloat(this.ui.zoomScale.value);
+		return Math.pow(10, exp);
 	}
 
 	getZoomStep() {
@@ -144,19 +130,19 @@ export class SystemTab {
 
 	getState() {
 		return {
-			timeScaleVal: this.ui.timeScale ? parseFloat(this.ui.timeScale.value) : -1,
-			zoomScaleVal: this.ui.zoomScale ? parseFloat(this.ui.zoomScale.value) : 0,
+			timeScaleVal: parseFloat(this.ui.timeScale.value),
+			zoomScaleVal: parseFloat(this.ui.zoomScale.value),
 		};
 	}
 
 	loadState(cpState) {
 		if (!cpState) { return; }
 
-		if (cpState.timeScaleVal !== undefined && this.ui.timeScale) {
+		if (cpState.timeScaleVal !== undefined) {
 			this.ui.timeScale.value = cpState.timeScaleVal;
 			this.updateTimeScaleIndicator(this.getTimeScale());
 		}
-		if (cpState.zoomScaleVal !== undefined && this.ui.zoomScale) {
+		if (cpState.zoomScaleVal !== undefined) {
 			this.ui.zoomScale.value = cpState.zoomScaleVal;
 			this.updateZoomScaleIndicator(this.getZoomScale());
 			this.universe.updateZoomScale();
