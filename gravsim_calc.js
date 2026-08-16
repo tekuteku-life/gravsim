@@ -377,9 +377,7 @@ class PhysicsEngine {
 		}
 
 		if (!refBody) {
-			if (obj.type === OBJECT_TYPES.ROCKET) {
-				obj.clearAerodynamicParameters();
-			}
+			obj.clearAerodynamicParameters();
 			return;
 		}
 
@@ -389,9 +387,7 @@ class PhysicsEngine {
 		const altM = distM - refBody.radius;
 
 		if (altM > refParam.ATM_LIMIT_ALT) {
-			if (obj.type === OBJECT_TYPES.ROCKET) {
-				obj.clearAerodynamicParameters();
-			}
+			obj.clearAerodynamicParameters();
 			return;
 		}
 
