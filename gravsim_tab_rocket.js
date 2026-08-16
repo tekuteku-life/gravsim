@@ -326,6 +326,9 @@ export class RocketTab {
 			this.universe.cameraOffset = { ...this.previousCameraOffset };
 			this.universe.ControlPanel.systemTab.updateCenterOptions();
 			this.universe.InfoPanel.updateCamera(this.previousCameraTarget.name);
+
+			this.previousCameraTarget = null;
+			this.previousCameraOffset = null;
 		}
 	}
 
