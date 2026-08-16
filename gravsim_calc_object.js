@@ -2,7 +2,8 @@
 // gravsim_calc_object.js
 
 import {
-	PHYSICS, ROCHE_LIMIT, DEFAULT_OBJECT_PARAMS,
+	PHYSICS, ROCHE_LIMIT, AERO_DYNAMIC,
+	DEFAULT_OBJECT_PARAMS,
 	OBJECT_TYPES, SIMULATION
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
@@ -119,6 +120,21 @@ class GravSimCalcObject {
 		return distSq < rocheLimitM * rocheLimitM;
 	}
 
+	_determinDynamicParam(vRelY, vRelX, vRelSq) {
+		let area = Math.PI * this.radius * this.radius;;
+		let cd = AERO_DYNAMIC.DEFAULT_CD;
+
+		return {area: area, cd: cd};
+	}
+
+	_checkAerodynamicDestruction(q) {
+		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
+		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
+		if (q > maxQ) {
+			this.shattered = true;
+		}
+	}
+
 	applyAerodynamics(refBody, refParam, altM) {
 		this.inAtmosphere = true;
 
@@ -146,31 +162,7 @@ class GravSimCalcObject {
 		const vRel = Math.sqrt(vRelSq);
 
 		// Determine Area and Cd
-		let area = Math.PI * this.radius * this.radius;
-		let cd = 0.47;
-
-		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
-		if (objParam && objParam.AERO_AREA_FRONT) {
-			cd = objParam.DRAG_COEF || 0.2;
-			const velAngle = Math.atan2(vRelY, vRelX);
-			const angleDiff = Math.abs(MathUtils.normalizeAngle(this.thrustAngle - velAngle));
-			
-			const aoa = Math.min(angleDiff, Math.PI - angleDiff);
-			const sinAoA = Math.sin(aoa);
-			area = objParam.AERO_AREA_FRONT * (1 - sinAoA) + objParam.AERO_AREA_SIDE * sinAoA;
-
-			if (this.type === OBJECT_TYPES.ROCKET) {
-				this._aoaDeg = angleDiff * (180 / Math.PI);
-				const q = 0.5 * rho * vRelSq;
-				this._qAxialKpa = (q * Math.pow(Math.cos(angleDiff), 2)) / 1000;
-				this._qLateralKpa = (q * Math.pow(Math.sin(angleDiff), 2)) / 1000;
-				this._progradeAngle = velAngle;
-			}
-		} else {
-			if (this.type === OBJECT_TYPES.ROCKET) {
-				this._progradeAngle = Math.atan2(vRelY, vRelX);
-			}
-		}
+		const aeroDynamicParam = this._determinDynamicParam(vRelY, vRelX, vRelSq);
 
 		// Dynamic Pressure & Drag Force
 		const q = 0.5 * rho * vRelSq;
@@ -182,7 +174,7 @@ class GravSimCalcObject {
 			return;
 		}
 
-		const dragForce = q * cd * area;
+		const dragForce = q * aeroDynamicParam.cd * aeroDynamicParam.area;
 		const accelDrag = dragForce / this.mass;
 		
 		this.ax -= (vRelX / vRel) * accelDrag;
@@ -192,14 +184,6 @@ class GravSimCalcObject {
 	clearAerodynamicParameters() {
 		this.inAtmosphere = false;
 		this._currentQ = 0;
-	}
-
-	_checkAerodynamicDestruction(q) {
-		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
-		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity;
-		if (q > maxQ) {
-			this.shattered = true;
-		}
 	}
 }
 
@@ -246,6 +230,34 @@ export class CalcRocket extends GravSimCalcObject {
 
 	get mass() { return this.dryMass + this.fuelMass; }
 	set mass(val) {}
+
+	_determinDynamicParam(vRelY, vRelX, vRelSq) {
+		let area = 0;
+		let cd = 0.2;
+
+		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
+		if (objParam && objParam.DRAG_COEF) {
+			cd = objParam.DRAG_COEF;
+		}
+		if (objParam && objParam.AERO_AREA_FRONT) {
+			const velAngle = Math.atan2(vRelY, vRelX);
+			const angleDiff = Math.abs(MathUtils.normalizeAngle(this.thrustAngle - velAngle));
+			
+			const aoa = Math.min(angleDiff, Math.PI - angleDiff);
+			const sinAoA = Math.sin(aoa);
+			area = objParam.AERO_AREA_FRONT * (1 - sinAoA) + objParam.AERO_AREA_SIDE * sinAoA;
+
+			this._aoaDeg = angleDiff * (180 / Math.PI);
+			const q = 0.5 * rho * vRelSq;
+			this._qAxialKpa = (q * Math.pow(Math.cos(angleDiff), 2)) / 1000;
+			this._qLateralKpa = (q * Math.pow(Math.sin(angleDiff), 2)) / 1000;
+			this._progradeAngle = velAngle;
+		} else {
+			this._progradeAngle = Math.atan2(vRelY, vRelX);
+		}
+
+		return {area: area, cd: cd};
+	}
 
 	_checkAerodynamicDestruction(q) {
 		const objParam = DEFAULT_OBJECT_PARAMS[this.name];

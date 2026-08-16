@@ -30,6 +30,11 @@ export const ROCHE_LIMIT = {
 	RIGID_DESTROYER_MASS: 1e25
 };
 
+// Aero Dynamics
+export const AERO_DYNAMIC = {
+	DEFAULT_CD: 0.47,
+};
+
 // Debris generation
 export const DEBRIS = {
 	MIN_FRAG: 3,
