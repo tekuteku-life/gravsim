@@ -120,8 +120,8 @@ class GravSimCalcObject {
 		return distSq < rocheLimitM * rocheLimitM;
 	}
 
-	_determinDynamicParam(vRelY, vRelX, vRelSq) {
-		let area = Math.PI * this.radius * this.radius;;
+	_determinDynamicParam(vRelY, vRelX, vRelSq, rho) {
+		let area = Math.PI * this.radius * this.radius;
 		let cd = AERO_DYNAMIC.DEFAULT_CD;
 
 		return {area: area, cd: cd};
@@ -162,7 +162,7 @@ class GravSimCalcObject {
 		const vRel = Math.sqrt(vRelSq);
 
 		// Determine Area and Cd
-		const aeroDynamicParam = this._determinDynamicParam(vRelY, vRelX, vRelSq);
+		const aeroDynamicParam = this._determinDynamicParam(vRelY, vRelX, vRelSq, rho);
 
 		// Dynamic Pressure & Drag Force
 		const q = 0.5 * rho * vRelSq;
@@ -231,7 +231,7 @@ export class CalcRocket extends GravSimCalcObject {
 	get mass() { return this.dryMass + this.fuelMass; }
 	set mass(val) {}
 
-	_determinDynamicParam(vRelY, vRelX, vRelSq) {
+	_determinDynamicParam(vRelY, vRelX, vRelSq, rho) {
 		let area = 0;
 		let cd = 0.2;
 
