@@ -158,7 +158,7 @@ export class ObjectManager {
 
 				if (objData.isCollided) {
 					if (objData.isImpact && target.state === OBJECT_STATE.ACTIVE) {
-						console.debug(`${target.name} (id:${target.id}) impacted.` + objData.impactWinnerX + "," + objData.impactWinnerY);
+						console.debug(`${target.name} (id:${target.id}) impacted.`);
 
 						// Generate debris and effects via DebrisGenerator
 						const debrisData = DebrisGenerator.generateFromImpact(
