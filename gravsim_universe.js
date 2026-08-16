@@ -58,6 +58,7 @@ export class Universe {
 		this.canvas = _canvas;
 		this.cameraOffset = { x: 0, y: 0 };
 		this.uiUpdaters = [];
+		this.isPaused = false;
 
 		// Initialize Modules
 		this.Renderer = new Renderer(_canvas);
@@ -122,7 +123,27 @@ export class Universe {
 
 	// Send resume command to worker
 	resumeSimulation() {
-		this.CalcWorkerManager.postMessage({ cmd: 'pause', value: false });
+		// Prevent resuming if globally paused by user
+		if (!this.isPaused) {
+			this.CalcWorkerManager.postMessage({ cmd: 'pause', value: false });
+		}
+	}
+
+	clearObjects(clearDebris, clearRocket, clearCelestial) {
+		const toRemove = [];
+		for (const obj of this.objects) {
+			if (clearDebris && obj.type === OBJECT_TYPES.DEBRIS) {
+				toRemove.push(obj);
+			} else if (clearRocket && obj.type === OBJECT_TYPES.ROCKET) {
+				toRemove.push(obj);
+			} else if (clearCelestial && obj.type === OBJECT_TYPES.CELESTIAL) {
+				// Prevent removing the Sun (id:0) to avoid crashing
+				if (obj.id !== 0) {
+					toRemove.push(obj);
+				}
+			}
+		}
+		toRemove.forEach(obj => this.removeObject(obj));
 	}
 
 	updateZoomScale() {

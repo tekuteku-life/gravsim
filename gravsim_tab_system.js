@@ -1,7 +1,7 @@
 
 // gravsim_tab_system.js
 
-import { PHYSICS, RENDER, SIMULATION } from './gravsim_const.js';
+import { PHYSICS, RENDER, SIMULATION, UI } from './gravsim_const.js';
 import { DOMUtils } from './gravsim_utils.js';
 
 export class SystemTab {
@@ -25,7 +25,15 @@ export class SystemTab {
 			timeIndicator: document.getElementById('time-scale-indicator'),
 			zoomScale: document.getElementById('zoom-scale'),
 			zoomIndicator: document.getElementById('zoom-scale-indicator'),
-			centerSelect: document.getElementById('center-select')
+			centerSelect: document.getElementById('center-select'),
+			
+			pauseResumeBtn: document.getElementById('pause-resume-btn'),
+			resetAllBtn: document.getElementById('reset-all-btn'),
+			
+			clearDebrisChk: document.getElementById('clear-debris-chk'),
+			clearRocketChk: document.getElementById('clear-rocket-chk'),
+			clearCelestialChk: document.getElementById('clear-celestial-chk'),
+			clearSelectedBtn: document.getElementById('clear-selected-btn')
 		};
 		DOMUtils.verifyElements(this.ui, 'SystemTab');
 	}
@@ -34,6 +42,35 @@ export class SystemTab {
 		this.ui.timeScale.addEventListener('input', () => this.updateTimeScaleIndicator(this.getTimeScale()));
 		this.ui.zoomScale.addEventListener('input', () => this.updateZoomScaleIndicator(this.getZoomScale()));
 		this.ui.centerSelect.addEventListener('change', (e) => this._onCenterChanged(e));
+
+		// Simulation Control
+		this.ui.pauseResumeBtn.addEventListener('click', () => {
+			this.universe.isPaused = !this.universe.isPaused;
+			if (this.universe.isPaused) {
+				this.universe.pauseSimulation();
+				DOMUtils.setText(this.ui.pauseResumeBtn, "Resume");
+				this.ui.pauseResumeBtn.style.color = UI.BUTTON_COLOR.ACTIVE;
+			} else {
+				this.universe.resumeSimulation();
+				DOMUtils.setText(this.ui.pauseResumeBtn, "Pause");
+				this.ui.pauseResumeBtn.style.color = UI.BUTTON_COLOR.DEFAULT;
+			}
+		});
+
+		this.ui.resetAllBtn.addEventListener('click', () => {
+			if (confirm("Are you sure you want to reset the universe?")) {
+				this.universe.reset();
+			}
+		});
+
+		// Clear Objects
+		this.ui.clearSelectedBtn.addEventListener('click', () => {
+			this.universe.clearObjects(
+				this.ui.clearDebrisChk.checked,
+				this.ui.clearRocketChk.checked,
+				this.ui.clearCelestialChk.checked
+			);
+		});
 	}
 
 	_onCenterChanged(e) {

@@ -88,14 +88,19 @@
 		====================================== -->
 		<div id="tab-sys" class="tab-content active">
 			<div class="panel-section">
-				<div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+				<div style="margin-bottom: 10px;">
 					<button type="button" id="save-state-btn" style="width: 48%;">Save State</button>
 					<button type="button" id="load-state-btn" style="width: 48%;">Load State</button>
 					<input type="file" id="load-file-input" accept=".json" style="display: none;">
 				</div>
+				<div style="margin-bottom: 10px;">
+					<button type="button" id="pause-resume-btn" style="width: 48%;">Pause</button>
+					<button type="button" id="reset-all-btn">Reset All</button>
+				</div>
 			</div>
 
 			<div class="panel-section">
+				<div class="panel-section-header">[ SIMULATION SPEED & CAMERA ]</div>
 				<label for="time-scale">Time scale:</label>
 				<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-7" max="1" class="slider-full">
 				<div class="indicator"><span id="time-scale-indicator"></span></div>
@@ -106,6 +111,16 @@
 				
 				<label for="center-select">Center Object (Camera):</label>
 				<select id="center-select" name="center" class="full-width"></select>
+			</div>
+
+			<div class="panel-section" style="border:none;">
+				<div class="panel-section-header">[ CLEAR OBJECTS ]</div>
+				<div style="margin-top: 5px;">
+					<label><input type="checkbox" id="clear-debris-chk" checked> Debris</label>
+					<label><input type="checkbox" id="clear-rocket-chk"> Rocket</label>
+					<label><input type="checkbox" id="clear-celestial-chk"> Celestial</label>
+				</div>
+				<button type="button" id="clear-selected-btn">Clear Selected</button>
 			</div>
 		</div>
 

@@ -104,6 +104,10 @@ export const UI = {
 		NAVI: 500,
 		INFO_PANEL: 500,
 		TELEMETRY: 100
+	},
+	BUTTON_COLOR: {
+		ACTIVE: "#00ffcc",
+		DEFAULT: ""
 	}
 };
 

@@ -59,6 +59,15 @@ html, body {
 	color: #00ffcc;
 	border-bottom: 2px solid #00ffcc;
 }
+#reset-all-btn {
+	width: 48%;
+	color: #ff5555;
+	border-color: #ff5555;
+}
+#clear-selected-btn {
+	width: 100%;
+	margin-top: 10px;
+}
 
 /* Tab Content Areas */
 .tab-content {
@@ -89,9 +98,18 @@ label {
 }
 .panel-section > label:first-of-type { margin-top: 0; }
 
+.panel-section label:has(input[type=checkbox]) {
+	cursor: pointer;
+}
+
 .panel-section-header {
 	color:#aaa;
 	border-color:#555;
+}
+
+.panel-section > div::not(class=panel-section-header) {
+	display: flex;
+	justify-content: space-between;
 }
 
 .slider-full {
