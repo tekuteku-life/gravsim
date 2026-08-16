@@ -72,6 +72,7 @@ export class Renderer {
 		this.renderContext.basis = centerObject;
 		this.renderContext.zoomScale = this.zoomScale;
 		this.renderContext.trailLengthAU = trailLengthAU;
+		this.renderContext.cameraOffset = cameraOffset;
 		
 		objects.forEach(obj => obj.draw(this.renderContext));
 		

@@ -23,6 +23,7 @@ class BaseTrailRenderer {
 		const targetLengthPx = renderContext.trailLengthAU * RENDER.DISTANCE_SCALE * zoomScale;
 		
 		let prevPt = null;
+		let lastAddedPt = null;
 		const pointsToDraw = [];
 
 		for (let i = count - 1; i >= 0; i--) {
@@ -46,11 +47,31 @@ class BaseTrailRenderer {
 				const dy = relY - prevPt.relY;
 				drawnLength += Math.sqrt(dx * dx + dy * dy);
 			}
-
-			pointsToDraw.push({ relX, relY, logicalIdx: i });
 			prevPt = { relX, relY };
 
-			if (drawnLength > targetLengthPx) { break; }
+			// Thinning
+			let shouldAdd = false;
+			if (!lastAddedPt || i === 0) {
+				shouldAdd = true;
+			} else {
+				const dxAdd = relX - lastAddedPt.relX;
+				const dyAdd = relY - lastAddedPt.relY;
+				if ((dxAdd * dxAdd + dyAdd * dyAdd) > 4) {
+					shouldAdd = true;
+				}
+			}
+
+			if (shouldAdd) {
+				pointsToDraw.push({ relX, relY, logicalIdx: i });
+				lastAddedPt = { relX, relY, logicalIdx: i };
+			}
+
+			if (drawnLength > targetLengthPx) {
+				if (lastAddedPt && lastAddedPt.logicalIdx !== i) {
+					pointsToDraw.push({ relX, relY, logicalIdx: i });
+				}
+				break; 
+			}
 		}
 		
 		return pointsToDraw;
@@ -70,13 +91,31 @@ class SolidLineRenderer extends BaseTrailRenderer {
 		const color = config.color || '#FFFFFF';
 		const baseSize = config.baseSize || 1;
 
+		const cx = renderContext.cameraOffset ? renderContext.cameraOffset.x * renderContext.zoomScale : 0;
+		const cy = renderContext.cameraOffset ? renderContext.cameraOffset.y * renderContext.zoomScale : 0;
+		const halfW = (ctx.canvas.width / 2) + 50;
+		const halfH = (ctx.canvas.height / 2) + 50;
+		
+		const minX = cx - halfW;
+		const maxX = cx + halfW;
+		const minY = cy - halfH;
+		const maxY = cy + halfH;
+
 		ctx.save();
 
 		for (let i = pointsToDraw.length - 1; i > 0; i--) {
 			const p1 = pointsToDraw[i];
 			const p2 = pointsToDraw[i - 1];
 
-			// t = 0 (old) -> 1 (new)
+			// Culling: skip if the point is out of screen
+			const isOutside = 
+				(p1.relX < minX && p2.relX < minX) ||
+				(p1.relX > maxX && p2.relX > maxX) ||
+				(p1.relY < minY && p2.relY < minY) ||
+				(p1.relY > maxY && p2.relY > maxY);
+
+			if (isOutside) { continue; }
+
 			const t = (pointsToDraw.length - i) / pointsToDraw.length;
 			const alpha = t * RENDER.TRAJECTORY.ALPHA_RATE + RENDER.TRAJECTORY.ALPHA_BASE;
 			const width = baseSize * (RENDER.TRAJECTORY.TAPER_BASE + RENDER.TRAJECTORY.TAPER_RATE * t);
@@ -110,12 +149,30 @@ class SparkRenderer extends BaseTrailRenderer {
 		const trajectory_color = config.color || '#FFFFFF';
 		const baseSize = config.baseSize || 1;
 
+		const cx = renderContext.cameraOffset ? renderContext.cameraOffset.x * renderContext.zoomScale : 0;
+		const cy = renderContext.cameraOffset ? renderContext.cameraOffset.y * renderContext.zoomScale : 0;
+		const halfW = (ctx.canvas.width / 2) + 50;
+		const halfH = (ctx.canvas.height / 2) + 50;
+		
+		const minX = cx - halfW;
+		const maxX = cx + halfW;
+		const minY = cy - halfH;
+		const maxY = cy + halfH;
+
 		ctx.save();
 
 		// Drawing traditional trajectory
 		for (let i = pointsToDraw.length - 1; i > RENDER.SPARKLE.COUNT; i--) {
 			const p1 = pointsToDraw[i];
 			const p2 = pointsToDraw[i - 1];
+
+			const isOutside = 
+				(p1.relX < minX && p2.relX < minX) ||
+				(p1.relX > maxX && p2.relX > maxX) ||
+				(p1.relY < minY && p2.relY < minY) ||
+				(p1.relY > maxY && p2.relY > maxY);
+
+			if (isOutside) { continue; }
 
 			const t = (pointsToDraw.length - i) / pointsToDraw.length;
 			const alpha = t * RENDER.TRAJECTORY.ALPHA_RATE + RENDER.TRAJECTORY.ALPHA_BASE;
@@ -133,8 +190,11 @@ class SparkRenderer extends BaseTrailRenderer {
 		const sparkEnd = Math.min(RENDER.SPARKLE.COUNT, pointsToDraw.length - 1);
 		for (let i = sparkEnd; i >= 0; i--) {
 			const pt = pointsToDraw[i];
+
+			if (pt.relX < minX || pt.relX > maxX || pt.relY < minY || pt.relY > maxY) { continue; }
+
 			const age = i;
-			const attenuation = 1.0 - (age /RENDER.SPARKLE.COUNT);
+			const attenuation = 1.0 - (age / RENDER.SPARKLE.COUNT);
 			if (attenuation <= 0) { continue; }
 
 			this._drawSingleSpark(ctx, pt.relX, pt.relY, baseSize, attenuation, now, trajectory.id);
@@ -185,12 +245,25 @@ class SmokeRenderer extends BaseTrailRenderer {
 		const bodyScreenRadius = config.bodyScreenRadius || 1;
 
 		const r = 220, g = 220, b = 220;
+		
+		const cx = renderContext.cameraOffset ? renderContext.cameraOffset.x * renderContext.zoomScale : 0;
+		const cy = renderContext.cameraOffset ? renderContext.cameraOffset.y * renderContext.zoomScale : 0;
+		const halfW = (ctx.canvas.width / 2) + 50;
+		const halfH = (ctx.canvas.height / 2) + 50;
+		
+		const minX = cx - halfW;
+		const maxX = cx + halfW;
+		const minY = cy - halfH;
+		const maxY = cy + halfH;
 
 		ctx.save();
 
 		const drawLen = Math.min(RENDER.SMOKE.DRAW_MAX_LEN, pointsToDraw.length);
 		for (let i = 0; i < drawLen; i++) {
 			const pt = pointsToDraw[i];
+
+			// Culling
+			if (pt.relX < minX || pt.relX > maxX || pt.relY < minY || pt.relY > maxY) { continue; }
 
 			// Skip drawing to avoid overlapping
 			const latestPt = pointsToDraw[0];
