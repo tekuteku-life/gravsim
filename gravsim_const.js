@@ -56,7 +56,6 @@ export const DEBRIS = {
 export const RENDER = {
 	DISTANCE_SCALE: 180,
 	TRAIL_HISTORY_LENGTH: 1500,
-	TARGET_TRAIL_LENGTH_AU: 3,
 	SCALE_BAR: {
 		WIDTH: 150,
 		LINE_WIDTH: 2,
@@ -94,6 +93,19 @@ export const RENDER = {
 		RADIUS_RATE: 3,
 		DEVIATION_RATE: 10,
 		DRAW_MAX_LEN: 300,
+	},
+	LABEL: {
+		FONT: "10px sans-serif",
+		BG_COLOR: "rgba(0, 0, 0, 0.5)",
+		OFFSET_X: 10,
+		OFFSET_Y: -10,
+		MARGIN: 100
+	},
+	DEBUG: {
+		FONT: "10px monospace",
+		LINE_COLOR: "rgba(0, 255, 100, 0.15)",
+		TEXT_COLOR: "rgba(0, 255, 100, 0.5)",
+		CROSS_SIZE: 10
 	}
 };
 

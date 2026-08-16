@@ -13,12 +13,14 @@ class BaseTrailRenderer {
 	}
 
 	_getPointsToDraw(trajectory, renderContext) {
+		if (renderContext.trailLengthAU <= 0) { return []; }
+
 		const basis = renderContext.basis;
 		const zoomScale = renderContext.zoomScale;
 		const count = trajectory.count;
 
 		let drawnLength = 0;
-		const targetLengthPx = (RENDER.TARGET_TRAIL_LENGTH_AU || 1) * RENDER.DISTANCE_SCALE * zoomScale;
+		const targetLengthPx = renderContext.trailLengthAU * RENDER.DISTANCE_SCALE * zoomScale;
 		
 		let prevPt = null;
 		const pointsToDraw = [];

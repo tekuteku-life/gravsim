@@ -59,6 +59,7 @@ export class Universe {
 		this.cameraOffset = { x: 0, y: 0 };
 		this.uiUpdaters = [];
 		this.isPaused = false;
+		this.trailLengthAU = 3.0;
 
 		// Initialize Modules
 		this.Renderer = new Renderer(_canvas);
@@ -235,7 +236,7 @@ export class Universe {
 	}
 
 	draw() {
-		this.Renderer.draw(this.objects, this.centerObject, this.cameraOffset);
+		this.Renderer.draw(this.objects, this.centerObject, this.cameraOffset, this.trailLengthAU);
 
 		this.ctx = this.canvas.getContext('2d');
 		this.ctx.save();

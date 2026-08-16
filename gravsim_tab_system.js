@@ -30,6 +30,11 @@ export class SystemTab {
 			pauseResumeBtn: document.getElementById('pause-resume-btn'),
 			resetAllBtn: document.getElementById('reset-all-btn'),
 			
+			trailLength: document.getElementById('trail-length'),
+			trailLengthVal: document.getElementById('trail-length-val'),
+			showLabelsChk: document.getElementById('show-labels-chk'),
+			showDebugChk: document.getElementById('show-debug-chk'),
+			
 			clearDebrisChk: document.getElementById('clear-debris-chk'),
 			clearRocketChk: document.getElementById('clear-rocket-chk'),
 			clearCelestialChk: document.getElementById('clear-celestial-chk'),
@@ -61,6 +66,21 @@ export class SystemTab {
 			if (confirm("Are you sure you want to reset the universe?")) {
 				this.universe.reset();
 			}
+		});
+
+		// Display Options
+		this.ui.trailLength.addEventListener('input', (e) => {
+			const val = parseFloat(e.target.value);
+			DOMUtils.setText(this.ui.trailLengthVal, val.toFixed(1));
+			this.universe.trailLengthAU = val;
+		});
+		
+		this.ui.showLabelsChk.addEventListener('change', (e) => {
+			this.universe.Renderer.showLabels = e.target.checked;
+		});
+
+		this.ui.showDebugChk.addEventListener('change', (e) => {
+			this.universe.Renderer.showDebugOverlay = e.target.checked;
 		});
 
 		// Clear Objects

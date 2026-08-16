@@ -68,6 +68,13 @@ html, body {
 	width: 100%;
 	margin-top: 10px;
 }
+label:has(id=show-labels-chk),
+label:has(id=show-debug-chk) {
+	display:flex;
+	align-items:center;
+	gap:5px;
+	margin-top:10px;
+}
 
 /* Tab Content Areas */
 .tab-content {

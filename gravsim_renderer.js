@@ -21,11 +21,14 @@ export class Renderer {
 		this.zoomScale = 1;
 		this.visualEffects = [];
 		this.rotation = 0;
+		this.showLabels = false;
+		this.showDebugOverlay = false;
 
 		this.renderContext = {
 			ctx: this.ctx,
 			basis: null,
-			zoomScale: 1
+			zoomScale: 1,
+			trailLengthAU: 3.0,
 		};
 	}
 
@@ -53,7 +56,7 @@ export class Renderer {
 		});
 	}
 
-	draw(objects, centerObject, cameraOffset = {x: 0, y: 0}) {
+	draw(objects, centerObject, cameraOffset = {x: 0, y: 0}, trailLengthAU = 3.0) {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
@@ -68,8 +71,18 @@ export class Renderer {
 		// draw object
 		this.renderContext.basis = centerObject;
 		this.renderContext.zoomScale = this.zoomScale;
+		this.renderContext.trailLengthAU = trailLengthAU;
+		
 		objects.forEach(obj => obj.draw(this.renderContext));
 		
+		if (this.showLabels) {
+			this._drawLabels(objects, centerObject);
+		}
+
+		if (this.showDebugOverlay) {
+			this._drawDebugOverlay(centerObject);
+		}
+
 		// draw visual effect
 		const now = Date.now();
 		this.visualEffects = this.visualEffects.filter(eff => {
@@ -97,6 +110,86 @@ export class Renderer {
 		this.ctx.restore();
 
 		this._drawScaleBar();
+	}
+
+	_drawLabels(objects, centerObject) {
+		this.ctx.save();
+		this.ctx.font = RENDER.LABEL.FONT;
+		this.ctx.textAlign = "left";
+		this.ctx.textBaseline = "middle";
+
+		objects.forEach(obj => {
+			if (obj.state !== 0) { return; }
+			
+			const relX = (obj.x - centerObject.x) * this.zoomScale;
+			const relY = (obj.y - centerObject.y) * this.zoomScale;
+			
+			// Don't draw if completely out of screen
+			const margin = RENDER.LABEL.MARGIN;
+			const halfW = this.canvas.width / 2;
+			const halfH = this.canvas.height / 2;
+			if (relX < -halfW - margin || relX > halfW + margin || 
+				relY < -halfH - margin || relY > halfH + margin) {
+				return;
+			}
+
+			const labelX = relX + RENDER.LABEL.OFFSET_X;
+			const labelY = relY + RENDER.LABEL.OFFSET_Y;
+			
+			// Draw background for readability
+			const textWidth = this.ctx.measureText(obj.name).width;
+			this.ctx.fillStyle = RENDER.LABEL.BG_COLOR;
+			this.ctx.fillRect(labelX - 2, labelY - 6, textWidth + 4, 12);
+
+			this.ctx.fillStyle = obj.color;
+			this.ctx.fillText(obj.name, labelX, labelY);
+		});
+		
+		this.ctx.restore();
+	}
+
+	_drawDebugOverlay(centerObject) {
+		this.ctx.save();
+		this.ctx.strokeStyle = RENDER.DEBUG.LINE_COLOR;
+		this.ctx.fillStyle = RENDER.DEBUG.TEXT_COLOR;
+		this.ctx.font = RENDER.DEBUG.FONT;
+		this.ctx.textAlign = "center";
+		this.ctx.textBaseline = "bottom";
+		this.ctx.lineWidth = 1;
+
+		// Calculate appropriate distance step based on zoom scale
+		let stepAU = 1;
+		const oneAUPx = this.au2pix(1) * this.zoomScale;
+		
+		if (oneAUPx > 500) { stepAU = 0.1; }
+		else if (oneAUPx < 5) { stepAU = 100; }
+		else if (oneAUPx < 10) { stepAU = 20; }
+		else if (oneAUPx < 50) { stepAU = 10; }
+		else if (oneAUPx < 100) { stepAU = 2; }
+
+		// Draw concentric circles up to screen boundary
+		const maxRadiusPx = Math.sqrt(Math.pow(this.canvas.width, 2) + Math.pow(this.canvas.height, 2));
+		const maxAU = this.pix2au(maxRadiusPx / this.zoomScale);
+		
+		for (let rAU = stepAU; rAU <= maxAU; rAU += stepAU) {
+			const rPx = this.au2pix(rAU) * this.zoomScale;
+			this.ctx.beginPath();
+			this.ctx.arc(0, 0, rPx, 0, Math.PI * 2);
+			this.ctx.stroke();
+
+			this.ctx.fillText(`${parseFloat(rAU.toPrecision(4))} AU`, 0, -rPx - 2);
+		}
+
+		// Center cross
+		const crossSize = RENDER.DEBUG.CROSS_SIZE;
+		this.ctx.beginPath();
+		this.ctx.moveTo(-crossSize, 0);
+		this.ctx.lineTo(crossSize, 0);
+		this.ctx.moveTo(0, -crossSize);
+		this.ctx.lineTo(0, crossSize);
+		this.ctx.stroke();
+
+		this.ctx.restore();
 	}
 
 	_drawScaleBar() {
