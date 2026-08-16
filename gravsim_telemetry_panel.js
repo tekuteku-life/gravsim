@@ -9,10 +9,8 @@ export class TelemetryPanel {
 	constructor(universe) {
 		this.universe = universe;
 		this.isOpen = false;
-		this.lastUpdate = 0;
-		this.intervalMs = UI.UPDATE_INTERVAL.TELEMETRY;
-
-		this.targetId = null;
+		
+		this.targetId = 0;
 		this.lastObjCount = -1;
 		this.maxProp = {};
 
@@ -49,6 +47,18 @@ export class TelemetryPanel {
 		}
 
 		this._bindEvents();
+
+		// Register to the main Pub/Sub manager
+		this.universe.registerUIUpdater(UI.UPDATE_INTERVAL.TELEMETRY, () => {
+			if (this.isOpen) {
+				this.update();
+			}
+		});
+
+		// Subscribe to object list changes
+		this.universe.on('object-list-changed', () => {
+			this._updateTargetOptions();
+		});
 	}
 
 	_bindEvents() {
@@ -59,7 +69,6 @@ export class TelemetryPanel {
 
 		this.ui.targetSelect.addEventListener('change', (e) => {
 			this.targetId = parseInt(e.target.value, 10);
-			this.lastUpdate = 0;
 		});
 	}
 
@@ -84,7 +93,6 @@ export class TelemetryPanel {
 		this.ui.panel.classList.toggle('open', _open);
 
 		if (_open) {
-			this.lastUpdate = 0;
 			this.update();
 		}
 	}
@@ -92,12 +100,6 @@ export class TelemetryPanel {
 	close() { this._openCloseCtl(false); }
 
 	update() {
-		if (!this.isOpen) { return; }
-
-		const now = Date.now();
-		if (now - this.lastUpdate < this.intervalMs) {return; }
-		this.lastUpdate = now;
-
 		const target = this._resolveTarget();
 		if (!target) { return; }
 
@@ -109,26 +111,20 @@ export class TelemetryPanel {
 	}
 
 	_resolveTarget() {
-		if (this.lastObjCount !== this.universe.objects.length) {
-			if (this.lastObjCount !== -1 && this.universe.objects.length > this.lastObjCount) {
-				const newestObj = this.universe.objects[this.universe.objects.length - 1];
-				this.targetId = newestObj.id;
-			}
-			this._updateTargetOptions();
-			this.lastObjCount = this.universe.objects.length;
-		}
-
-		let target = this.universe.objects.find(o => o.id === this.targetId);
+		let target = this.universe.objects.find(o => o.id === this.targetId && o.type === OBJECT_TYPES.ROCKET);
 		if (!target) {
 			target = this.universe.centerObject;
-			if (target) {
+			if (target && target.type === OBJECT_TYPES.ROCKET) {
 				this.targetId = target.id;
-				if (this.ui.targetSelect) { this.ui.targetSelect.value = target.id; }
+				this.ui.targetSelect.value = target.id;
 			}
-		}
-
-		if (target && target.type === OBJECT_TYPES.CELESTIAL) {
-			target = null;
+			else {
+				this.targetId = parseInt(this.ui.targetSelect.value, 10);
+				target = this.universe.objects.find(o => o.id === this.targetId && o.type === OBJECT_TYPES.ROCKET);
+				if (!target) {
+					target = null;
+				}
+			}
 		}
 		return target;
 	}

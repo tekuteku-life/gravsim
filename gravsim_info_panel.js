@@ -8,7 +8,8 @@ import { DOMUtils } from './gravsim_utils.js';
  * InfoPanel class that manages the information panel.
 *******************************************************************/
 export class InfoPanel {
-	constructor() {
+	constructor(universe) {
+		this.universe = universe;
 		this.panel = document.getElementById('info-panel');
 		if (!this.panel) {
 			throw new Error("Info panel element not found.");
@@ -27,6 +28,11 @@ export class InfoPanel {
 			count: document.getElementById('info-count')
 		};
 		DOMUtils.verifyElements(this.ui, 'InfoPanel');
+
+		// Subscribe to object list changes
+		this.universe.on('object-list-changed', (count) => {
+			this.updateObjectCount(count);
+		});
 	}
 
 	resetElapsedTime() {
@@ -57,6 +63,7 @@ export class InfoPanel {
 		const now = new Date();
 		const elapsed = now - this.lastTime;
 		this.fpsCount++;
+		// Keep local interval check because frame counting is required
 		if (elapsed >= UI.UPDATE_INTERVAL.INFO_PANEL) {
 			const fps = (this.fpsCount / (elapsed / 1e3)).toFixed(1);
 			DOMUtils.setText(this.ui.fps, fps);

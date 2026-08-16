@@ -10,7 +10,18 @@ export class NaviTab {
 		this.naviTargetId = undefined;
 		this._initElements();
 		this._bindEvents();
-		this.update();
+
+		// Register to the main Pub/Sub manager instead of setInterval
+		this.universe.registerUIUpdater(UI.UPDATE_INTERVAL.NAVI, () => {
+			if (this.ui.nvTab && this.ui.nvTab.classList.contains('active')) {
+				this._updateNaviStats();
+			}
+		});
+
+		// Subscribe to object list changes
+		this.universe.on('object-list-changed', () => {
+			this.updateTargetOptions();
+		});
 	}
 
 	_initElements() {
@@ -36,21 +47,6 @@ export class NaviTab {
 			this.naviTargetId = parseInt(e.target.value, 10);
 			this._updateNaviStats();
 		});
-		this.ui.nvTargetSelect.addEventListener('focus', () => {
-			this.updateTargetOptions();
-		});
-
-		// Update Navi stats periodically if active
-		setInterval(() => {
-			if (this.ui.nvTab && this.ui.nvTab.classList.contains('active')) {
-				this._updateNaviStats();
-			}
-		}, UI.UPDATE_INTERVAL.NAVI);
-	}
-
-	update() {
-		this._updateNaviStats();
-		this.updateTargetOptions();
 	}
 
 	updateTargetOptions() {

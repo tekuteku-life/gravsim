@@ -90,6 +90,8 @@ export class ObjectPlacer {
 			if (options.autoControl !== undefined) {
 				obj.autoControl = options.autoControl;
 			}
+
+			this.universe.TelemetryPanel.targetId = obj.id;
 		} else {
 			obj = new CelestialBody(
 				nextId, param.NAME,

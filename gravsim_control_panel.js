@@ -90,10 +90,6 @@ export class ControlPanel {
 		this.systemTab.updateCenterOptions();
 	}
 
-	updateNaviTab() {
-		this.naviTab.update();
-	}
-
 	getTimeScale() {
 		return this.systemTab.getTimeScale();
 	}

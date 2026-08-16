@@ -10,6 +10,11 @@ export class SystemTab {
 		this._initElements();
 		this._bindEvents();
 
+		// Subscribe to object list changes
+		this.universe.on('object-list-changed', () => {
+			this.updateCenterOptions();
+		});
+
 		this.updateTimeScaleIndicator(this.getTimeScale());
 		this.updateZoomScaleIndicator(this.getZoomScale());
 	}
@@ -28,9 +33,7 @@ export class SystemTab {
 	_bindEvents() {
 		this.ui.timeScale.addEventListener('input', () => this.updateTimeScaleIndicator(this.getTimeScale()));
 		this.ui.zoomScale.addEventListener('input', () => this.updateZoomScaleIndicator(this.getZoomScale()));
-		this.ui.centerSelect.addEventListener('focus', () => this.updateCenterOptions());
 		this.ui.centerSelect.addEventListener('change', (e) => this._onCenterChanged(e));
-		setTimeout(() => this.updateCenterOptions(), 100);
 	}
 
 	_onCenterChanged(e) {

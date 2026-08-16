@@ -14,6 +14,11 @@ export class RocketTab {
 		this.previousCameraOffset = null;
 		this._initElements();
 		this._bindEvents();
+
+		// Subscribe to object list changes
+		this.universe.on('object-list-changed', () => {
+			this._updateRocketHostOptions();
+		});
 	}
 
 	_initElements() {
@@ -55,7 +60,6 @@ export class RocketTab {
 		this.ui.rlModeSelect.addEventListener('change', (e) => {
 			this.universe.RocketLauncher.mode = e.target.value;
 			this.ui.rlHostOptions.style.display = e.target.value === 'host' ? 'block' : 'none';
-			if (e.target.value === 'host') { this._updateRocketHostOptions(); }
 			this._updateRocketStats();
 		});
 		this.ui.rlFuelType.addEventListener('change', (e) => {
@@ -69,7 +73,6 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 		this.ui.rlHostSelect.addEventListener('focus', () => {
-			this._updateRocketHostOptions();
 			this._updateRocketStats();
 		});
 		this.ui.rlAutoControl.addEventListener('change', (e) => {
@@ -264,7 +267,6 @@ export class RocketTab {
 			}
 			this.universe.RocketLauncher.hostId = targetHostId;
 		}
-		this._updateRocketHostOptions();
 		this._setupLaunchEnvironment(targetHostId);
 		this._updateRocketStats();
 	}

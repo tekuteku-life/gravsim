@@ -57,6 +57,7 @@ export class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
 		this.cameraOffset = { x: 0, y: 0 };
+		this.uiUpdaters = [];
 
 		// Initialize Modules
 		this.Renderer = new Renderer(_canvas);
@@ -64,7 +65,7 @@ export class Universe {
 		this.InputManager = new InputManager(this.canvas);
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
 
-		this.InfoPanel = new InfoPanel();
+		this.InfoPanel = new InfoPanel(this);
 		this.TelemetryPanel = new TelemetryPanel(this);
 		this.ControlPanel = new ControlPanel(this);
 		this.ObjectPlacer = new ObjectPlacer(this);
@@ -94,11 +95,9 @@ export class Universe {
 	// ------------------------------------------
 	addObject(obj) {
 		this.ObjectManager.addObject(obj);
-		this.ControlPanel.updateNaviTab();
 	}
 	removeObject(obj) {
 		this.ObjectManager.removeObject(obj);
-		this.ControlPanel.updateNaviTab();
 	}
 	updateObject(obj) { this.ObjectManager.updateObject(obj); }
 	updateObjectParams(data) { this.ObjectManager.updateObjectParams(data); }
@@ -130,6 +129,54 @@ export class Universe {
 		this.Renderer.setZoomScale(this.ControlPanel.getZoomScale());
 	}
 
+	// Register UI updater callback with specific interval
+	registerUIUpdater(intervalMs, callback) {
+		if (!this.uiUpdaters) {
+			this.uiUpdaters = [];
+		}
+		this.uiUpdaters.push({
+			interval: intervalMs,
+			callback: callback,
+			lastTime: 0
+		});
+	}
+
+	// Simple Event Emitter logic
+	on(eventName, callback) {
+		if (!this.eventListeners) this.eventListeners = {};
+		if (!this.eventListeners[eventName]) this.eventListeners[eventName] = [];
+		this.eventListeners[eventName].push(callback);
+	}
+
+	emit(eventName, data) {
+		if (!this.eventListeners || !this.eventListeners[eventName]) return;
+		for (let i = 0; i < this.eventListeners[eventName].length; i++) {
+			this.eventListeners[eventName][i](data);
+		}
+	}
+
+	// Execute registered updaters (Call this method in the main simulation loop)
+	updateUI(now) {
+		// Detect changes in object count to trigger list updates safely once per frame
+		if (this.ObjectManager) {
+			const currentCount = this.ObjectManager.objects.length;
+			if (this._lastObjCount !== currentCount) {
+				this.emit('object-list-changed', currentCount);
+				this._lastObjCount = currentCount;
+			}
+		}
+
+		if (this.uiUpdaters) {
+			for (let i = 0; i < this.uiUpdaters.length; i++) {
+				const updater = this.uiUpdaters[i];
+				if (now - updater.lastTime >= updater.interval) {
+					updater.callback();
+					updater.lastTime = now;
+				}
+			}
+		}
+	}
+
 	update(dt) {
 		// Center Object Check
 		const centerStatus = this.ObjectManager.ensureCenterObject(this.cameraOffset);
@@ -154,18 +201,16 @@ export class Universe {
 		});
 
 		// UI Update
+		this.updateUI(Date.now());
 		if (this.objects.length === 1) {
 			this.InfoPanel.resetElapsedTime();
 		} else {
 			this.InfoPanel.updateElapsedTime(scaledDt);
 		}
-		this.InfoPanel.updateObjectCount(this.objects.length);
 		this.InfoPanel.updateFPS();
-		
+
 		this.updateZoomScale();
 		this.ObjectManager.cleanupObjects();
-
-		this.TelemetryPanel.update();
 	}
 
 	draw() {
