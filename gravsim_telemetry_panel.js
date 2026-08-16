@@ -24,33 +24,26 @@ export class TelemetryPanel {
 			toggleBtn: document.getElementById('telemetry-toggle-btn'),
 			panel: document.getElementById('telemetry-panel'),
 			targetSelect: document.getElementById('tm-target-select'),
-
 			missionStatus: document.getElementById('tm-mission-status'),
 			missionTime: document.getElementById('tm-met'),
-
 			mass: document.getElementById('tm-mass'),
 			remDv: document.getElementById('tm-rem-dv'),
 			twr: document.getElementById('tm-twr'),
-
 			alt: document.getElementById('tm-alt'),
 			velV: document.getElementById('tm-vel-v'),
 			velH: document.getElementById('tm-vel-h'),
 			accV: document.getElementById('tm-acc-v'),
 			accH: document.getElementById('tm-acc-h'),
-
 			pitch: document.getElementById('tm-pitch'),
 			aoa: document.getElementById('tm-aoa'),
 			dyn: document.getElementById('tm-dyn'),
 			dynAx: document.getElementById('tm-dyn-ax'),
 			dynLat: document.getElementById('tm-dyn-lat'),
-
 			thrtl: document.getElementById('tm-thrtl'),
 			prop: document.getElementById('tm-prop'),
 			fuelBar: document.getElementById('tm-fuel-bar'),
-
 			navPrograde: document.getElementById('tm-nav-prograde'),
 			navGravity: document.getElementById('tm-nav-gravity'),
-
 			subCanvas: document.getElementById('sub-canvas'),
 		};
 		
@@ -87,7 +80,7 @@ export class TelemetryPanel {
 			const option = document.createElement('option');
 			option.value = obj.id;
 			option.textContent = `${obj.name.substring(0, 10)} (ID:${obj.id})`;
-			
+
 			if (obj.id === this.targetId) {
 				option.selected = true;
 			}
@@ -97,7 +90,6 @@ export class TelemetryPanel {
 
 	_openCloseCtl(_open) {
 		this.isOpen = _open;
-
 		this.ui.panel.classList.toggle('open', _open);
 
 		if (_open) {
@@ -223,7 +215,6 @@ export class TelemetryPanel {
 
 	_updateMissionTimeUI(flightTime) {
 		const totalSec = Math.floor(flightTime || 0);
-
 		const SEC_PER_DAY = 86400;
 		const SEC_PER_YEAR = 365.25 * SEC_PER_DAY;
 
@@ -240,7 +231,6 @@ export class TelemetryPanel {
 		const secs = remSec % 60;
 
 		const pad = (num, len = 2) => String(num).padStart(len, '0');
-
 		const timeStr = `T+ ${pad(years, 3)}y ${pad(days, 3)}d ${pad(hours)}:${pad(mins)}:${pad(secs)}`;
 		this.ui.missionTime.innerText = timeStr;
 	}

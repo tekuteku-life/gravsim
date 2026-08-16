@@ -10,8 +10,6 @@ import { CalcCelestialBody, CalcRocket, CalcDebris } from './gravsim_calc_object
 import { FlightComputer } from './gravsim_flight_computer.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 
-const CALC_INTERVAL = 60;
-
 // QuadTree Data Structures for Spatial Partitioning
 class Rectangle {
 	constructor(x, y, w, h) {
