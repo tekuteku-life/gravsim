@@ -9,6 +9,7 @@ import { ControlPanel } from './gravsim_control_panel.js';
 import { ObjectManager } from './gravsim_object_manager.js';
 import { ObjectPlacer } from './gravsim_object_placer.js';
 import { RocketLauncher } from './gravsim_rocket_launcher.js';
+import { LaunchSequencer } from './gravsim_launch_sequencer.js';
 import { SaveManager } from './gravsim_save_manager.js';
 import { InputManager } from './gravsim_input_manager.js';
 
@@ -72,6 +73,7 @@ export class Universe {
 		this.ControlPanel = new ControlPanel(this);
 		this.ObjectPlacer = new ObjectPlacer(this);
 		this.RocketLauncher = new RocketLauncher(this);
+		this.LaunchSequencer = new LaunchSequencer(this);
 		this.SaveManager = new SaveManager(this);
 
 		this.timeScale = this.ControlPanel.getTimeScale();
@@ -214,6 +216,10 @@ export class Universe {
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
 		const scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
+		const scaledDtSec = scaledDt * PHYSICS.YEARS_PER_SECOND;
+
+		// Launch Sequencer
+		this.LaunchSequencer.update(scaledDtSec);
 
 		// Update flight time for rocket
 		this.objects.forEach(obj => {

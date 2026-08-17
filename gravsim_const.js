@@ -362,3 +362,9 @@ export const TRAIL_MODE = {
 	ATMOSPHERE: 1,
 	ESCAPE: 2
 };
+
+export const LAUNCH_SEQUENCES = {
+	LEGACY_QUICK: [
+		{ time: 0.0, name: "Ignition & Liftoff", command: "IGNITE_AND_RELEASE" }
+	]
+};

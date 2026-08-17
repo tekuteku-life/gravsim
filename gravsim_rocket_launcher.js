@@ -1,7 +1,7 @@
 
 // gravsim_rocket_launcher.js
 
-import { PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS } from './gravsim_const.js';
+import { PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, LAUNCH_SEQUENCES } from './gravsim_const.js';
 
 /*******************************************************************
  * RocketLauncher Class
@@ -183,6 +183,9 @@ export class RocketLauncher {
 		};
 
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
+
+		// Start immediate legacy sequence
+		this.universe.LaunchSequencer.start(LAUNCH_SEQUENCES.LEGACY_QUICK, newRocket.id);
 
 		// Set new rocket to center object
 		this.universe.ObjectManager.centerObject = newRocket;

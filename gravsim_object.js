@@ -206,6 +206,14 @@ export class Rocket extends GravSimObject {
 		this.thrustRatio = 0;
 		this.flightTime = 0;
 		this.autoControl = true;
+		
+		// Launch Sequencer States
+		this.hostId = null;
+		this.hostAngleRad = 0;
+		this.hostAltM = 0;
+		this.isHoldDown = false;
+		this.isIgnited = true;
+
 		this.telemetry = {
 			status: 0,
 			qAxialKpa: 0, qLateralKpa: 0, structRatio: 0,

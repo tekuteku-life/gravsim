@@ -62,10 +62,10 @@ export class ObjectManager {
 	}
 
 	addObject(obj) {
-		if (!(obj instanceof GravSimObject)) throw new Error("Invalid object type.");
+		if (!(obj instanceof GravSimObject)) { throw new Error("Invalid object type."); }
 		this.objects.push(obj);
-		const isRocket = obj.type === OBJECT_TYPES.ROCKET;
-		this.workerManager.postMessage({
+
+		const payload = {
 			cmd: 'add',
 			id: obj.id,
 			name: obj.name,
@@ -73,17 +73,36 @@ export class ObjectManager {
 			x: this.renderer.pix2m(obj.x), y: this.renderer.pix2m(obj.y),
 			vx: this.renderer.pix2m(obj.vx), vy: this.renderer.pix2m(obj.vy),
 			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
-			mass: isRocket ? obj.dryMass * 1e3 : obj.mass * 1e3,
-			fuelMass: isRocket ? obj.fuelMass * 1e3 : 0,
 			radius: obj.radius,
-			generation: obj.generation,
+			generation: obj.generation
+		};
+
+		if (obj.type === OBJECT_TYPES.ROCKET) {
+			Object.assign(payload, this._buildRocketPayload(obj));
+		} else {
+			payload.mass = obj.mass * 1e3;
+			payload.fuelMass = 0;
+		}
+
+		this.workerManager.postMessage(payload);
+	}
+
+	_buildRocketPayload(obj) {
+		return {
+			mass: obj.dryMass * 1e3,
+			fuelMass: obj.fuelMass * 1e3,
 			thrustForce: obj.thrustForce || 0,
 			burnTime: obj.burnTime || 0,
 			thrustAngle: obj.thrustAngle || 0,
 			massLossRate: (obj.massLossRate || 0) * 1e3,
 			maxGLimit: obj.maxGLimit || 0,
-			autoControl: isRocket ? obj.autoControl : true,
-		});
+			autoControl: obj.autoControl !== undefined ? obj.autoControl : true,
+			hostId: obj.hostId !== undefined ? obj.hostId : null,
+			hostAngleRad: obj.hostAngleRad || 0,
+			hostAltM: obj.hostAltM || 0,
+			isHoldDown: obj.isHoldDown || false,
+			isIgnited: obj.isIgnited !== undefined ? obj.isIgnited : true
+		};
 	}
 
 	removeObject(obj) {
@@ -104,6 +123,13 @@ export class ObjectManager {
 			radius: obj.radius,
 			generation: obj.generation,
 		});
+	}
+
+	updateRocketState(id, isIgnited, isHoldDown) {
+		const payload = { cmd: 'setRocketState', id: id };
+		if (isIgnited !== undefined) { payload.isIgnited = isIgnited; }
+		if (isHoldDown !== undefined) { payload.isHoldDown = isHoldDown; }
+		this.workerManager.postMessage(payload);
 	}
 
 	updateObjectParams(data) {

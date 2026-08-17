@@ -78,7 +78,9 @@ export class WorkerBridge {
 			}
 			buffer[offset + BUFFER_INDEX.RADIUS] = obj.radius || 1;
 			
-			buffer[offset + BUFFER_INDEX.FLAGS] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0) | (obj.isImpact ? 4 : 0) | (obj.inAtmosphere ? 8 : 0) | (obj.isEscaping ? 16 : 0);
+			buffer[offset + BUFFER_INDEX.FLAGS] = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0)
+												| (obj.isImpact ? 4 : 0) | (obj.inAtmosphere ? 8 : 0)
+												| (obj.isEscaping ? 16 : 0) | (obj.isHoldDown ? 32 : 0) | (obj.isIgnited ? 64 : 0);
 			
 			buffer[offset + BUFFER_INDEX.DEBRIS_MASS] = obj.debrisMass || 0;
 			buffer[offset + BUFFER_INDEX.IMPACT_VX] = obj.impactVx || 0;
@@ -122,6 +124,8 @@ export class WorkerBridge {
 			this._cache.isImpact = (flags & 4) !== 0;
 			this._cache.inAtmosphere = (flags & 8) !== 0;
 			this._cache.isEscaping = (flags & 16) !== 0;
+			this._cache.isHoldDown = (flags & 32) !== 0;
+			this._cache.isIgnited = (flags & 64) !== 0;
 
 			this._cache.debrisMass = buffer[offset + BUFFER_INDEX.DEBRIS_MASS];
 			this._cache.impactVx = buffer[offset + BUFFER_INDEX.IMPACT_VX];

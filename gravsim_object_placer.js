@@ -90,6 +90,11 @@ export class ObjectPlacer {
 			if (options.autoControl !== undefined) {
 				obj.autoControl = options.autoControl;
 			}
+			if (options.hostId !== undefined) { obj.hostId = options.hostId; }
+			if (options.hostAngleRad !== undefined) { obj.hostAngleRad = options.hostAngleRad; }
+			if (options.hostAltM !== undefined) { obj.hostAltM = options.hostAltM; }
+			if (options.isHoldDown !== undefined) { obj.isHoldDown = options.isHoldDown; }
+			if (options.isIgnited !== undefined) { obj.isIgnited = options.isIgnited; }
 
 			this.universe.TelemetryPanel.targetId = obj.id;
 		} else {

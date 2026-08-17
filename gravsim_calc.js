@@ -167,10 +167,40 @@ class PhysicsEngine {
 	}
 
 	step(dt) {
+		this._updateHoldDownPositions(dt);
 		this._buildQuadTree(dt);
 		this._checkCollisions(dt);
 		this._checkRocheLimit();
 		this._moveObjects(dt);
+	}
+
+	_updateHoldDownPositions(dt) {
+		for (const obj of this.objects) {
+			if (obj.type === OBJECT_TYPES.ROCKET && obj.isHoldDown && obj.hostId !== null) {
+				const host = this.objects.find(o => o.id === obj.hostId);
+				if (host) {
+					const hostParam = DEFAULT_OBJECT_PARAMS[host.name];
+					let omega = 0;
+					if (hostParam && hostParam.ROTATION_PERIOD) {
+						omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
+					}
+					obj.hostAngleRad += omega * dt;
+					
+					const r = host.radius + obj.radius + obj.hostAltM;
+					const dx = r * Math.cos(obj.hostAngleRad);
+					const dy = r * Math.sin(obj.hostAngleRad);
+					
+					obj.x = host.x + dx;
+					obj.y = host.y + dy;
+					obj.vx = host.vx - omega * dy;
+					obj.vy = host.vy + omega * dx;
+					obj.ax = host.ax;
+					obj.ay = host.ay;
+					obj.dominantBody = host;
+					obj.distToDominantM = r;
+				}
+			}
+		}
 	}
 
 	_buildQuadTree(dt) {
@@ -480,6 +510,13 @@ class SimulationController {
 			case 'pause':
 				this.isPaused = data.value;
 				if (!this.isPaused) this.lastTime = Date.now();
+				break;
+			case 'setRocketState':
+				const rObj = this.engine.objects.find(o => o.id === data.id);
+				if (rObj && rObj.type === OBJECT_TYPES.ROCKET) {
+					if (data.isIgnited !== undefined) { rObj.isIgnited = data.isIgnited; }
+					if (data.isHoldDown !== undefined) { rObj.isHoldDown = data.isHoldDown; }
+				}
 				break;
 			case 'returnBuffer':
 				WorkerBridge.recycleBuffer(data.buffer);

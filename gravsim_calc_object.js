@@ -213,6 +213,13 @@ export class CalcRocket extends GravSimCalcObject {
 		this.massLossRate = thrustData?.massLossRate || 0;
 		this.maxGLimit = thrustData?.maxGLimit || 0;
 		this.autoControl = thrustData?.autoControl !== undefined ? thrustData.autoControl : true;
+		
+		this.hostId = thrustData?.hostId !== undefined ? thrustData.hostId : null;
+		this.hostAngleRad = thrustData?.hostAngleRad || 0;
+		this.hostAltM = thrustData?.hostAltM || 0;
+		this.isHoldDown = thrustData?.isHoldDown || false;
+		this.isIgnited = thrustData?.isIgnited !== undefined ? thrustData.isIgnited : true;
+		
 		this._thrustRatio = 0;
 		
 		this._qAxialKpa = 0;
@@ -302,7 +309,12 @@ export class CalcRocket extends GravSimCalcObject {
 			throttle = 1.0;
 		}
 
-		if (this.burnTime > 0) {
+		// Force cut throttle before ignition
+		if (!this.isIgnited) {
+			throttle = 0;
+		}
+
+		if (this.burnTime > 0 && throttle > 0) {
 			// The time consumed is proportional to the throttle
 			const consumedTime = dt * throttle;
 			actualDt = Math.min(consumedTime, this.burnTime);
