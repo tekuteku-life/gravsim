@@ -298,6 +298,8 @@ export class CalcRocket extends GravSimCalcObject {
 			progradeAngle: this._progradeAngle || 0,
 			refBody: refBody,
 			distToRefM: distToRefM,
+			isHoldDown: this.isHoldDown,
+			isIgnited: this.isIgnited
 		};
 
 		const command = this.flightComputer.update(sensorData);

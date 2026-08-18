@@ -102,11 +102,11 @@
 			<div class="panel-section">
 				<div class="panel-section-header">[ SIMULATION SPEED & CAMERA ]</div>
 				<label for="time-scale">Time scale:</label>
-				<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-7" max="1" class="slider-full">
+				<input type="range" id="time-scale" name="time-scale" value="-1" step="0.1" min="-7.5" max="1" class="slider-full">
 				<div class="indicator"><span id="time-scale-indicator"></span></div>
 				
 				<label for="zoom-scale">Zoom level:</label>
-				<input type="range" id="zoom-scale" name="zoom-scale" value="0" step="0.05" min="-2" max="8" class="slider-full">
+				<input type="range" id="zoom-scale" name="zoom-scale" value="0" step="0.05" min="-2" max="8.5" class="slider-full">
 				<div class="indicator"><span id="zoom-scale-indicator"></span></div>
 				
 				<label for="center-select">Center Object (Camera):</label>
@@ -220,7 +220,14 @@
 				Max Burn: <span id="rl-stat-fuel-max-burn">0</span> s<br>
 			</div>
 			
-			<button type="button" id="rl-execute-btn" class="launch-btn">LAUNCH ROCKET</button>
+			<div id="rl-action-buttons">
+				<button type="button" id="rl-rollout-btn" class="launch-btn">ROLLOUT TO PAD</button>
+				<div id="rl-ignition-group" style="display:none; gap: 5px; margin-top: 15px;">
+					<button type="button" id="rl-ignite-quick-btn" class="launch-btn" style="flex:1; margin-top:0;">QUICK IGNITE</button>
+					<button type="button" id="rl-ignite-full-btn" class="launch-btn" style="flex:1; margin-top:0;">FULL IGNITE</button>
+				</div>
+				<button type="button" id="rl-abort-btn" class="launch-btn" style="display:none; background:#555; border-color:#888; color:#ddd; margin-top:5px;">ABORT ROLLOUT</button>
+			</div>
 		</div>
 
 		<!-- =====================================

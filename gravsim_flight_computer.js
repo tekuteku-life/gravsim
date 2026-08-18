@@ -17,7 +17,7 @@ export class FlightComputer {
 		this.flightTime = 0;
 		
 		this.telemetryCache = {
-			status: 0, // 0:PRE_LAUNCH, 1:LIFTOFF, 2:ASCENT, 3:MAX_Q, 4:MECO, 5:COASTING, 6:TRACKING
+			status: TELEMETRY.STATUS.PRE_LAUNCH,
 			qAxialKpa: 0,
 			qLateralKpa: 0,
 			structRatio: 0,
@@ -48,18 +48,20 @@ export class FlightComputer {
 		const throttle = this._computeThrottle(sensor);
 
 		// Decide mission status
-		let statusInt = 0; // PRE_LAUNCH
-		if (sensor.burnTime > 0) {
+		let statusInt = TELEMETRY.STATUS.PRE_LAUNCH;
+		if (sensor.isHoldDown) {
+			statusInt = TELEMETRY.STATUS.PRE_LAUNCH;
+		} else if (sensor.burnTime > 0) {
 			if (this.telemetryCache.structRatio > TELEMETRY.MAX_Q_TH) {
-				statusInt = 3; // MAX_Q
+				statusInt = TELEMETRY.STATUS.MAX_Q;
 			} else {
-				statusInt = 2; // ASCENT
+				statusInt = TELEMETRY.STATUS.ASCENT;
 			}
 		} else if (this.flightTime > 0) {
 			if (sensor.massLossRate > 0 && sensor.fuelMass <= 0) {
-				statusInt = 4; // MECO
+				statusInt = TELEMETRY.STATUS.MECO;
 			} else {
-				statusInt = 5; // COASTING
+				statusInt = TELEMETRY.STATUS.COASTING;
 			}
 		}
 		this.telemetryCache.status = statusInt;

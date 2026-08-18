@@ -41,6 +41,7 @@ export class LaunchSequencer {
 		switch (cmd) {
 			case 'IGNITE_AND_RELEASE':
 				this.universe.ObjectManager.updateRocketState(this.rocketId, true, false);
+				this.universe.ControlPanel.rocketTab.setRolloutState(false);
 				break;
 		}
 	}

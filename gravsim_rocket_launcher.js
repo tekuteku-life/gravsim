@@ -33,6 +33,8 @@ export class RocketLauncher {
 		this.calculatedBurnTime = 0;
 		this.maxGLimit = 4.0;	// G
 		this.autoControl = true; // Auto Flight Computer flag
+
+		this.rolloutedRocketId = null;
 	}
 
 	togglePreview(forceState = null) {
@@ -102,51 +104,73 @@ export class RocketLauncher {
 		};
 	}
 
-	drawPreview(ctx, centerObject, zoomScale) {
-		if (!this.isActive) return;
+	drawTargetMarker(ctx, centerObject, zoomScale) {
+		if (this.mode !== 'host' || this.hostId === null) { return; }
+		if (this.rolloutedRocketId !== null) { return; }
 
-		const transform = this._calculateTransform();
-		if (!transform) return;
+		const host = this.universe.objects.find(o => o.id === this.hostId);
+		if (!host) { return; }
 
-		// Convert to screen space
-		const relX = (transform.x - centerObject.x) * zoomScale;
-		const relY = (transform.y - centerObject.y) * zoomScale;
+		const t = this._calculateTransform();
+		if (!t) { return; }
 
-		ctx.save();
-
-		// Draw Ghost Rocket
-		ctx.fillStyle = "rgba(50, 205, 50, 0.6)";
-		ctx.beginPath();
-		ctx.arc(relX, relY, 5, 0, Math.PI * 2); // screen pixels
-		ctx.fill();
-
-		// Estimate total Delta-v visually for the arrow length
-		// dV = (Thrust * BurnTime) / avgMass
-		const baseMassTon = DEFAULT_OBJECT_PARAMS['Rocket'].MASS;
-		const estDv = (this.thrustKN * this.calculatedBurnTime) / baseMassTon;
-		const arrowLen = Math.max(20, Math.min(300, (estDv / 1000) * 2)); // screen pixels
+		const relX = (t.x - centerObject.x) * zoomScale;
+		const relY = (t.y - centerObject.y) * zoomScale;
 		
-		const launchRad = this.launchAngleDeg * (Math.PI / 180);
-		const endX = relX + Math.cos(launchRad) * arrowLen;
-		const endY = relY + Math.sin(launchRad) * arrowLen;
+		const objName = this.universe.ObjectPlacer.getLaunchObjectName();
+		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
+		const rocketRadiusM = param.RADIUS || 1;
+		const screenRadiusPx = this.universe.m2pix(rocketRadiusM) * zoomScale;
+		const mSize = Math.max(10, screenRadiusPx);
+		
+		ctx.save();
+		ctx.translate(relX, relY);
 
-		// Draw Vector Arrow
-		ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
-		ctx.lineWidth = 2; // screen pixels
+		// Blueprint-style bounding box
+		ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
+		ctx.lineWidth = 1.5;
+		
+		const b = mSize * 1.2;
+		const l = b * 0.3;
+
 		ctx.beginPath();
-		ctx.moveTo(relX, relY);
-		ctx.lineTo(endX, endY);
-
-		// Arrow head
-		const headlen = 10;
-		ctx.lineTo(endX - headlen * Math.cos(launchRad - Math.PI / 6), endY - headlen * Math.sin(launchRad - Math.PI / 6));
-		ctx.moveTo(endX, endY);
-		ctx.lineTo(endX - headlen * Math.cos(launchRad + Math.PI / 6), endY - headlen * Math.sin(launchRad + Math.PI / 6));
-
+		ctx.moveTo(-b, -b + l); ctx.lineTo(-b, -b); ctx.lineTo(-b + l, -b);
+		ctx.moveTo(b - l, -b); ctx.lineTo(b, -b); ctx.lineTo(b, -b + l);
+		ctx.moveTo(b, b - l); ctx.lineTo(b, b); ctx.lineTo(b - l, b);
+		ctx.moveTo(-b + l, b); ctx.lineTo(-b, b); ctx.lineTo(-b, b - l);
 		ctx.stroke();
 
-		// Draw Target Reticle for Free Mode
-		if (this.mode === 'free') {
+		// Center dot
+		ctx.fillStyle = "rgba(0, 255, 255, 0.5)";
+		ctx.beginPath();
+		ctx.arc(0, 0, 2, 0, Math.PI * 2);
+		ctx.fill();
+
+		// Launch vector line
+		ctx.rotate(this.launchAngleDeg * (Math.PI / 180));
+		ctx.strokeStyle = "rgba(0, 255, 255, 0.5)";
+		ctx.setLineDash([4, 4]);
+		ctx.beginPath();
+		ctx.moveTo(0, 0);
+		ctx.lineTo(b * 2.5, 0);
+		ctx.stroke();
+
+		ctx.restore();
+	}
+
+	drawPreview(ctx, centerObject, zoomScale) {
+		if (!this.isActive) { return; }
+
+		if (this.mode === 'host') {
+			this.drawTargetMarker(ctx, centerObject, zoomScale);
+		} else if (this.mode === 'free') {
+			const transform = this._calculateTransform();
+			if (!transform) { return; }
+
+			const relX = (transform.x - centerObject.x) * zoomScale;
+			const relY = (transform.y - centerObject.y) * zoomScale;
+
+			ctx.save();
 			ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
 			ctx.lineWidth = 1;
 			ctx.beginPath();
@@ -156,13 +180,15 @@ export class RocketLauncher {
 			ctx.moveTo(relX, relY - 20);
 			ctx.lineTo(relX, relY + 20);
 			ctx.stroke();
+			ctx.restore();
 		}
-
-		ctx.restore();
 	}
 
-	executeLaunch() {
-		if (!this.isActive) { return; }
+	rollout() {
+		if (this.mode !== 'host' || this.hostId === null) { return; }
+
+		const host = this.universe.objects.find(o => o.id === this.hostId);
+		if (!host) { return; }
 
 		const t = this._calculateTransform();
 		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
@@ -179,25 +205,27 @@ export class RocketLauncher {
 			time: this.calculatedBurnTime,
 			lossRate: massLossRateTon,
 			maxGLimit: this.maxGLimit,
-			autoControl: this.autoControl
+			autoControl: this.autoControl,
+			hostId: this.hostId,
+			hostAngleRad: this.hostAngleDeg * (Math.PI / 180),
+			hostAltM: this.hostAltitudeM,
+			isHoldDown: true,
+			isIgnited: false
 		};
 
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
-
-		// Start immediate legacy sequence
-		this.universe.LaunchSequencer.start(LAUNCH_SEQUENCES.LEGACY_QUICK, newRocket.id);
+		this.rolloutedRocketId = newRocket.id;
 
 		// Set new rocket to center object
 		this.universe.ObjectManager.centerObject = newRocket;
-		this.universe.cameraOffset = { x: 0, y: 0 };
-		this.universe.ControlPanel.updateCenterOptions();
+		this.universe.ControlPanel.systemTab.updateCenterOptions();
 		this.universe.InfoPanel.updateCamera(newRocket.name);
 
 		// Zoom the rocket
 		const systemTab = this.universe.ControlPanel.systemTab;
 		if (systemTab && systemTab.ui.zoomScale) {
 			const realRadiusPx = (newRocket.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
-			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 2.2;
+			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 4;
 			let idealExp = Math.log10(targetSize / realRadiusPx);
 
 			const maxZoom = parseFloat(systemTab.ui.zoomScale.max);
@@ -208,16 +236,31 @@ export class RocketLauncher {
 			systemTab.updateZoomScaleIndicator(systemTab.getZoomScale());
 			this.universe.updateZoomScale();
 		}
-		
-		// Fix time & zoom scale & camera target
-		this.universe.ControlPanel.rocketTab.saveTimeScale();
-		this.universe.ControlPanel.rocketTab.saveZoomScale();
-		this.universe.ControlPanel.rocketTab.saveCameraTarget();
 
 		// Open telemetry
 		this.universe.TelemetryPanel.open();
 
-		this.togglePreview(false);
+		this.universe.ControlPanel.rocketTab.setRolloutState(true);
+	}
+
+	abortRollout() {
+		if (this.rolloutedRocketId !== null) {
+			const obj = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
+			if (obj) {
+				this.universe.ObjectManager.removeObject(obj);
+			}
+			this.rolloutedRocketId = null;
+			this.universe.ControlPanel.rocketTab.setRolloutState(false);
+
+			this.universe.ControlPanel.rocketTab._setupLaunchEnvironment(this.hostId);
+		}
+	}
+
+	ignite(sequenceType) {
+		if (this.rolloutedRocketId === null) { return; }
+		const sequence = LAUNCH_SEQUENCES[sequenceType];
+		if (!sequence) { return; }
+		this.universe.LaunchSequencer.start(sequence, this.rolloutedRocketId);
 	}
 
 	getState() {

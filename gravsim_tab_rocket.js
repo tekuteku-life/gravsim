@@ -14,6 +14,7 @@ export class RocketTab {
 		this.previousCameraOffset = null;
 		this._initElements();
 		this._bindEvents();
+		this.isOpened = false;
 
 		// Subscribe to object list changes
 		this.universe.on('object-list-changed', () => {
@@ -50,8 +51,12 @@ export class RocketTab {
 			rlStatFuelAmount: document.getElementById('rl-stat-fuel-amount'),
 			rlStatFuelIsp: document.getElementById('rl-stat-fuel-isp'),
 			rlStatFuelMaxBurn: document.getElementById('rl-stat-fuel-max-burn'),
-			rlExecuteBtn: document.getElementById('rl-execute-btn'),
 			massSelect: document.getElementById('mass-select'),
+			rlRolloutBtn: document.getElementById('rl-rollout-btn'),
+			rlIgnitionGroup: document.getElementById('rl-ignition-group'),
+			rlIgniteQuickBtn: document.getElementById('rl-ignite-quick-btn'),
+			rlIgniteFullBtn: document.getElementById('rl-ignite-full-btn'),
+			rlAbortBtn: document.getElementById('rl-abort-btn'),
 		};
 		DOMUtils.verifyElements(this.ui, 'RocketTab');
 	}
@@ -78,6 +83,25 @@ export class RocketTab {
 		this.ui.rlAutoControl.addEventListener('change', (e) => {
 			this.universe.RocketLauncher.autoControl = e.target.checked;
 		});
+		if (this.ui.rlRolloutBtn) {
+			this.ui.rlRolloutBtn.addEventListener('click', () => this.universe.RocketLauncher.rollout());
+		}
+		
+		const triggerIgnite = (sequenceType) => {
+			this.universe.RocketLauncher.ignite(sequenceType);
+			const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
+			if (sysTabBtn) sysTabBtn.click();
+		};
+
+		if (this.ui.rlIgniteQuickBtn) {
+			this.ui.rlIgniteQuickBtn.addEventListener('click', () => triggerIgnite('LEGACY_QUICK'));
+		}
+		if (this.ui.rlIgniteFullBtn) {
+			this.ui.rlIgniteFullBtn.addEventListener('click', () => triggerIgnite('LEGACY_QUICK')); // フルは後ほど実装
+		}
+		if (this.ui.rlAbortBtn) {
+			this.ui.rlAbortBtn.addEventListener('click', () => this.universe.RocketLauncher.abortRollout());
+		}
 
 		// Helper to bind range inputs to RocketLauncher properties
 		const bindSlider = (sliderId, valId, propName, isFloat = false) => {
@@ -106,15 +130,6 @@ export class RocketTab {
 
 		document.addEventListener('rocket-preview-updated', () => {
 			this._updateRocketStats();
-		});
-
-		this.ui.rlExecuteBtn.addEventListener('click', () => {
-			this.universe.RocketLauncher.executeLaunch();
-
-			const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
-			if (sysTabBtn) {
-				sysTabBtn.click();
-			}
 		});
 	}
 
@@ -247,6 +262,8 @@ export class RocketTab {
 	}
 
 	open() {
+		this.isOpened = true;
+
 		// Pause simulation while setting up rocket
 		this.universe.pauseSimulation();
 
@@ -272,15 +289,25 @@ export class RocketTab {
 	}
 
 	close() {
+		if (!this.isOpened) { return; }
+
 		// Resume simulation when leaving rocket tab
 		this.universe.resumeSimulation();
 
 		this.universe.RocketLauncher.togglePreview(false);
 
+		if (this.universe.RocketLauncher.rolloutedRocketId !== null || this.universe.LaunchSequencer.isActive) {
+			this.previousCameraTarget = null;
+			this.previousTimeScaleVal = this.systemTab.ui.timeScale.min;
+			this.previousZoomScaleVal = null;
+		}
+
 		// Restore time & zoom scale & camera target
 		this.restoreTimeScale();
 		this.restoreZoomScale();
 		this.restoreCameraTarget();
+
+		this.isOpened = false;
 	}
 
 	saveTimeScale() {
@@ -329,6 +356,30 @@ export class RocketTab {
 
 			this.previousCameraTarget = null;
 			this.previousCameraOffset = null;
+		}
+	}
+
+	setRolloutState(isRollouted) {
+		const sliders = this.ui.rlModeSelect.closest('.tab-content').querySelectorAll('input[type="range"]');
+
+		if (isRollouted) {
+			if (this.ui.rlRolloutBtn) this.ui.rlRolloutBtn.style.display = 'none';
+			if (this.ui.rlIgnitionGroup) this.ui.rlIgnitionGroup.style.display = 'flex';
+			if (this.ui.rlAbortBtn) this.ui.rlAbortBtn.style.display = 'block';
+			sliders.forEach(slider => slider.disabled = true);
+			this.ui.rlModeSelect.disabled = true;
+			this.ui.rlFuelType.disabled = true;
+			this.ui.rlHostSelect.disabled = true;
+			this.ui.rlAutoControl.disabled = true;
+		} else {
+			if (this.ui.rlRolloutBtn) this.ui.rlRolloutBtn.style.display = 'block';
+			if (this.ui.rlIgnitionGroup) this.ui.rlIgnitionGroup.style.display = 'none';
+			if (this.ui.rlAbortBtn) this.ui.rlAbortBtn.style.display = 'none';
+			sliders.forEach(slider => slider.disabled = false);
+			this.ui.rlModeSelect.disabled = false;
+			this.ui.rlFuelType.disabled = false;
+			this.ui.rlHostSelect.disabled = false;
+			this.ui.rlAutoControl.disabled = false;
 		}
 	}
 

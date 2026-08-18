@@ -134,14 +134,23 @@ export const TELEMETRY = {
 			MAX_Q_COLOR: '#ff5555'
 		},
 	},
+	STATUS: {
+		PRE_LAUNCH: -1,
+		LIFTOFF: 0,
+		ASCENT: 1,
+		MAX_Q: 2,
+		MECO: 3,
+		COASTING: 4,
+		TRACKING: 5
+	},
 	STATUS_MAP: {
-		0: "PRE-LAUNCH",
-		1: "LIFTOFF",
-		2: "ASCENT",
-		3: "MAX-Q",
-		4: "MECO",
-		5: "COASTING",
-		6: "TRACKING"
+		"-1": "PRE-LAUNCH",
+		"0": "LIFTOFF",
+		"1": "ASCENT",
+		"2": "MAX-Q",
+		"3": "MECO",
+		"4": "COASTING",
+		"5": "TRACKING"
 	}
 };
 
