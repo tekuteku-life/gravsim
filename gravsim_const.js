@@ -372,8 +372,36 @@ export const TRAIL_MODE = {
 	ESCAPE: 2
 };
 
+// Step 3: Implement new FULL_COUNTDOWN sequence definition
 export const LAUNCH_SEQUENCES = {
-	LEGACY_QUICK: [
-		{ time: 0.0, name: "Ignition & Liftoff", command: "IGNITE_AND_RELEASE" }
-	]
+	LAUNCH_TO_COMPLETION_TIME: 5,
+	LEGACY_QUICK: {
+		tMinusOffset: 3,
+		events: [
+			{ time: 0, name: "TERMINAL COUNTDOWN START", command: "START_COUNTDOWN" },
+			{ time: 3, name: "Ignition & Liftoff", command: "IGNITE_AND_RELEASE" }
+		]
+	},
+	FULL_COUNTDOWN: {
+		tMinusOffset: 120,
+		events: [
+			{ time: 0, name: "TERMINAL COUNTDOWN START", command: "START_COUNTDOWN" },
+			{ time: 15, name: "PROPELLANT LOADING COMPLETE", command: "" },
+			{ time: 20, name: "ENGINE CHILLDOWN START", command: "" },
+			{ time: 30, name: "POLL: WEATHER - GO", command: "" },
+			{ time: 32, name: "POLL: RANGE - GO", command: "" },
+			{ time: 34, name: "POLL: GROUND - GO", command: "" },
+			{ time: 36, name: "POLL: AVIONICS - GO", command: "" },
+			{ time: 38, name: "POLL: PROPULSION - GO", command: "" },
+			{ time: 40, name: "POLL: GUIDANCE - GO", command: "" },
+			{ time: 42, name: "POLL: FLIGHT - GO", command: "" },
+			{ time: 47, name: "POLL: LD - GO FOR LAUNCH", command: "" },
+			{ time: 60, name: "AUTO SEQUENCE START", command: "AUTO_SEQUENCE_START" },
+			{ time: 90, name: "TRANSFER TO INTERNAL POWER", command: "" },
+			{ time: 105, name: "WATER DELUGE SYSTEM ON", command: "WATER_DELUGE" },
+			{ time: 110, name: "ROFI IGNITION", command: "ROFI_IGNITION" },
+			{ time: 115, name: "MAIN ENGINE START", command: "IGNITE_ENGINE" },
+			{ time: 120, name: "LIFTOFF", command: "RELEASE_HOLD_DOWN" }
+		]
+	}
 };

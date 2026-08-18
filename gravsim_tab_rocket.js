@@ -88,16 +88,17 @@ export class RocketTab {
 		}
 		
 		const triggerIgnite = (sequenceType) => {
-			this.universe.RocketLauncher.ignite(sequenceType);
 			const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
 			if (sysTabBtn) sysTabBtn.click();
+			
+			this.universe.RocketLauncher.ignite(sequenceType);
 		};
 
 		if (this.ui.rlIgniteQuickBtn) {
 			this.ui.rlIgniteQuickBtn.addEventListener('click', () => triggerIgnite('LEGACY_QUICK'));
 		}
 		if (this.ui.rlIgniteFullBtn) {
-			this.ui.rlIgniteFullBtn.addEventListener('click', () => triggerIgnite('LEGACY_QUICK')); // フルは後ほど実装
+			this.ui.rlIgniteFullBtn.addEventListener('click', () => triggerIgnite('FULL_COUNTDOWN'));
 		}
 		if (this.ui.rlAbortBtn) {
 			this.ui.rlAbortBtn.addEventListener('click', () => this.universe.RocketLauncher.abortRollout());
@@ -298,7 +299,7 @@ export class RocketTab {
 
 		if (this.universe.RocketLauncher.rolloutedRocketId !== null || this.universe.LaunchSequencer.isActive) {
 			this.previousCameraTarget = null;
-			this.previousTimeScaleVal = this.systemTab.ui.timeScale.min;
+			this.previousTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
 			this.previousZoomScaleVal = null;
 		}
 

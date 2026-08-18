@@ -216,10 +216,9 @@ export class Universe {
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
 		const scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
-		const scaledDtSec = scaledDt * PHYSICS.YEARS_PER_SECOND;
 
 		// Launch Sequencer
-		this.LaunchSequencer.update(scaledDtSec);
+		this.LaunchSequencer.update(scaledDt);
 
 		// Update flight time for rocket
 		this.objects.forEach(obj => {

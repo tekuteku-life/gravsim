@@ -120,7 +120,12 @@ class PhysicsEngine {
 					thrustAngle: data.thrustAngle,
 					maxGLimit: data.maxGLimit,
 					massLossRate: data.massLossRate,
-					autoControl: data.autoControl
+					autoControl: data.autoControl,
+					hostId: data.hostId,
+					hostAngleRad: data.hostAngleRad,
+					hostAltM: data.hostAltM,
+					isHoldDown: data.isHoldDown,
+					isIgnited: data.isIgnited
 				}
 			));
 		} else if (data.type === OBJECT_TYPES.DEBRIS) {

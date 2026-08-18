@@ -35,6 +35,11 @@ export class RocketLauncher {
 		this.autoControl = true; // Auto Flight Computer flag
 
 		this.rolloutedRocketId = null;
+
+		// Clear rollout state on liftoff so that the marker can be displayed for the next launch
+		this.universe.on('liftoff', () => {
+			this.rolloutedRocketId = null;
+		});
 	}
 
 	togglePreview(forceState = null) {
@@ -245,6 +250,8 @@ export class RocketLauncher {
 
 	abortRollout() {
 		if (this.rolloutedRocketId !== null) {
+			this.universe.LaunchSequencer.abort();
+
 			const obj = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
 			if (obj) {
 				this.universe.ObjectManager.removeObject(obj);

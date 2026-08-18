@@ -116,9 +116,10 @@ export class FormatUtils {
 
 	// Format total seconds to "T+ YYYy DDDd HH:MM:SS"
 	static timeMission(totalSec) {
-		const t = this.parseSeconds(totalSec);
+		const sign = totalSec < 0 ? '-' : '+';
+		const t = this.parseSeconds(Math.abs(totalSec));
 		const pad = (n, len = 2) => String(n).padStart(len, '0');
-		return `T+ ${pad(t.years, 3)}y ${pad(t.days, 3)}d ${pad(t.hours)}:${pad(t.minutes)}:${pad(t.seconds)}`;
+		return `T${sign} ${pad(t.years, 3)}y ${pad(t.days, 3)}d ${pad(t.hours)}:${pad(t.minutes)}:${pad(t.seconds)}`;
 	}
 
 	// Format number with fixed fraction digits and left padding

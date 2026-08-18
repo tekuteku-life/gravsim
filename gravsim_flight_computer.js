@@ -36,7 +36,7 @@ export class FlightComputer {
 	}
 
 	update(sensor) {
-		if (sensor.burnTime > 0 || this.flightTime > 0) {
+		if (!sensor.isHoldDown || this.flightTime > 0) {
 			this.flightTime += sensor.dt;
 		}
 

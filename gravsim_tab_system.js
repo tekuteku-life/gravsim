@@ -91,6 +91,21 @@ export class SystemTab {
 				this.ui.clearCelestialChk.checked
 			);
 		});
+
+		// Lock simulation controls during launch sequence
+		this.universe.on('sequencer-start', () => {
+			this.ui.timeScale.disabled = true;
+			this.ui.pauseResumeBtn.disabled = true;
+			this.ui.resetAllBtn.disabled = true;
+		});
+
+		const unlockControls = () => {
+			this.ui.timeScale.disabled = false;
+			this.ui.pauseResumeBtn.disabled = false;
+			this.ui.resetAllBtn.disabled = false;
+		};
+		this.universe.on('sequencer-end', unlockControls);
+		this.universe.on('sequencer-abort', unlockControls);
 	}
 
 	_onCenterChanged(e) {

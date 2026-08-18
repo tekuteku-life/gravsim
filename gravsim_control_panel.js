@@ -65,6 +65,25 @@ export class ControlPanel {
 				btn.addEventListener('click', (e) => this._tabBtnClick(e));
 			});
 		}
+
+		// Lock tabs during launch sequence
+		this.universe.on('sequencer-start', () => {
+			this.ui.tabBtns.forEach(btn => {
+				btn.disabled = true;
+				btn.style.pointerEvents = 'none';
+				btn.style.opacity = '0.5';
+			});
+		});
+
+		const unlockTabs = () => {
+			this.ui.tabBtns.forEach(btn => {
+				btn.disabled = false;
+				btn.style.pointerEvents = 'auto';
+				btn.style.opacity = '1.0';
+			});
+		};
+		this.universe.on('sequencer-end', unlockTabs);
+		this.universe.on('sequencer-abort', unlockTabs);
 	}
 
 	_tabBtnClick(e) {

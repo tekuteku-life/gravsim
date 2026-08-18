@@ -39,6 +39,9 @@ export class TelemetryPanel {
 			navPrograde: document.getElementById('tm-nav-prograde'),
 			navGravity: document.getElementById('tm-nav-gravity'),
 			subCanvas: document.getElementById('sub-canvas'),
+			countdownDisplay: document.getElementById('countdown-display'),
+			cdTime: document.getElementById('cd-time'),
+			cdEvent: document.getElementById('cd-event'),
 		};
 		DOMUtils.verifyElements(this.ui, 'TelemetryPanel');
 		
@@ -69,6 +72,40 @@ export class TelemetryPanel {
 
 		this.ui.targetSelect.addEventListener('change', (e) => {
 			this.targetId = parseInt(e.target.value, 10);
+		});
+
+		// Event listeners for launch sequence updates and animations
+		this.universe.on('sequencer-start', () => {
+			if (this.ui.countdownDisplay) this.ui.countdownDisplay.style.display = 'block';
+		});
+
+		const resetSequenceUI = () => {
+			if (this.ui.countdownDisplay) this.ui.countdownDisplay.style.display = 'none';
+			if (this.ui.panel) this.ui.panel.classList.remove('auto-sequence-mode');
+		};
+		this.universe.on('sequencer-end', resetSequenceUI);
+		this.universe.on('sequencer-abort', resetSequenceUI);
+
+		this.universe.on('sequencer-tick', (data) => {
+			DOMUtils.setText(this.ui.cdTime, data.timeText);
+			DOMUtils.setText(this.ui.cdEvent, data.eventName);
+		});
+
+		this.universe.on('sequencer-event', () => {
+			if (this.ui.countdownDisplay) {
+				// Re-trigger CSS animation
+				this.ui.countdownDisplay.classList.remove('flash');
+				void this.ui.countdownDisplay.offsetWidth; 
+				this.ui.countdownDisplay.classList.add('flash');
+			}
+		});
+
+		this.universe.on('auto-sequence-start', () => {
+			if (this.ui.panel) this.ui.panel.classList.add('auto-sequence-mode');
+		});
+
+		this.universe.on('liftoff', () => {
+			if (this.ui.panel) this.ui.panel.classList.remove('auto-sequence-mode');
 		});
 	}
 
@@ -162,16 +199,29 @@ export class TelemetryPanel {
 		if (pct < 0.5) { pct = 0; }
 		DOMUtils.setStyle(this.ui.fuelBar, 'width', `${pct}%`);
 
-		const mStat = TELEMETRY.STATUS_MAP[tm.status] || TELEMETRY.STATUS_MAP[0];
+		let mStat = TELEMETRY.STATUS_MAP[tm.status] || TELEMETRY.STATUS_MAP[0];
+		
+		// Override UI status with AUTO-SEQUENCE if under automatic control
+		if (tm.status === TELEMETRY.STATUS.PRE_LAUNCH && this.universe.LaunchSequencer.isAutoSequence) {
+			mStat = "AUTO-SEQUENCE";
+		}
+		
 		DOMUtils.setText(this.ui.missionStatus, mStat);
 		
 		if (mStat === TELEMETRY.STATUS_MAP[3]) { 
 			DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.MAX_Q_COLOR);
 		} else { 
+			// Will be overridden by CSS in auto-sequence mode
 			DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.NORMAL_COLOR);
 		}
 
-		DOMUtils.setText(this.ui.missionTime, FormatUtils.timeMission(tm.flightTime));
+		// Sync MET with sequencer time during countdown
+		let displayTimeSec = tm.flightTime;
+		if (this.universe.LaunchSequencer.isActive && this.universe.LaunchSequencer.rocketId === target.id) {
+			displayTimeSec = this.universe.LaunchSequencer.timer - this.universe.LaunchSequencer.tMinusOffset;
+		}
+
+		DOMUtils.setText(this.ui.missionTime, FormatUtils.timeMission(displayTimeSec));
 		this._updateFlightDirectorUI(target.thrustAngle, tm.progradeAngle, tm.gravityAngle);
 	}
 
