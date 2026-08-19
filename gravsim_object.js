@@ -230,7 +230,7 @@ export class Rocket extends GravSimObject {
 	set mass(val) {}
 
 	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
-		if (this.burnTime > 0) {
+		if (this.isIgnited && this.burnTime > 0) {
 			this._drawFlame(ctx, x, y, screenRadius);
 		}
 	}

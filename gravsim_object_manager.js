@@ -150,6 +150,8 @@ export class ObjectManager {
 					target.fuelMass = objData.fuelMass / 1e3;
 					target.burnTime = objData.burnTime;
 					target.thrustRatio = objData.thrustRatio;
+					target.isHoldDown = objData.isHoldDown;
+					target.isIgnited = objData.isIgnited;
 
 					target.telemetry = {
 						status: objData.tmStatus,
