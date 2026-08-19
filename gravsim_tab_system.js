@@ -50,8 +50,7 @@ export class SystemTab {
 
 		// Simulation Control
 		this.ui.pauseResumeBtn.addEventListener('click', () => {
-			this.universe.isPaused = !this.universe.isPaused;
-			if (this.universe.isPaused) {
+			if (!this.universe.isPaused) {
 				this.universe.pauseSimulation();
 				DOMUtils.setText(this.ui.pauseResumeBtn, "Resume");
 				this.ui.pauseResumeBtn.style.color = UI.BUTTON_COLOR.ACTIVE;

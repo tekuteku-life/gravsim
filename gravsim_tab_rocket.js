@@ -88,9 +88,19 @@ export class RocketTab {
 		}
 		
 		const triggerIgnite = (sequenceType) => {
-			const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
-			if (sysTabBtn) sysTabBtn.click();
-			
+			// Resume simulation to ensure physics worker runs during sequence
+			this.universe.resumeSimulation();
+
+			// Change system setting
+			this.previousCameraTarget = null;
+			this.previousTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
+			this.previousZoomScaleVal = null;
+
+			// Restore time & zoom scale & camera target
+			this.restoreTimeScale();
+			this.restoreZoomScale();
+			this.restoreCameraTarget();
+
 			this.universe.RocketLauncher.ignite(sequenceType);
 		};
 

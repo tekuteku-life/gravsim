@@ -121,13 +121,17 @@ export class Universe {
 
 	// Send pause command to worker
 	pauseSimulation() {
-		this.CalcWorkerManager.postMessage({ cmd: 'pause', value: true });
+		if (!this.isPaused) {
+			this.isPaused = true;
+			this.CalcWorkerManager.postMessage({ cmd: 'pause', value: true });
+		}
 	}
 
 	// Send resume command to worker
 	resumeSimulation() {
 		// Prevent resuming if globally paused by user
-		if (!this.isPaused) {
+		if (this.isPaused) {
+			this.isPaused = false;
 			this.CalcWorkerManager.postMessage({ cmd: 'pause', value: false });
 		}
 	}
