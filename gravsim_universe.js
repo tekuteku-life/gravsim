@@ -19,8 +19,9 @@ const GRAVSIM_CALC_JS_FILE = './gravsim_calc.js';
  * CalcWorkerManager class that manages the calculation worker for physics simulation.
 *******************************************************************/
 class CalcWorkerManager {
-	constructor() {
+	constructor(onUpdateCallback) {
 		this.worker = new Worker(GRAVSIM_CALC_JS_FILE, {type: 'module'});
+		this.onUpdateCallback = onUpdateCallback;
 		this.worker.onmessage = this.handleMessage.bind(this);
 	}
 
@@ -28,7 +29,9 @@ class CalcWorkerManager {
 		const data = e.data;
 		switch(data.cmd) {
 		case 'update':
-			window.universe.updateObjectParams(data);
+			if (this.onUpdateCallback) {
+				this.onUpdateCallback(data);
+			}
 			break;
 		default:
 			console.error('Unknown command from worker:', data.cmd);
@@ -64,7 +67,7 @@ export class Universe {
 
 		// Initialize Modules
 		this.Renderer = new Renderer(_canvas);
-		this.CalcWorkerManager = new CalcWorkerManager();
+		this.CalcWorkerManager = new CalcWorkerManager((data) => this.updateObjectParams(data));
 		this.InputManager = new InputManager(this.canvas);
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
 
