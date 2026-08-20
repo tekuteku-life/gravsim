@@ -105,7 +105,15 @@ export const RENDER = {
 		FONT: "10px monospace",
 		LINE_COLOR: "rgba(0, 255, 100, 0.15)",
 		TEXT_COLOR: "rgba(0, 255, 100, 0.5)",
-		CROSS_SIZE: 10
+		CROSS_SIZE: 10,
+		STEP_THRESHOLDS: [
+			{ limit: 5, step: 100 },
+			{ limit: 10, step: 20 },
+			{ limit: 50, step: 10 },
+			{ limit: 100, step: 2 }
+		],
+		STEP_DEFAULT: 0.1,
+		STEP_MAX: 1
 	}
 };
 

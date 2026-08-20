@@ -3,6 +3,7 @@
 
 import { PHYSICS, SIMULATION, OBJECT_STATE, OBJECT_TYPES } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
+import { OverlayRenderer } from './gravsim_overlay_renderer.js';
 import { InfoPanel } from './gravsim_info_panel.js';
 import { TelemetryPanel } from './gravsim_telemetry_panel.js';
 import { ControlPanel } from './gravsim_control_panel.js';
@@ -70,6 +71,10 @@ export class Universe {
 		this.CalcWorkerManager = new CalcWorkerManager((data) => this.updateObjectParams(data));
 		this.InputManager = new InputManager(this.canvas);
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
+		
+		this.OverlayRenderer = new OverlayRenderer(this);
+		this.Renderer.addDrawHook('overlay', (ctx, rc) => this.OverlayRenderer.drawOverlay(ctx, rc));
+		this.Renderer.addDrawHook('after', (ctx, rc) => this.OverlayRenderer.drawAfter(ctx, rc));
 
 		this.InfoPanel = new InfoPanel(this);
 		this.TelemetryPanel = new TelemetryPanel(this);

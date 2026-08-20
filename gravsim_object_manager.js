@@ -2,7 +2,7 @@
 // gravsim_object_manager.js
 
 import {
-	PHYSICS, SIMULATION, DEBRIS,
+	PHYSICS, SIMULATION, DEBRIS, RENDER,
 	OBJECT_STATE, OBJECT_TYPES,
 	CALC_BUFFER_CONFIG, BUFFER_INDEX
 } from './gravsim_const.js';
@@ -18,11 +18,56 @@ export class ObjectManager {
 		this.objects = [];
 		this.centerObject = null;
 		this.physicsSequence = 0;
+		this.shockwaves = [];
+		
+		// Register shockwave drawing to the renderer
+		this.renderer.addDrawHook('after', this.drawShockwaves.bind(this));
 	}
 
 	destroy() {
 		this.objects.forEach(obj => this.removeObject(obj));
 		this.objects = [];
+		this.shockwaves = [];
+	}
+
+	addShockwave(x, y, color) {
+		this.shockwaves.push({
+			x: x,
+			y: y,
+			color: color,
+			startTime: Date.now(),
+			duration: DEBRIS.SHOCKWAVE_TIME
+		});
+	}
+
+	drawShockwaves(ctx, renderContext) {
+		const now = Date.now();
+		const basis = renderContext.basis;
+		const zoomScale = renderContext.zoomScale;
+		
+		if (!basis) return;
+
+		this.shockwaves = this.shockwaves.filter(eff => {
+			const progress = (now - eff.startTime) / eff.duration;
+
+			if (progress >= 1) { return false; }
+
+			const radius = (progress * DEBRIS.SHOCKWAVE_RADIUS) * zoomScale;
+			const alpha = 1.0 - progress;
+
+			ctx.save();
+			const relX = (eff.x - basis.x) * zoomScale;
+			const relY = (eff.y - basis.y) * zoomScale;
+			
+			ctx.strokeStyle = ColorUtils.hexToRgba(eff.color, alpha);
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			ctx.arc(relX, relY, radius, 0, Math.PI * 2);
+			ctx.stroke();
+			ctx.restore();
+
+			return true;
+		});
 	}
 
 	ensureCenterObject(currentOffset = {x: 0, y: 0}) {
@@ -106,13 +151,13 @@ export class ObjectManager {
 	}
 
 	removeObject(obj) {
-		if (!(obj instanceof GravSimObject)) throw new Error("Invalid object type.");
+		if (!(obj instanceof GravSimObject)) { throw new Error("Invalid object type."); }
 		obj.setCollided();
 		this.workerManager.postMessage({ cmd: 'remove', id: obj.id });
 	}
 
 	updateObject(obj) {
-		if (!(obj instanceof GravSimObject)) throw new Error("Invalid object type.");
+		if (!(obj instanceof GravSimObject)) { throw new Error("Invalid object type."); }
 		this.workerManager.postMessage({
 			cmd: 'update',
 			id: obj.id,
@@ -202,7 +247,7 @@ export class ObjectManager {
 						);
 
 						if (debrisData.shockwave) {
-							this.renderer.addShockwave(debrisData.shockwave.x, debrisData.shockwave.y, debrisData.shockwave.color);
+							this.addShockwave(debrisData.shockwave.x, debrisData.shockwave.y, debrisData.shockwave.color);
 						}
 						debrisData.debrisList.forEach(debris => this.addObject(debris));
 					}
@@ -222,7 +267,7 @@ export class ObjectManager {
 					);
 
 					if (debrisData.shockwave) {
-						this.renderer.addShockwave(debrisData.shockwave.x, debrisData.shockwave.y, debrisData.shockwave.color);
+						this.addShockwave(debrisData.shockwave.x, debrisData.shockwave.y, debrisData.shockwave.color);
 					}
 					debrisData.debrisList.forEach(debris => this.addObject(debris));
 				}

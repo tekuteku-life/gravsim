@@ -75,11 +75,11 @@ export class SystemTab {
 		});
 		
 		this.ui.showLabelsChk.addEventListener('change', (e) => {
-			this.universe.Renderer.showLabels = e.target.checked;
+			this.universe.OverlayRenderer.showLabels = e.target.checked;
 		});
 
 		this.ui.showDebugChk.addEventListener('change', (e) => {
-			this.universe.Renderer.showDebugOverlay = e.target.checked;
+			this.universe.OverlayRenderer.showDebugOverlay = e.target.checked;
 		});
 
 		// Clear Objects

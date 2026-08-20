@@ -42,8 +42,8 @@ export class GravSimObject {
 
 	get mass() { return 1; }
 
-	isCenterObject() {
-		return window.universe && window.universe.centerObject && this.id === window.universe.centerObject.id;
+	isCenterObject(renderContext) {
+		return renderContext && renderContext.centerObjectId === this.id;
 	}
 
 	updateHistory(currentFrame) {
