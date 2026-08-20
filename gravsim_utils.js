@@ -1,6 +1,8 @@
 
 // gravsim_utils.js
 
+import { RENDER, PHYSICS } from './gravsim_const.js';
+
 /*******************************************************************
  * DOM Utility class for Dirty Checking (Differential Update)
  *******************************************************************/
@@ -81,6 +83,16 @@ export const MathUtils = {
 		return angle;
 	}
 };
+
+/*******************************************************************
+ * Unit Convert Utility class for text and numbers
+ *******************************************************************/
+export class UnitConvertUtils {
+	static pix2au(px) { return px / RENDER.DISTANCE_SCALE; }
+	static au2pix(au) { return au * RENDER.DISTANCE_SCALE; }
+	static m2pix(m) { return UnitConvertUtils.au2pix(m / PHYSICS.METERS_PER_AU); }
+	static pix2m(px) { return PHYSICS.METERS_PER_AU * (UnitConvertUtils.pix2au(px)); }
+}
 
 /*******************************************************************
  * Format Utility class for text and numbers

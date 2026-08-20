@@ -3,6 +3,7 @@
 
 import { PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
+import { UnitConvertUtils } from './gravsim_utils.js';
 
 function AU2M(au) {
 	return au * PHYSICS.METERS_PER_AU;
@@ -132,13 +133,13 @@ export class ObjectPlacer {
 		const perihelionDeg = param.PERIHELION_DEG || 0;
 		const theta = perihelionDeg * (Math.PI / 180);
 
-		const r_p_px = this.universe.m2pix(r_p_m);
+		const r_p_px = UnitConvertUtils.m2pix(r_p_m);
 		const relX = r_p_px * Math.cos(theta);
 		const relY = r_p_px * Math.sin(theta);
 
 		// Calculate velocity vector
 		// (At perihelion, the velocity vector is perpendicular to the radius vector)
-		const v_p_px = this.universe.m2pix(v_p_m);
+		const v_p_px = UnitConvertUtils.m2pix(v_p_m);
 		const relVx = -v_p_px * Math.sin(theta);
 		const relVy = v_p_px * Math.cos(theta);
 
@@ -246,8 +247,8 @@ export class ObjectPlacer {
 		this.placeObject(
 			name,
 			launchX, launchY,
-			this.universe.Renderer.m2pix(v.vx) + this.universe.centerObject.vx,
-			this.universe.Renderer.m2pix(v.vy) + this.universe.centerObject.vy,
+			UnitConvertUtils.m2pix(v.vx) + this.universe.centerObject.vx,
+			UnitConvertUtils.m2pix(v.vy) + this.universe.centerObject.vy,
 			{ angle: Math.atan2(v.vy, v.vx) }
 		);
 		

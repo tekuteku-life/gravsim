@@ -2,7 +2,7 @@
 // gravsim_tab_rocket.js
 
 import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS } from './gravsim_const.js';
-import { DOMUtils } from './gravsim_utils.js';
+import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
 
 export class RocketTab {
 	constructor(universe, systemTab) {
@@ -200,7 +200,7 @@ export class RocketTab {
 				const dy = rl.freeY - host.y;
 				upAngleRad = Math.atan2(dy, dx);
 				const distPx = Math.sqrt(dx * dx + dy * dy);
-				rMeters = this.universe.pix2m(distPx);
+				rMeters = UnitConvertUtils.pix2m(distPx);
 			}
 		}
 

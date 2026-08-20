@@ -7,7 +7,7 @@ import {
 	CALC_BUFFER_CONFIG, BUFFER_INDEX
 } from './gravsim_const.js';
 import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.js';
-import { ColorUtils } from './gravsim_utils.js';
+import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 import { DebrisGenerator } from './gravsim_debris_generator.js';
 
@@ -70,9 +70,9 @@ export class ObjectManager {
 			id: obj.id,
 			name: obj.name,
 			type: obj.type,
-			x: this.renderer.pix2m(obj.x), y: this.renderer.pix2m(obj.y),
-			vx: this.renderer.pix2m(obj.vx), vy: this.renderer.pix2m(obj.vy),
-			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
+			x: UnitConvertUtils.pix2m(obj.x), y: UnitConvertUtils.pix2m(obj.y),
+			vx: UnitConvertUtils.pix2m(obj.vx), vy: UnitConvertUtils.pix2m(obj.vy),
+			ax: UnitConvertUtils.pix2m(obj.ax), ay: UnitConvertUtils.pix2m(obj.ay),
 			radius: obj.radius,
 			generation: obj.generation
 		};
@@ -116,9 +116,9 @@ export class ObjectManager {
 		this.workerManager.postMessage({
 			cmd: 'update',
 			id: obj.id,
-			x: this.renderer.pix2m(obj.x), y: this.renderer.pix2m(obj.y),
-			vx: this.renderer.pix2m(obj.vx), vy: this.renderer.pix2m(obj.vy),
-			ax: this.renderer.pix2m(obj.ax), ay: this.renderer.pix2m(obj.ay),
+			x: UnitConvertUtils.pix2m(obj.x), y: UnitConvertUtils.pix2m(obj.y),
+			vx: UnitConvertUtils.pix2m(obj.vx), vy: UnitConvertUtils.pix2m(obj.vy),
+			ax: UnitConvertUtils.pix2m(obj.ax), ay: UnitConvertUtils.pix2m(obj.ay),
 			mass: obj.mass * 1e3,
 			radius: obj.radius,
 			generation: obj.generation,
@@ -138,12 +138,12 @@ export class ObjectManager {
 		WorkerBridge.parseWorkerToMain(data.objectsData, data.validLength, (objData) => {
 			const target = this.objects.find(t => t.id === objData.id);
 			if (target) {
-				target.x = this.renderer.m2pix(objData.x);
-				target.y = this.renderer.m2pix(objData.y);
-				target.vx = this.renderer.m2pix(objData.vx);
-				target.vy = this.renderer.m2pix(objData.vy);
-				target.ax = this.renderer.m2pix(objData.ax);
-				target.ay = this.renderer.m2pix(objData.ay);
+				target.x = UnitConvertUtils.m2pix(objData.x);
+				target.y = UnitConvertUtils.m2pix(objData.y);
+				target.vx = UnitConvertUtils.m2pix(objData.vx);
+				target.vy = UnitConvertUtils.m2pix(objData.vy);
+				target.ax = UnitConvertUtils.m2pix(objData.ax);
+				target.ay = UnitConvertUtils.m2pix(objData.ay);
 
 				if (objData.type === OBJECT_TYPES.ROCKET) {
 					target.dryMass = objData.mass / 1e3;
@@ -192,12 +192,12 @@ export class ObjectManager {
 						const debrisData = DebrisGenerator.generateFromImpact(
 							target,
 							objData.debrisMass / 1e3,
-							this.renderer.m2pix(objData.impactVx),
-							this.renderer.m2pix(objData.impactVy),
-							this.renderer.m2pix(objData.impactWinnerX),
-							this.renderer.m2pix(objData.impactWinnerY),
-							this.renderer.m2pix(objData.impactWinnerRadius),
-							(m) => this.renderer.m2pix(m),
+							UnitConvertUtils.m2pix(objData.impactVx),
+							UnitConvertUtils.m2pix(objData.impactVy),
+							UnitConvertUtils.m2pix(objData.impactWinnerX),
+							UnitConvertUtils.m2pix(objData.impactWinnerY),
+							UnitConvertUtils.m2pix(objData.impactWinnerRadius),
+							UnitConvertUtils.m2pix,
 							() => this.getNextId()
 						);
 
@@ -217,7 +217,7 @@ export class ObjectManager {
 					// Generate debris and effects via DebrisGenerator
 					const debrisData = DebrisGenerator.generateFromShatter(
 						target,
-						(m) => this.renderer.m2pix(m),
+						UnitConvertUtils.m2pix,
 						() => this.getNextId()
 					);
 
@@ -255,7 +255,7 @@ export class ObjectManager {
 			if (obj.isEscaping) {
 				const cx = obj.x - sun.x;
 				const cy = obj.y - sun.y;
-				if (this.renderer.pix2au(Math.sqrt(cx*cx + cy*cy)) > SIMULATION.REMOVE_DISTANCE_AU) {
+				if (UnitConvertUtils.pix2au(Math.sqrt(cx*cx + cy*cy)) > SIMULATION.REMOVE_DISTANCE_AU) {
 					this.removeObject(obj);
 					console.debug(`${obj.name} (id:${obj.id}) got out from heliosphere`);
 				}

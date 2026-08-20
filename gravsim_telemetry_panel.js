@@ -3,7 +3,7 @@
 
 import { PHYSICS, UI, OBJECT_TYPES, TELEMETRY } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
-import { MathUtils, DOMUtils, FormatUtils } from './gravsim_utils.js';
+import { MathUtils, DOMUtils, UnitConvertUtils, FormatUtils } from './gravsim_utils.js';
 
 export class TelemetryPanel {
 	constructor(universe) {
@@ -282,7 +282,7 @@ export class TelemetryPanel {
 		if (!targetObj) { targetObj = this.universe.centerObject; }
 
 		if (targetObj && targetObj.type === OBJECT_TYPES.ROCKET) {
-			const realRadiusPx = this.universe.m2pix(targetObj.radius);
+			const realRadiusPx = UnitConvertUtils.m2pix(targetObj.radius);
 
 			// Keep the radius of the object specified size on Sub screen
 			let subZoom = TELEMETRY.SUB_VIEW_TARGET_RADIUS / Math.max(realRadiusPx, 1e-10);

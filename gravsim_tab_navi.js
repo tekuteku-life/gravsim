@@ -2,7 +2,7 @@
 // gravsim_tab_navi.js
 
 import { PHYSICS, UI, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
-import { DOMUtils } from './gravsim_utils.js';
+import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
 
 export class NaviTab {
 	constructor(universe) {
@@ -93,8 +93,8 @@ export class NaviTab {
 		if (refBody) {
 			DOMUtils.setText(this.ui.nvRefBody, refBody.name);
 			DOMUtils.setText(this.ui.nvAlt, ((distToRefM - refBody.radius)/1000).toLocaleString('en-US', {maximumFractionDigits:0}) + " km");
-			const vx = this.universe.pix2m(target.vx - refBody.vx);
-			const vy = this.universe.pix2m(target.vy - refBody.vy);
+			const vx = UnitConvertUtils.pix2m(target.vx - refBody.vx);
+			const vy = UnitConvertUtils.pix2m(target.vy - refBody.vy);
 			DOMUtils.setText(this.ui.nvVel, (Math.sqrt(vx*vx + vy*vy)/1000).toFixed(2) + " km/s");
 		} else {
 			DOMUtils.setText(this.ui.nvRefBody, "NONE");

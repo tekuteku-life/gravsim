@@ -1,7 +1,11 @@
 
 // gravsim_rocket_launcher.js
 
-import { PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, LAUNCH_SEQUENCES } from './gravsim_const.js';
+import {
+	PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS,
+	ROCKET_FUELS, LAUNCH_SEQUENCES
+} from './gravsim_const.js';
+import { UnitConvertUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * RocketLauncher Class
@@ -84,7 +88,7 @@ export class RocketLauncher {
 				const angleRad = this.hostAngleDeg * (Math.PI / 180);
 				const distance = host.radius + (param.RADIUS || 1) + this.hostAltitudeM;
 				
-				const distPx = this.universe.m2pix(distance);
+				const distPx = UnitConvertUtils.m2pix(distance);
 				const dxPx = Math.cos(angleRad) * distPx;
 				const dyPx = Math.sin(angleRad) * distPx;
 				
@@ -125,7 +129,7 @@ export class RocketLauncher {
 		const objName = this.universe.ObjectPlacer.getLaunchObjectName();
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		const rocketRadiusM = param.RADIUS || 1;
-		const screenRadiusPx = this.universe.m2pix(rocketRadiusM) * zoomScale;
+		const screenRadiusPx = UnitConvertUtils.m2pix(rocketRadiusM) * zoomScale;
 		const mSize = Math.max(10, screenRadiusPx);
 		
 		ctx.save();

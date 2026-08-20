@@ -106,11 +106,6 @@ export class Universe {
 	updateObject(obj) { this.ObjectManager.updateObject(obj); }
 	updateObjectParams(data) { this.ObjectManager.updateObjectParams(data); }
 
-	pix2au(px) { return this.Renderer.pix2au(px); }
-	au2pix(au) { return this.Renderer.au2pix(au); }
-	m2pix(m) { return this.Renderer.m2pix(m); }
-	pix2m(px) { return this.Renderer.pix2m(px); }
-
 	reset() {
 		this.ObjectManager.destroy();
 		const centerX = this.canvas.width / 2;
