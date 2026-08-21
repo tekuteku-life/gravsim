@@ -534,7 +534,7 @@ export const PAD_EFFECT = {
 	PARTICLES: {
 		'smoke_white': { COLOR: "#dddddd", SHAPE: 'circle', DRAG: 0.94, GROW_SPEED: 0.25, GRAVITY_MULT: 0.1, SIZE_MULT: 0.25, MAX_ALPHA: 0.35 },
 		'chill':       { COLOR: "#aaddff", SHAPE: 'circle', DRAG: 0.98, GROW_SPEED: 0.2, GRAVITY_MULT: 0, SIZE_MULT: 0.5, MAX_ALPHA: 1.0 },
-		'deluge':      { COLOR: "#cccccc", SHAPE: 'circle', DRAG: 0.98, GROW_SPEED: 0.65, GRAVITY_MULT: 0, SIZE_MULT: 0.8, MAX_ALPHA: 1.0 },
+		'deluge':      { COLOR: "#d4f0ff", SHAPE: 'stretch', DRAG: 0.98, GROW_SPEED: 0.65, GRAVITY_MULT: 0, SIZE_MULT: 0.8, MAX_ALPHA: 0.4 },
 		'spark':       { COLOR: "#ffdd55", SHAPE: 'circle', DRAG: 1.0, GROW_SPEED: 0.0, GRAVITY_MULT: 0, SIZE_MULT: 0.2, MAX_ALPHA: 1.0 },
 		'ice':         { COLOR: "#ffffff", SHAPE: 'square', DRAG: 1.0, GROW_SPEED: 0.0, GRAVITY_MULT: 0.5, SIZE_MULT: 0.2, MAX_ALPHA: 1.0 }
 	}

@@ -422,6 +422,17 @@ export class PadEffectRenderer {
 
 			if (pDef.SHAPE === 'square') {
 				ctx.fillRect(px - drawSize / 2, py - drawSize / 2, drawSize, drawSize);
+			} else if (pDef.SHAPE === 'stretch') {
+				const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+				const angle = Math.atan2(p.vy, p.vx);
+				const stretchFactor = Math.min(8.0, Math.max(1.0, speed * 0.03));
+
+				ctx.save();
+				ctx.translate(px, py);
+				ctx.rotate(angle);
+				ctx.ellipse(0, 0, drawSize * stretchFactor, drawSize, 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
 			} else {
 				ctx.arc(px, py, drawSize, 0, Math.PI * 2);
 				ctx.fill();
