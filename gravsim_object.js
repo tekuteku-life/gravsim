@@ -3,7 +3,7 @@
 
 import {
 	PHYSICS, RENDER, OBJECT_STATE,
-	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE
+	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE, PAD_EFFECT
 } from './gravsim_const.js';
 import { Trajectory } from './gravsim_trajectory.js';
 import { ColorUtils } from './gravsim_utils.js';
@@ -213,6 +213,7 @@ export class Rocket extends GravSimObject {
 		this.hostAltM = 0;
 		this.isHoldDown = false;
 		this.isIgnited = true;
+		this.isInternalPower = false;
 
 		this.telemetry = {
 			status: 0,
@@ -271,6 +272,12 @@ export class Rocket extends GravSimObject {
 		ctx.save();
 		ctx.translate(x, y);
 		ctx.rotate(this.thrustAngle);
+
+		if (this.isInternalPower) {
+			ctx.shadowColor = PAD_EFFECT.STRUCTURE.GLOW_COLOR;
+			ctx.shadowBlur = Math.max(10, screenRadius * PAD_EFFECT.STRUCTURE.GLOW_BLUR_MULT);
+		}
+
 		ctx.ellipse(0, 0, screenRadius * conf.BODY_LENGTH_MULT, screenRadius * conf.BODY_WIDTH_MULT, 0, 0, Math.PI * 2);
 		ctx.fill();
 		ctx.restore();

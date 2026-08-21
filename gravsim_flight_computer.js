@@ -1,7 +1,7 @@
 
 // gravsim_flight_computer.js
 
-import { PHYSICS, FLIGHT_COMPUTER_CONFIG, TELEMETRY } from './gravsim_const.js';
+import { PHYSICS, FLIGHT_COMPUTER_CONFIG, TELEMETRY, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 import { MathUtils } from './gravsim_utils.js';
 
 export class FlightComputer {
@@ -91,8 +91,18 @@ export class FlightComputer {
 				const uHx = -uRy;
 				const uHy = uRx;
 
-				const dvx = sensor.vx - sensor.refBody.vx;
-				const dvy = sensor.vy - sensor.refBody.vy;
+				// Calculate surface relative velocity
+				let hostVx = sensor.refBody.vx;
+				let hostVy = sensor.refBody.vy;
+				const refParam = DEFAULT_OBJECT_PARAMS[sensor.refBody.name];
+				if (refParam && refParam.ROTATION_PERIOD) {
+					const omega = (2 * Math.PI) / refParam.ROTATION_PERIOD;
+					hostVx += -omega * dy;
+					hostVy += omega * dx;
+				}
+
+				const dvx = sensor.vx - hostVx;
+				const dvy = sensor.vy - hostVy;
 				vV = dvx * uRx + dvy * uRy;
 				vH = dvx * uHx + dvy * uHy;
 

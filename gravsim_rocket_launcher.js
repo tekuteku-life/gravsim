@@ -7,6 +7,7 @@ import {
 	ROCKET_LAUNCHER_CONFIG
 } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
+import { PadEffectRenderer } from './gravsim_pad_effect.js';
 
 /*******************************************************************
  * RocketLauncher Class
@@ -40,10 +41,38 @@ export class RocketLauncher {
 		this.autoControl = true; // Auto Flight Computer flag
 
 		this.rolloutedRocketId = null;
+		
+		this.padEffect = new PadEffectRenderer();
+
+		// Register hooks using Pub/Sub
+		this.universe.Renderer.addDrawHook('before', (ctx, rc) => {
+			if (!this.isActive || !this.padEffect.isActive) { return; }
+			const context = this._buildPadContext();
+			if (context) { this.padEffect.drawBackground(ctx, rc, context); }
+		});
+
+		this.universe.Renderer.addDrawHook('after', (ctx, rc) => {
+			if (!this.isActive || !this.padEffect.isActive) { return; }
+			const context = this._buildPadContext();
+			if (context) { this.padEffect.drawForeground(ctx, rc, context); }
+		});
+
+		this.universe.on('sequencer-event', (eventName) => {
+			this.padEffect.handleEvent(eventName);
+			if (eventName.includes('INTERNAL POWER') && this.rolloutedRocketId !== null) {
+				const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
+				if (rocket) { rocket.isInternalPower = true; }
+			}
+		});
 
 		// Clear rollout state on liftoff so that the marker can be displayed for the next launch
 		this.universe.on('liftoff', () => {
+			if (this.rolloutedRocketId !== null) {
+				const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
+				if (rocket) rocket.isInternalPower = false;
+			}
 			this.rolloutedRocketId = null;
+			this.padEffect.handleLiftoff();
 		});
 	}
 
@@ -116,7 +145,7 @@ export class RocketLauncher {
 
 	drawTargetMarker(ctx, centerObject, zoomScale) {
 		if (this.mode !== 'host' || this.hostId === null) { return; }
-		if (this.rolloutedRocketId !== null) { return; }
+		if (this.rolloutedRocketId !== null || this.padEffect.isActive) { return; }
 
 		const host = this.universe.objects.find(o => o.id === this.hostId);
 		if (!host) { return; }
@@ -228,6 +257,8 @@ export class RocketLauncher {
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
 		this.rolloutedRocketId = newRocket.id;
 
+		this.padEffect.start(newRocket.id, this.hostId);
+
 		// Set new rocket to center object
 		this.universe.ObjectManager.centerObject = newRocket;
 		this.universe.ControlPanel.systemTab.updateCenterOptions();
@@ -264,6 +295,7 @@ export class RocketLauncher {
 				this.universe.ObjectManager.removeObject(obj);
 			}
 			this.rolloutedRocketId = null;
+			this.padEffect.stop();
 			this.universe.ControlPanel.rocketTab.setRolloutState(false);
 
 			this.universe.ControlPanel.rocketTab._setupLaunchEnvironment(this.hostId);
@@ -275,6 +307,33 @@ export class RocketLauncher {
 		const sequence = LAUNCH_SEQUENCES[sequenceType];
 		if (!sequence) { return; }
 		this.universe.LaunchSequencer.start(sequence, this.rolloutedRocketId);
+	}
+
+	_buildPadContext() {
+		const rocket = this.universe.objects.find(o => o.id === this.padEffect.targetRocketId);
+		const host = this.universe.objects.find(o => o.id === this.padEffect.hostId);
+		return {
+			rocket: rocket,
+			host: host,
+			m2pix: (m) => UnitConvertUtils.m2pix(m),
+			zoomScale: this.universe.zoomScale
+		};
+	}
+
+	update(dt) {
+		if (this.padEffect && this.padEffect.isActive) {
+			const context = this._buildPadContext();
+			if (context) this.padEffect.update(dt, context);
+			
+			if (this.padEffect.targetRocketId) {
+				const rocket = this.universe.objects.find(o => o.id === this.padEffect.targetRocketId);
+				if (rocket && rocket.telemetry && rocket.telemetry.altM > ROCKET_LAUNCHER_CONFIG.EFFECT_STOP_ALT_M) {
+					this.padEffect.stop();
+				} else if (!rocket) {
+					this.padEffect.stop();
+				}
+			}
+		}
 	}
 
 	getState() {

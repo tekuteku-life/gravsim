@@ -83,17 +83,14 @@ export class OverlayRenderer {
 		// Calculate appropriate distance step based on zoom scale
 		let stepAU = RENDER.DEBUG.STEP_MAX;
 		const oneAUPx = UnitConvertUtils.au2pix(1) * zoomScale;
-		
-		if (oneAUPx > 500) { 
-			stepAU = RENDER.DEBUG.STEP_DEFAULT; 
-		} else {
-			for (const threshold of RENDER.DEBUG.STEP_THRESHOLDS) {
-				if (oneAUPx < threshold.limit) {
-					stepAU = threshold.step;
-					break;
-				}
+
+		for (const threshold of RENDER.DEBUG.STEP_THRESHOLDS) {
+			if (oneAUPx < threshold.limit) {
+				stepAU = threshold.step;
+				break;
 			}
 		}
+		if (oneAUPx > 500) { stepAU = RENDER.DEBUG.STEP_DEFAULT; }
 
 		// Draw concentric circles up to screen boundary
 		const maxRadiusPx = Math.sqrt(Math.pow(ctx.canvas.width, 2) + Math.pow(ctx.canvas.height, 2));

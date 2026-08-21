@@ -22,7 +22,8 @@ export class Renderer {
 			basis: null,
 			zoomScale: 1,
 			trailLengthAU: 3.0,
-			centerObjectId: null
+			centerObjectId: null,
+			cameraOffset: { x: 0, y: 0 }
 		};
 	}
 

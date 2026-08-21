@@ -224,8 +224,9 @@ export class Universe {
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
 		const scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
 
-		// Launch Sequencer
+		// Launch Sequencer and Rocket Launcher effects
 		this.LaunchSequencer.update(scaledDt);
+		this.RocketLauncher.update(scaledDt);
 
 		// Update flight time for rocket
 		this.objects.forEach(obj => {
