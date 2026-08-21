@@ -64,7 +64,6 @@ export class PadEffectRenderer {
 	}
 
 	handleLiftoff() {
-		console.log("liftoff!");
 		this.flags.isVenting = false;
 		this.flags.isROFI = false;
 		

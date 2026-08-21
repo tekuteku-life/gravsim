@@ -13,7 +13,7 @@ export class FlightComputer {
 		};
 
 		this.currentThrustAngle = config.thrustAngle || 0;
-		this.initialThrustAngle = this.currentThrustAngle;
+		this.targetLaunchAngle = config.launchAngle !== undefined ? config.launchAngle : this.currentThrustAngle;
 		this.flightTime = 0;
 		
 		this.telemetryCache = {
@@ -172,7 +172,7 @@ export class FlightComputer {
 
 		// Max-Q Auto-Throttle (Flight Computer Feedback)
 		if (this.config.maxQAxialLimit !== Infinity) {
-			const isTailFirst = Math.cos(sensor.aoaDeg * Math.PI / 180) < 0;
+			const isTailFirst = Math.cos(this.telemetryCache.aoaDeg * Math.PI / 180) < 0;
 			const effectiveAxialLimitPa = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
 			const qRatio = (sensor.qAxialKpa * 1000) / effectiveAxialLimitPa;
 			
@@ -191,33 +191,40 @@ export class FlightComputer {
 
 	_computeThrustAngle(sensor) {
 		this.currentThrustAngle = MathUtils.normalizeAngle(this.currentThrustAngle);
+		const progradeAngle = this.telemetryCache.progradeAngle;
+		const zenithAngle = MathUtils.normalizeAngle(this.telemetryCache.gravityAngle + Math.PI);
 
 		// Track prograde direction after thrust stops
 		if (sensor.burnTime <= 0) {
-			const turnDiff = MathUtils.normalizeAngle(sensor.progradeAngle - this.currentThrustAngle);
+			const turnDiff = MathUtils.normalizeAngle(progradeAngle - this.currentThrustAngle);
 			const maxTurn = FLIGHT_COMPUTER_CONFIG.MAX_TURN_RATE_PER_SEC * sensor.dt;
 
 			if (Math.abs(turnDiff) > maxTurn) {
 				return this.currentThrustAngle + Math.sign(turnDiff) * maxTurn;
 			} else {
-				return sensor.progradeAngle;
+				return progradeAngle;
 			}
+		}
+
+		// Lock zenith angle while holding down
+		if (sensor.isHoldDown) {
+			return zenithAngle;
 		}
 
 		const Q = sensor.qAxialKpa + sensor.qLateralKpa;
 
 		// Tower Clearance
 		if (this.flightTime < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_TIME || (Q < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MIN_Q && this.telemetryCache.altM < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MAX_ALT)) {
-			let diff = MathUtils.normalizeAngle(this.initialThrustAngle - this.currentThrustAngle);
+			let diff = MathUtils.normalizeAngle(zenithAngle - this.currentThrustAngle);
 			
 			const maxTurn = FLIGHT_COMPUTER_CONFIG.PITCH_KICK_TURN_RATE * sensor.dt;
 			if (Math.abs(diff) > maxTurn) {
 				return this.currentThrustAngle + Math.sign(diff) * maxTurn;
 			}
-			return this.initialThrustAngle;
+			return zenithAngle;
 		}
 
-		let targetAngle = this.initialThrustAngle;
+		let targetAngle = this.targetLaunchAngle;
 
 		// Load Relief Control
 		if (Q > 0.05 && this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD) {
@@ -240,7 +247,7 @@ export class FlightComputer {
 			}
 		}
 
-		let angleDiff = MathUtils.normalizeAngle(targetAngle - sensor.progradeAngle);
+		let angleDiff = MathUtils.normalizeAngle(targetAngle - progradeAngle);
 
 		const isRetrogradeIntent = Math.abs(angleDiff) > Math.PI / 2;
 
@@ -249,13 +256,13 @@ export class FlightComputer {
 			let retroDiff = angleDiff > 0 ? angleDiff - Math.PI : angleDiff + Math.PI;
 			if (retroDiff > maxAoA) retroDiff = maxAoA;
 			if (retroDiff < -maxAoA) retroDiff = -maxAoA;
-			safeTargetAngle = sensor.progradeAngle + Math.PI + retroDiff;
+			safeTargetAngle = progradeAngle + Math.PI + retroDiff;
 		} else {
 			// Clamp angle to max AoA
 			if (angleDiff > maxAoA) { angleDiff = maxAoA; }
 			if (angleDiff < -maxAoA) { angleDiff = -maxAoA; }
 
-			safeTargetAngle = sensor.progradeAngle + angleDiff;
+			safeTargetAngle = progradeAngle + angleDiff;
 		}
 
 		let turnDiff = MathUtils.normalizeAngle(safeTargetAngle - this.currentThrustAngle);

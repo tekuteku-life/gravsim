@@ -238,11 +238,15 @@ export class RocketLauncher {
 		const finalMassTon = this.dryMassT;
 		const massLossRateTon = this.calculatedBurnTime > 0 ? (initialMassTon - finalMassTon) / this.calculatedBurnTime : 0;
 
+		const initialAngleRad = this.hostAngleDeg * (Math.PI / 180);
+		const targetLaunchAngleRad = this.launchAngleDeg * (Math.PI / 180);
+
 		const optParams = {
 			force: this.thrustKN * 1e3,
 			mass: initialMassTon,
 			emptyMass: finalMassTon,
-			angle: this.launchAngleDeg * (Math.PI / 180),
+			angle: initialAngleRad, // Initially set to zenith direction
+			launchAngle: targetLaunchAngleRad, // Target pitch angle for gravity turn
 			time: this.calculatedBurnTime,
 			lossRate: massLossRateTon,
 			maxGLimit: this.maxGLimit,

@@ -118,6 +118,7 @@ class PhysicsEngine {
 					thrustForce: data.thrustForce,
 					burnTime: data.burnTime,
 					thrustAngle: data.thrustAngle,
+					launchAngle: data.launchAngle,
 					maxGLimit: data.maxGLimit,
 					massLossRate: data.massLossRate,
 					autoControl: data.autoControl,
