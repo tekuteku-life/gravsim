@@ -75,11 +75,18 @@ export const ColorUtils = {
  * Math Utility class
  *******************************************************************/
 export const MathUtils = {
-	// Normalize angle
+	// Normalize angle (-PI to PI)
 	normalizeAngle(radians) {
 		let angle = radians;
 		while (angle > Math.PI) angle -= 2 * Math.PI;
 		while (angle < -Math.PI) angle += 2 * Math.PI;
+		return angle;
+	},
+
+	// Normalize angle (0 to 360 degrees)
+	normalizeAngle360(degrees) {
+		let angle = degrees % 360;
+		if (angle < 0) { angle += 360; }
 		return angle;
 	}
 };
@@ -88,10 +95,39 @@ export const MathUtils = {
  * Unit Convert Utility class for text and numbers
  *******************************************************************/
 export class UnitConvertUtils {
+	// Screen(Pixel) <=> Astronomical Unit
 	static pix2au(px) { return px / RENDER.DISTANCE_SCALE; }
 	static au2pix(au) { return au * RENDER.DISTANCE_SCALE; }
+
+	// Screen(Pixel) <=> Meters
 	static m2pix(m) { return UnitConvertUtils.au2pix(m / PHYSICS.METERS_PER_AU); }
 	static pix2m(px) { return PHYSICS.METERS_PER_AU * (UnitConvertUtils.pix2au(px)); }
+
+	// Angle (Degrees <=> Radians)
+	static deg2rad(deg) { return deg * (Math.PI / 180); }
+	static rad2deg(rad) { return rad * (180 / Math.PI); }
+
+	// Mass (Tons <=> Kilograms)
+	static ton2kg(ton) { return ton * 1000; }
+	static kg2ton(kg) { return kg / 1000; }
+
+	// Distance / Velocity (Meters <=> Kilometers)
+	static m2km(m) { return m / 1000; }
+	static km2m(km) { return km * 1000; }
+	static m2au(m) { return m / PHYSICS.METERS_PER_AU; }
+	static au2m(au) { return au * PHYSICS.METERS_PER_AU; }
+
+	// Time (Years <=> Seconds)
+	static year2sec(year) { return year * PHYSICS.YEARS_PER_SECOND; }
+	static sec2year(sec) { return sec / PHYSICS.YEARS_PER_SECOND; }
+
+	// Force (Kilo-Newtons <=> Newtons)
+	static kn2n(kn) { return kn * 1000; }
+	static n2kn(n) { return n / 1000; }
+
+	// Pressure (Pascals <=> Kilo-Pascals)
+	static pa2kpa(pa) { return pa / 1000; }
+	static kpa2pa(kpa) { return kpa * 1000; }
 }
 
 /*******************************************************************

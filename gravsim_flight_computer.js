@@ -2,7 +2,7 @@
 // gravsim_flight_computer.js
 
 import { PHYSICS, FLIGHT_COMPUTER_CONFIG, TELEMETRY, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
-import { MathUtils } from './gravsim_utils.js';
+import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
 
 export class FlightComputer {
 	constructor(config = {}) {
@@ -131,11 +131,11 @@ export class FlightComputer {
 		
 		let structRatio = 0;
 		if (this.config.maxQAxialLimit !== Infinity && this.config.maxQLateralLimit !== Infinity) {
-			const isTailFirst = Math.cos(sensor.aoaDeg * Math.PI / 180) < 0;
+			const isTailFirst = Math.cos(UnitConvertUtils.deg2rad(sensor.aoaDeg)) < 0;
 			const effectiveAxialLimit = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
 
-			const axialRatio = (sensor.qAxialKpa * 1000) / effectiveAxialLimit;
-			const lateralRatio = (sensor.qLateralKpa * 1000) / this.config.maxQLateralLimit;
+			const axialRatio = UnitConvertUtils.kpa2pa(sensor.qAxialKpa) / effectiveAxialLimit;
+			const lateralRatio = UnitConvertUtils.kpa2pa(sensor.qLateralKpa) / this.config.maxQLateralLimit;
 			structRatio = Math.max(axialRatio, lateralRatio) * 100;
 		}
 		this.telemetryCache.structRatio = structRatio;
@@ -172,9 +172,9 @@ export class FlightComputer {
 
 		// Max-Q Auto-Throttle (Flight Computer Feedback)
 		if (this.config.maxQAxialLimit !== Infinity) {
-			const isTailFirst = Math.cos(this.telemetryCache.aoaDeg * Math.PI / 180) < 0;
+			const isTailFirst = Math.cos(UnitConvertUtils.deg2rad(this.telemetryCache.aoaDeg)) < 0;
 			const effectiveAxialLimitPa = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
-			const qRatio = (sensor.qAxialKpa * 1000) / effectiveAxialLimitPa;
+			const qRatio = UnitConvertUtils.kpa2pa(sensor.qAxialKpa) / effectiveAxialLimitPa;
 			
 			if (!isTailFirst && qRatio > FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) {
 				let qThrottle = 1.0 - (qRatio - FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) * 5.0;
@@ -229,7 +229,7 @@ export class FlightComputer {
 		// Load Relief Control
 		if (Q > 0.05 && this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD) {
 			const stallFactor = Math.max(0, (FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD - this.telemetryCache.vV) / FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD);
-			const maxPitchUp = FLIGHT_COMPUTER_CONFIG.ANTI_STALL_MAX_PITCH_UP * (Math.PI / 180);
+			const maxPitchUp = UnitConvertUtils.deg2rad(FLIGHT_COMPUTER_CONFIG.ANTI_STALL_MAX_PITCH_UP);
 			
 			const upAngle = this.telemetryCache.gravityAngle + Math.PI;
 			let angleToUp = MathUtils.normalizeAngle(upAngle - targetAngle);
@@ -237,7 +237,7 @@ export class FlightComputer {
 			targetAngle += Math.sign(angleToUp) * Math.min(Math.abs(angleToUp), maxPitchUp) * stallFactor;
 		}
 
-		const Q_Pa = Q * 1000;
+		const Q_Pa = UnitConvertUtils.kpa2pa(Q);
 		let maxAoA = Math.PI;
 		if (Q_Pa > 100 && this.config.maxQLateralLimit !== Infinity) {
 			const safeLateralLimit = this.config.maxQLateralLimit * FLIGHT_COMPUTER_CONFIG.LOAD_RELIEF_SAFE_MARGIN;

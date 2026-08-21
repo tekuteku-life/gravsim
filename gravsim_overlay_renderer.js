@@ -130,7 +130,7 @@ export class OverlayRenderer {
 			val = val / PHYSICS.METERS_PER_AU;
 		} else if (val > 1000) {
 			unit = "km";
-			val = val / 1000;
+			val = UnitConvertUtils.m2km(val);
 		}
 
 		// Make it even number
@@ -147,7 +147,7 @@ export class OverlayRenderer {
 		// Re-calculate pix
 		let niceM = niceVal;
 		if (unit === "AU") { niceM = niceVal * PHYSICS.METERS_PER_AU; }
-		else if (unit === "km") { niceM = niceVal * 1000; }
+		else if (unit === "km") { niceM = UnitConvertUtils.km2m(niceVal); }
 		const drawPx = Math.round(UnitConvertUtils.m2pix(niceM) * zoomScale);
 
 		// Generate indicator number text

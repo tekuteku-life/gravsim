@@ -75,13 +75,13 @@ export class NaviTab {
 		}
 
 		DOMUtils.setText(this.ui.nvMass, target.mass.toExponential(2) + " t");
-		DOMUtils.setText(this.ui.nvRadius, (target.radius/1000).toLocaleString('en-US') + " km");
+		DOMUtils.setText(this.ui.nvRadius, UnitConvertUtils.m2km(target.radius).toLocaleString('en-US') + " km");
 
-		const surfaceG_ms2 = (PHYSICS.G * (target.mass*1e3)) / (target.radius * target.radius);
+		const surfaceG_ms2 = (PHYSICS.G * UnitConvertUtils.ton2kg(target.mass)) / (target.radius * target.radius);
 		DOMUtils.setText(this.ui.nvSurfaceG, (surfaceG_ms2 / PHYSICS.G0).toFixed(2) + " G (" + surfaceG_ms2.toFixed(2) + " m/s²)");
 
-		const escapeV = Math.sqrt(2 * PHYSICS.G * (target.mass*1e3) / target.radius);
-		DOMUtils.setText(this.ui.nvEscapeV, (escapeV/1000).toFixed(2) + " km/s");
+		const escapeV = Math.sqrt(2 * PHYSICS.G * UnitConvertUtils.ton2kg(target.mass) / target.radius);
+		DOMUtils.setText(this.ui.nvEscapeV, UnitConvertUtils.m2km(escapeV).toFixed(2) + " km/s");
 
 		let refBody = null;
 		let distToRefM = 0;
@@ -92,10 +92,10 @@ export class NaviTab {
 
 		if (refBody) {
 			DOMUtils.setText(this.ui.nvRefBody, refBody.name);
-			DOMUtils.setText(this.ui.nvAlt, ((distToRefM - refBody.radius)/1000).toLocaleString('en-US', {maximumFractionDigits:0}) + " km");
+			DOMUtils.setText(this.ui.nvAlt, UnitConvertUtils.m2km(distToRefM - refBody.radius).toLocaleString('en-US', {maximumFractionDigits:0}) + " km");
 			const vx = UnitConvertUtils.pix2m(target.vx - refBody.vx);
 			const vy = UnitConvertUtils.pix2m(target.vy - refBody.vy);
-			DOMUtils.setText(this.ui.nvVel, (Math.sqrt(vx*vx + vy*vy)/1000).toFixed(2) + " km/s");
+			DOMUtils.setText(this.ui.nvVel, UnitConvertUtils.m2km(Math.sqrt(vx*vx + vy*vy)).toFixed(2) + " km/s");
 		} else {
 			DOMUtils.setText(this.ui.nvRefBody, "NONE");
 			DOMUtils.setText(this.ui.nvAlt, "--- km");
@@ -104,7 +104,7 @@ export class NaviTab {
 
 		const param = DEFAULT_OBJECT_PARAMS[target.name];
 		if (param && param.ATM_LIMIT_ALT) {
-			DOMUtils.setText(this.ui.nvAtmAlt, (param.ATM_LIMIT_ALT/1000).toLocaleString() + " km");
+			DOMUtils.setText(this.ui.nvAtmAlt, UnitConvertUtils.m2km(param.ATM_LIMIT_ALT).toLocaleString() + " km");
 			DOMUtils.setText(this.ui.nvAtmRho, param.ATM_DENSITY_0.toLocaleString() + " kg/m³");
 			DOMUtils.setText(this.ui.nvAtmScale, param.ATM_SCALE_HEIGHT.toLocaleString() + " m");
 		} else {

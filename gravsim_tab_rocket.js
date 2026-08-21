@@ -170,15 +170,15 @@ export class RocketTab {
 		
 		const fuel = ROCKET_FUELS[rl.fuelType] || ROCKET_FUELS['liquid'];
 		const ve = fuel.isp * PHYSICS.G0;
-		const m0 = (rl.dryMassT + rl.fuelAmountT) * 1e3;
-		const mf = rl.dryMassT * 1e3;
+		const m0 = UnitConvertUtils.ton2kg(rl.dryMassT + rl.fuelAmountT);
+		const mf = UnitConvertUtils.ton2kg(rl.dryMassT);
 		
-		const massFlowRateKgS = (rl.thrustKN * 1e3) / ve;
-		const maxBurnTime = massFlowRateKgS > 0 ? (rl.fuelAmountT * 1e3) / massFlowRateKgS : 0;
+		const massFlowRateKgS = UnitConvertUtils.kn2n(rl.thrustKN) / ve;
+		const maxBurnTime = massFlowRateKgS > 0 ? UnitConvertUtils.ton2kg(rl.fuelAmountT) / massFlowRateKgS : 0;
 		
 		let dvKmS = 0;
 		if (maxBurnTime > 0 && rl.thrustKN > 0) {
-			dvKmS = (ve * Math.log(m0 / mf)) / 1000;
+			dvKmS = UnitConvertUtils.m2km(ve * Math.log(m0 / mf));
 		}
 
 		// Calculate Local Gravity and Direction
@@ -189,7 +189,7 @@ export class RocketTab {
 		if (rl.mode === 'host') {
 			host = this.universe.objects.find(o => o.id === rl.hostId) || this.universe.centerObject;
 			if (host) {
-				upAngleRad = rl.hostAngleDeg * (Math.PI / 180);
+				upAngleRad = UnitConvertUtils.deg2rad(rl.hostAngleDeg);
 				rMeters = host.radius + (param.RADIUS || 1) + rl.hostAltitudeM;
 			}
 		} else {
@@ -211,15 +211,15 @@ export class RocketTab {
 		// Calculate Vector TWR
 		if (host && rMeters > 0) {
 			hostName = host.name;
-			const hostMassKg = host.mass * 1e3;
+			const hostMassKg = UnitConvertUtils.ton2kg(host.mass);
 
 			// Calculate local gravity (g = GM / r^2)
 			const localG = (PHYSICS.G * hostMassKg) / (rMeters * rMeters);
-			const weightN = (rl.dryMassT + rl.fuelAmountT) * 1e3 * localG;
-			const thrustN = rl.thrustKN * 1e3;
+			const weightN = UnitConvertUtils.ton2kg(rl.dryMassT + rl.fuelAmountT) * localG;
+			const thrustN = UnitConvertUtils.kn2n(rl.thrustKN);
 
 			// Transform thrust vector to relative degree
-			const thrustAngleRad = rl.launchAngleDeg * (Math.PI / 180);
+			const thrustAngleRad = UnitConvertUtils.deg2rad(rl.launchAngleDeg);
 			const relAngleRad = thrustAngleRad - upAngleRad;
 
 			const thrustY = thrustN * Math.cos(relAngleRad);

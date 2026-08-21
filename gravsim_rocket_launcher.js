@@ -101,12 +101,12 @@ export class RocketLauncher {
 		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
 		const ve = fuel.isp * PHYSICS.G0; // Exhaust velocity
-		const m0 = (this.dryMassT + this.fuelAmountT) * 1e3; // Initial mass in kg
-		const mf = this.dryMassT * 1e3; // Final mass in kg
+		const m0 = UnitConvertUtils.ton2kg(this.dryMassT + this.fuelAmountT); // Initial mass in kg
+		const mf = UnitConvertUtils.ton2kg(this.dryMassT); // Final mass in kg
 
 		// Calculate Max Burn Time based on Thrust and Isp
-		const massFlowRateKgS = (this.thrustKN * 1e3) / ve;
-		this.calculatedBurnTime = massFlowRateKgS > 0 ? (this.fuelAmountT * 1e3) / massFlowRateKgS : 0;
+		const massFlowRateKgS = UnitConvertUtils.kn2n(this.thrustKN) / ve;
+		this.calculatedBurnTime = massFlowRateKgS > 0 ? UnitConvertUtils.ton2kg(this.fuelAmountT) / massFlowRateKgS : 0;
 		
 		if (this.calculatedBurnTime > 0 && this.thrustKN > 0) {
 			deltaVM = ve * Math.log(m0 / mf);
@@ -115,7 +115,7 @@ export class RocketLauncher {
 		if (this.mode === 'host') {
 			const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.centerObject;
 			if (host) {
-				const angleRad = this.hostAngleDeg * (Math.PI / 180);
+				const angleRad = UnitConvertUtils.deg2rad(this.hostAngleDeg);
 				const distance = host.radius + (param.RADIUS || 1) + this.hostAltitudeM;
 				
 				const distPx = UnitConvertUtils.m2pix(distance);
@@ -187,7 +187,7 @@ export class RocketLauncher {
 		ctx.fill();
 
 		// Launch vector line
-		ctx.rotate(this.launchAngleDeg * (Math.PI / 180));
+		ctx.rotate(UnitConvertUtils.deg2rad(this.launchAngleDeg));
 		ctx.strokeStyle = conf.HOST_FILL;
 		ctx.setLineDash(conf.HOST_DASH);
 		ctx.beginPath();
@@ -238,11 +238,11 @@ export class RocketLauncher {
 		const finalMassTon = this.dryMassT;
 		const massLossRateTon = this.calculatedBurnTime > 0 ? (initialMassTon - finalMassTon) / this.calculatedBurnTime : 0;
 
-		const initialAngleRad = this.hostAngleDeg * (Math.PI / 180);
-		const targetLaunchAngleRad = this.launchAngleDeg * (Math.PI / 180);
+		const initialAngleRad = UnitConvertUtils.deg2rad(this.hostAngleDeg);
+		const targetLaunchAngleRad = UnitConvertUtils.deg2rad(this.launchAngleDeg);
 
 		const optParams = {
-			force: this.thrustKN * 1e3,
+			force: UnitConvertUtils.kn2n(this.thrustKN),
 			mass: initialMassTon,
 			emptyMass: finalMassTon,
 			angle: initialAngleRad, // Initially set to zenith direction
@@ -252,7 +252,7 @@ export class RocketLauncher {
 			maxGLimit: this.maxGLimit,
 			autoControl: this.autoControl,
 			hostId: this.hostId,
-			hostAngleRad: this.hostAngleDeg * (Math.PI / 180),
+			hostAngleRad: UnitConvertUtils.deg2rad(this.hostAngleDeg),
 			hostAltM: this.hostAltitudeM,
 			isHoldDown: true,
 			isIgnited: false

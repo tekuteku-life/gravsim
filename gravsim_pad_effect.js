@@ -2,6 +2,7 @@
 // gravsim_pad_effect.js
 
 import { PAD_EFFECT, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
+import { UnitConvertUtils } from './gravsim_utils.js';
 
 export class PadEffectRenderer {
 	constructor() {
@@ -338,7 +339,7 @@ export class PadEffectRenderer {
 		// Main Strongback (Truss)
 		ctx.save();
 		ctx.translate(rPx * conf.STRONGBACK_X_MULT, rPx * conf.STRONGBACK_Y_MULT);
-		ctx.rotate(this.strongbackAngle * Math.PI / 180);
+		ctx.rotate(UnitConvertUtils.deg2rad(this.strongbackAngle));
 		ctx.fillStyle = conf.TRUSS_COLOR;
 		ctx.fillRect(-b * 0.5, -b * 0.2, b * conf.STRONGBACK_W_MULT, b * conf.STRONGBACK_H_MULT);
 		
@@ -357,7 +358,7 @@ export class PadEffectRenderer {
 		// Umbilical Tower & Cables (Placed on the right side)
 		ctx.save();
 		ctx.translate(rPx * conf.UMBILICAL_OFFSET_X, rPx * conf.UMBILICAL_OFFSET_Y);
-		ctx.rotate(-this.umbilicalAngle * Math.PI / 180);
+		ctx.rotate(UnitConvertUtils.deg2rad(-this.umbilicalAngle));
 		ctx.fillStyle = conf.TRUSS_COLOR;
 		ctx.fillRect(-b * 0.3, -b * 0.1, b * conf.UMBILICAL_W_MULT, b * conf.UMBILICAL_H_MULT);
 

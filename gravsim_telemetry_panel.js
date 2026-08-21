@@ -171,16 +171,15 @@ export class TelemetryPanel {
 
 		DOMUtils.setText(this.ui.mass, target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' '));
 		DOMUtils.setText(this.ui.twr, FormatUtils.numFixPad(tm.twr, 2, 6));
-		DOMUtils.setText(this.ui.remDv, FormatUtils.numFixPad(tm.remDv / 1e3, 2, 6));
+		DOMUtils.setText(this.ui.remDv, FormatUtils.numFixPad(UnitConvertUtils.m2km(tm.remDv), 2, 6));
 
-		DOMUtils.setText(this.ui.alt, (tm.altM / 1000).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' '));
-		DOMUtils.setText(this.ui.velV, FormatUtils.numFixPad(tm.vV / 1e3, 2, 7));
-		DOMUtils.setText(this.ui.velH, FormatUtils.numFixPad(tm.vH / 1e3, 2, 7));
+		DOMUtils.setText(this.ui.alt, UnitConvertUtils.m2km(tm.altM).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' '));
+		DOMUtils.setText(this.ui.velV, FormatUtils.numFixPad(UnitConvertUtils.m2km(tm.vV), 2, 7));
+		DOMUtils.setText(this.ui.velH, FormatUtils.numFixPad(UnitConvertUtils.m2km(tm.vH), 2, 7));
 		DOMUtils.setText(this.ui.accV, FormatUtils.numFixPad(tm.aV, 2, 7));
 		DOMUtils.setText(this.ui.accH, FormatUtils.numFixPad(tm.aH, 2, 7));
 
-		let pitchDeg = (target.thrustAngle * 180 / Math.PI) % 360;
-		if (pitchDeg < 0) { pitchDeg += 360; }
+		const pitchDeg = MathUtils.normalizeAngle360(UnitConvertUtils.rad2deg(target.thrustAngle));
 		DOMUtils.setText(this.ui.pitch, FormatUtils.numFixPad(pitchDeg, 1, 6));
 		DOMUtils.setText(this.ui.aoa, FormatUtils.numFixPad(tm.aoaDeg, 1, 5));
 		DOMUtils.setText(this.ui.dyn, FormatUtils.numFixPad(tm.structRatio, 1, 5));

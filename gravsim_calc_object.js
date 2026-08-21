@@ -7,7 +7,7 @@ import {
 	OBJECT_TYPES, SIMULATION
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
-import { MathUtils } from './gravsim_utils.js';
+import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * Calculation Object Class for Base
@@ -264,10 +264,10 @@ export class CalcRocket extends GravSimCalcObject {
 			const sinAoA = Math.sin(aoa);
 			area = objParam.AERO_AREA_FRONT * (1 - sinAoA) + objParam.AERO_AREA_SIDE * sinAoA;
 
-			this._aoaDeg = angleDiff * (180 / Math.PI);
+			this._aoaDeg = UnitConvertUtils.rad2deg(angleDiff);
 			const q = 0.5 * rho * vRelSq;
-			this._qAxialKpa = (q * Math.pow(Math.cos(angleDiff), 2)) / 1000;
-			this._qLateralKpa = (q * Math.pow(Math.sin(angleDiff), 2)) / 1000;
+			this._qAxialKpa = UnitConvertUtils.pa2kpa(q * Math.pow(Math.cos(angleDiff), 2));
+			this._qLateralKpa = UnitConvertUtils.pa2kpa(q * Math.pow(Math.sin(angleDiff), 2));
 			this._progradeAngle = velAngle;
 		} else {
 			this._progradeAngle = velAngle;
@@ -281,11 +281,11 @@ export class CalcRocket extends GravSimCalcObject {
 		const maxQAxial = objParam?.MAX_Q_AXIAL || Infinity;
 		const maxQLateral = objParam?.MAX_Q_LATERAL || Infinity;
 
-		const isTailFirst = Math.cos(this._aoaDeg * Math.PI / 180) < 0;
+		const isTailFirst = Math.cos(UnitConvertUtils.deg2rad(this._aoaDeg)) < 0;
 		const effectiveMaxQAxial = isTailFirst ? maxQLateral : maxQAxial;
 
-		const currentQAxialPa = this._qAxialKpa * 1000;
-		const currentQLateralPa = this._qLateralKpa * 1000;
+		const currentQAxialPa = UnitConvertUtils.kpa2pa(this._qAxialKpa);
+		const currentQLateralPa = UnitConvertUtils.kpa2pa(this._qLateralKpa);
 
 		if (currentQAxialPa > effectiveMaxQAxial || currentQLateralPa > maxQLateral) {
 			this.shattered = true;
@@ -375,7 +375,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 		this._progradeAngle = velAngle;
 		const angleDiff = Math.abs(MathUtils.normalizeAngle(this.thrustAngle - velAngle));
-		this._aoaDeg = angleDiff * (180 / Math.PI);
+		this._aoaDeg = UnitConvertUtils.rad2deg(angleDiff);
 	}
 }
 

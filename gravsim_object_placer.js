@@ -3,11 +3,7 @@
 
 import { PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
-import { UnitConvertUtils } from './gravsim_utils.js';
-
-function AU2M(au) {
-	return au * PHYSICS.METERS_PER_AU;
-}
+import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * ObjectPlacer class that manages the placement of objects in the universe.
@@ -128,15 +124,15 @@ export class ObjectPlacer {
 		// Get A/E (circular orbit by default)
 		const a_au = param.A || 1;
 		const e = param.E || 0;
-		const a_m = AU2M(a_au);
+		const a_m = UnitConvertUtils.au2m(a_au);
 		const r_p_m = a_m * (1 - e); // perihelion distance (m)
 
 		// Calculate velocity at perihelion by using Vis-viva equation
-		const totalMassKg = (hostObj.mass + param.MASS) * 1e3;
+		const totalMassKg = UnitConvertUtils.ton2kg(hostObj.mass + param.MASS);
 		const v_p_m = Math.sqrt(PHYSICS.G * totalMassKg * (2 / r_p_m - 1 / a_m));
 
 		const perihelionDeg = param.PERIHELION_DEG || 0;
-		const theta = perihelionDeg * (Math.PI / 180);
+		const theta = UnitConvertUtils.deg2rad(perihelionDeg);
 
 		const r_p_px = UnitConvertUtils.m2pix(r_p_m);
 		const relX = r_p_px * Math.cos(theta);
@@ -271,9 +267,9 @@ export class ObjectPlacer {
 		if (!this.isSlingshotting || this.startRelX == null) { return; }
 
 		const v = this._calculateSlingshotVelocity(this.startScreenX, this.startScreenY, this.screenCursorX, this.screenCursorY);
-		const speed_kms = Math.sqrt(v.vx * v.vx + v.vy * v.vy) / 1000;
-		const angle_deg = Math.atan2(v.vy, v.vx) * (180 / Math.PI);
-		const displayAngle = angle_deg < 0 ? angle_deg + 360 : angle_deg;
+		const speed_kms = UnitConvertUtils.m2km(Math.sqrt(v.vx * v.vx + v.vy * v.vy));
+		const angle_deg = UnitConvertUtils.rad2deg(Math.atan2(v.vy, v.vx));
+		const displayAngle = MathUtils.normalizeAngle360(angle_deg);
 
 		const relStartX = this.startRelX * zoomScale;
 		const relStartY = this.startRelY * zoomScale;

@@ -125,7 +125,7 @@ export class ObjectManager {
 		if (obj.type === OBJECT_TYPES.ROCKET) {
 			Object.assign(payload, this._buildRocketPayload(obj));
 		} else {
-			payload.mass = obj.mass * 1e3;
+			payload.mass = UnitConvertUtils.ton2kg(obj.mass);
 			payload.fuelMass = 0;
 		}
 
@@ -134,13 +134,13 @@ export class ObjectManager {
 
 	_buildRocketPayload(obj) {
 		return {
-			mass: obj.dryMass * 1e3,
-			fuelMass: obj.fuelMass * 1e3,
+			mass: UnitConvertUtils.ton2kg(obj.dryMass),
+			fuelMass: UnitConvertUtils.ton2kg(obj.fuelMass),
 			thrustForce: obj.thrustForce || 0,
 			burnTime: obj.burnTime || 0,
 			thrustAngle: obj.thrustAngle || 0,
 			launchAngle: obj.launchAngle !== undefined ? obj.launchAngle : (obj.thrustAngle || 0),
-			massLossRate: (obj.massLossRate || 0) * 1e3,
+			massLossRate: UnitConvertUtils.ton2kg(obj.massLossRate || 0),
 			maxGLimit: obj.maxGLimit || 0,
 			autoControl: obj.autoControl !== undefined ? obj.autoControl : true,
 			hostId: obj.hostId !== undefined ? obj.hostId : null,
@@ -165,7 +165,7 @@ export class ObjectManager {
 			x: UnitConvertUtils.pix2m(obj.x), y: UnitConvertUtils.pix2m(obj.y),
 			vx: UnitConvertUtils.pix2m(obj.vx), vy: UnitConvertUtils.pix2m(obj.vy),
 			ax: UnitConvertUtils.pix2m(obj.ax), ay: UnitConvertUtils.pix2m(obj.ay),
-			mass: obj.mass * 1e3,
+			mass: UnitConvertUtils.ton2kg(obj.mass),
 			radius: obj.radius,
 			generation: obj.generation,
 		});
@@ -192,8 +192,8 @@ export class ObjectManager {
 				target.ay = UnitConvertUtils.m2pix(objData.ay);
 
 				if (objData.type === OBJECT_TYPES.ROCKET) {
-					target.dryMass = objData.mass / 1e3;
-					target.fuelMass = objData.fuelMass / 1e3;
+					target.dryMass = UnitConvertUtils.kg2ton(objData.mass);
+					target.fuelMass = UnitConvertUtils.kg2ton(objData.fuelMass);
 					target.burnTime = objData.burnTime;
 					target.thrustRatio = objData.thrustRatio;
 					target.isHoldDown = objData.isHoldDown;
@@ -219,7 +219,7 @@ export class ObjectManager {
 					};
 					target.thrustAngle = objData.thrustAngle;
 				} else {
-					target.mass = objData.mass / 1e3;
+					target.mass = UnitConvertUtils.kg2ton(objData.mass);
 				}
 				
 				target.radius = objData.radius;
@@ -237,7 +237,7 @@ export class ObjectManager {
 						// Generate debris and effects via DebrisGenerator
 						const debrisData = DebrisGenerator.generateFromImpact(
 							target,
-							objData.debrisMass / 1e3,
+							UnitConvertUtils.kg2ton(objData.debrisMass),
 							UnitConvertUtils.m2pix(objData.impactVx),
 							UnitConvertUtils.m2pix(objData.impactVy),
 							UnitConvertUtils.m2pix(objData.impactWinnerX),
