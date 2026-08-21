@@ -151,6 +151,35 @@ export const RENDER = {
 		RAD_RATIO_MIN: 0.6,
 		RAD_RATIO_VAR: 0.6,
 		ROT_SPEED_VAR: 0.005
+	},
+	SLINGSHOT: {
+		GUIDE_RADIUS: 12,
+		GUIDE_CROSS: 16,
+		GUIDE_COLOR: "rgba(0, 255, 204, 0.4)",
+		LINE_DASH: [4, 4],
+		LINE_OPPOSITE_COLOR: "rgba(0, 255, 204, 0.3)",
+		LINE_VECTOR_COLOR: "rgba(0, 255, 204, 0.9)",
+		LINE_WIDTH: 2,
+		ARROW_MIN_LEN: 5,
+		ARROW_HEAD_LEN: 8,
+		ARROW_INDENT_MULT: 0.6,
+		ARROW_ANGLE: Math.PI / 6,
+		HUD_OFFSET_X: 20,
+		HUD_OFFSET_Y: -80,
+		HUD_WIDTH: 140,
+		HUD_HEIGHT: 75,
+		HUD_RAD: 4,
+		HUD_BG_COLOR: "rgba(0, 20, 0, 0.85)",
+		HUD_BORDER_COLOR: "rgba(0, 255, 204, 0.6)",
+		HUD_TEXT_COLOR_MAIN: "#00ffcc",
+		HUD_TEXT_COLOR_SUB: "#00aa88",
+		HUD_FONT_TITLE: "bold 12px 'Courier New', Courier, monospace",
+		HUD_FONT_BODY: "11px 'Courier New', Courier, monospace",
+		HUD_PAD_X: 8,
+		HUD_PAD_Y_TITLE: 8,
+		HUD_PAD_Y_MASS: 26,
+		HUD_PAD_Y_VEL: 42,
+		HUD_PAD_Y_ANG: 56
 	}
 };
 

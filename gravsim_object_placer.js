@@ -1,7 +1,7 @@
 
 // gravsim_object_placer.js
 
-import { PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
+import { PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS, RENDER } from './gravsim_const.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
 import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
 
@@ -283,23 +283,25 @@ export class ObjectPlacer {
 		const endX = relStartX + Math.cos(Math.atan2(v.vy, v.vx)) * lineLength;
 		const endY = relStartY + Math.sin(Math.atan2(v.vy, v.vx)) * lineLength;
 
+		const conf = RENDER.SLINGSHOT;
+
 		ctx.save();
 
 		// Guide circle
-		ctx.strokeStyle = "rgba(0, 255, 204, 0.4)";
+		ctx.strokeStyle = conf.GUIDE_COLOR;
 		ctx.lineWidth = 1;
 		ctx.beginPath();
-		ctx.arc(relStartX, relStartY, 12, 0, Math.PI * 2);
-		ctx.moveTo(relStartX - 16, relStartY);
-		ctx.lineTo(relStartX + 16, relStartY);
-		ctx.moveTo(relStartX, relStartY - 16);
-		ctx.lineTo(relStartX, relStartY + 16);
+		ctx.arc(relStartX, relStartY, conf.GUIDE_RADIUS, 0, Math.PI * 2);
+		ctx.moveTo(relStartX - conf.GUIDE_CROSS, relStartY);
+		ctx.lineTo(relStartX + conf.GUIDE_CROSS, relStartY);
+		ctx.moveTo(relStartX, relStartY - conf.GUIDE_CROSS);
+		ctx.lineTo(relStartX, relStartY + conf.GUIDE_CROSS);
 		ctx.stroke();
 
 		// Indicator opposite side to direction
-		ctx.strokeStyle = "rgba(0, 255, 204, 0.3)";
+		ctx.strokeStyle = conf.LINE_OPPOSITE_COLOR;
 		ctx.lineWidth = 1;
-		ctx.setLineDash([4, 4]);
+		ctx.setLineDash(conf.LINE_DASH);
 		ctx.beginPath();
 		ctx.moveTo(relStartX, relStartY);
 		ctx.lineTo(relCurX, relCurY);
@@ -307,23 +309,23 @@ export class ObjectPlacer {
 
 		// Vector of direction
 		ctx.setLineDash([]);
-		ctx.strokeStyle = "rgba(0, 255, 204, 0.9)";
-		ctx.lineWidth = 2;
+		ctx.strokeStyle = conf.LINE_VECTOR_COLOR;
+		ctx.lineWidth = conf.LINE_WIDTH;
 		ctx.beginPath();
 		ctx.moveTo(relStartX, relStartY);
 		ctx.lineTo(endX, endY);
 		ctx.stroke();
 
 		// Top of arrow
-		if (lineLength > 5) {
-			const headlen = 8;
+		if (lineLength > conf.ARROW_MIN_LEN) {
+			const headlen = conf.ARROW_HEAD_LEN;
 			const launchRad = Math.atan2(v.vy, v.vx);
-			ctx.fillStyle = "rgba(0, 255, 204, 0.9)";
+			ctx.fillStyle = conf.LINE_VECTOR_COLOR;
 			ctx.beginPath();
 			ctx.moveTo(endX, endY);
-			ctx.lineTo(endX - headlen * Math.cos(launchRad - Math.PI / 6), endY - headlen * Math.sin(launchRad - Math.PI / 6));
-			ctx.lineTo(endX - (headlen * 0.6) * Math.cos(launchRad), endY - (headlen * 0.6) * Math.sin(launchRad));
-			ctx.lineTo(endX - headlen * Math.cos(launchRad + Math.PI / 6), endY - headlen * Math.sin(launchRad + Math.PI / 6));
+			ctx.lineTo(endX - headlen * Math.cos(launchRad - conf.ARROW_ANGLE), endY - headlen * Math.sin(launchRad - conf.ARROW_ANGLE));
+			ctx.lineTo(endX - (headlen * conf.ARROW_INDENT_MULT) * Math.cos(launchRad), endY - (headlen * conf.ARROW_INDENT_MULT) * Math.sin(launchRad));
+			ctx.lineTo(endX - headlen * Math.cos(launchRad + conf.ARROW_ANGLE), endY - headlen * Math.sin(launchRad + conf.ARROW_ANGLE));
 			ctx.closePath();
 			ctx.fill();
 		}
@@ -334,31 +336,31 @@ export class ObjectPlacer {
 		const massText = param.MASS.toExponential(2) + " t";
 
 		// Adjust center offset
-		const hudX = (this.screenCursorX - this.universe.canvas.width / 2) + 20;
-		const hudY = (this.screenCursorY - this.universe.canvas.height / 2) - 80;
+		const hudX = (this.screenCursorX - this.universe.canvas.width / 2) + conf.HUD_OFFSET_X;
+		const hudY = (this.screenCursorY - this.universe.canvas.height / 2) + conf.HUD_OFFSET_Y;
 
 		// HUD background
-		ctx.fillStyle = "rgba(0, 20, 0, 0.85)";
-		ctx.strokeStyle = "rgba(0, 255, 204, 0.6)";
+		ctx.fillStyle = conf.HUD_BG_COLOR;
+		ctx.strokeStyle = conf.HUD_BORDER_COLOR;
 		ctx.lineWidth = 1;
 		ctx.beginPath();
-		ctx.roundRect(hudX, hudY, 140, 75, 4);
+		ctx.roundRect(hudX, hudY, conf.HUD_WIDTH, conf.HUD_HEIGHT, conf.HUD_RAD);
 		ctx.fill();
 		ctx.stroke();
 
 		//Text
-		ctx.fillStyle = "#00ffcc";
-		ctx.font = "bold 12px 'Courier New', Courier, monospace";
+		ctx.fillStyle = conf.HUD_TEXT_COLOR_MAIN;
+		ctx.font = conf.HUD_FONT_TITLE;
 		ctx.textAlign = "left";
 		ctx.textBaseline = "top";
-		ctx.fillText(`[ LAUNCH: ${objName.toUpperCase()} ]`, hudX + 8, hudY + 8);
+		ctx.fillText(`[ LAUNCH: ${objName.toUpperCase()} ]`, hudX + conf.HUD_PAD_X, hudY + conf.HUD_PAD_Y_TITLE);
 
-		ctx.font = "11px 'Courier New', Courier, monospace";
-		ctx.fillStyle = "#00aa88";
-		ctx.fillText(`MASS: ${massText}`, hudX + 8, hudY + 26);
-		ctx.fillStyle = "#00ffcc";
-		ctx.fillText(`VEL : ${speed_kms.toFixed(2)} km/s`, hudX + 8, hudY + 42);
-		ctx.fillText(`ANG : ${displayAngle.toFixed(1)}°`, hudX + 8, hudY + 56);
+		ctx.font = conf.HUD_FONT_BODY;
+		ctx.fillStyle = conf.HUD_TEXT_COLOR_SUB;
+		ctx.fillText(`MASS: ${massText}`, hudX + conf.HUD_PAD_X, hudY + conf.HUD_PAD_Y_MASS);
+		ctx.fillStyle = conf.HUD_TEXT_COLOR_MAIN;
+		ctx.fillText(`VEL : ${speed_kms.toFixed(2)} km/s`, hudX + conf.HUD_PAD_X, hudY + conf.HUD_PAD_Y_VEL);
+		ctx.fillText(`ANG : ${displayAngle.toFixed(1)}°`, hudX + conf.HUD_PAD_X, hudY + conf.HUD_PAD_Y_ANG);
 
 		ctx.restore();
 	}
