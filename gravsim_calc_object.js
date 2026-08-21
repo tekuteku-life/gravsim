@@ -158,11 +158,11 @@ class GravSimCalcObject {
 		const vRelY = this.vy - vAtmM_y;
 		const vRelSq = vRelX * vRelX + vRelY * vRelY;
 
-		if (vRelSq === 0) { return; }
-		const vRel = Math.sqrt(vRelSq);
-
 		// Determine Area and Cd
 		const aeroDynamicParam = this._determinDynamicParam(vRelY, vRelX, vRelSq, rho);
+
+		if (vRelSq === 0) { return; }
+		const vRel = Math.sqrt(vRelSq);
 
 		// Dynamic Pressure & Drag Force
 		const q = 0.5 * rho * vRelSq;
@@ -246,8 +246,16 @@ export class CalcRocket extends GravSimCalcObject {
 		if (objParam && objParam.DRAG_COEF) {
 			cd = objParam.DRAG_COEF;
 		}
+
+		let velAngle;
+		// Handle extremely low relative velocity (e.g. hold down on pad)
+		if (vRelSq < 0.01) {
+			velAngle = this.thrustAngle;
+		} else {
+			velAngle = Math.atan2(vRelY, vRelX);
+		}
+
 		if (objParam && objParam.AERO_AREA_FRONT) {
-			const velAngle = Math.atan2(vRelY, vRelX);
 			const angleDiff = Math.abs(MathUtils.normalizeAngle(this.thrustAngle - velAngle));
 			
 			const aoa = Math.min(angleDiff, Math.PI - angleDiff);
@@ -260,7 +268,7 @@ export class CalcRocket extends GravSimCalcObject {
 			this._qLateralKpa = (q * Math.pow(Math.sin(angleDiff), 2)) / 1000;
 			this._progradeAngle = velAngle;
 		} else {
-			this._progradeAngle = Math.atan2(vRelY, vRelX);
+			this._progradeAngle = velAngle;
 		}
 
 		return {area: area, cd: cd};
@@ -348,8 +356,24 @@ export class CalcRocket extends GravSimCalcObject {
 		this._currentQ = 0;
 		this._qAxialKpa = 0;
 		this._qLateralKpa = 0;
-		this._aoaDeg = 0;
-		this._progradeAngle = Math.atan2(this.vy, this.vx);
+
+		let velAngle;
+		if (this.dominantBody) {
+			const dvx = this.vx - this.dominantBody.vx;
+			const dvy = this.vy - this.dominantBody.vy;
+			const vSq = dvx * dvx + dvy * dvy;
+			if (vSq < 0.01) {
+				velAngle = this.thrustAngle;
+			} else {
+				velAngle = Math.atan2(dvy, dvx);
+			}
+		} else {
+			velAngle = Math.atan2(this.vy, this.vx);
+		}
+
+		this._progradeAngle = velAngle;
+		const angleDiff = Math.abs(MathUtils.normalizeAngle(this.thrustAngle - velAngle));
+		this._aoaDeg = angleDiff * (180 / Math.PI);
 	}
 }
 
