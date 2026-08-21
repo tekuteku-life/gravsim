@@ -28,9 +28,10 @@ export class OverlayRenderer {
 		const objects = this.universe.objects;
 		const centerObject = renderContext.basis;
 		const zoomScale = renderContext.zoomScale;
+		const LBL = RENDER.LABEL;
 		
 		ctx.save();
-		ctx.font = RENDER.LABEL.FONT;
+		ctx.font = LBL.FONT;
 		ctx.textAlign = "left";
 		ctx.textBaseline = "middle";
 
@@ -41,21 +42,25 @@ export class OverlayRenderer {
 			const relY = (obj.y - centerObject.y) * zoomScale;
 			
 			// Don't draw if completely out of screen
-			const margin = RENDER.LABEL.MARGIN;
 			const halfW = ctx.canvas.width / 2;
 			const halfH = ctx.canvas.height / 2;
-			if (relX < -halfW - margin || relX > halfW + margin || 
-				relY < -halfH - margin || relY > halfH + margin) {
+			if (relX < -halfW - LBL.MARGIN || relX > halfW + LBL.MARGIN || 
+				relY < -halfH - LBL.MARGIN || relY > halfH + LBL.MARGIN) {
 				return;
 			}
 
-			const labelX = relX + RENDER.LABEL.OFFSET_X;
-			const labelY = relY + RENDER.LABEL.OFFSET_Y;
+			const labelX = relX + LBL.OFFSET_X;
+			const labelY = relY + LBL.OFFSET_Y;
 			
 			// Draw background for readability
 			const textWidth = ctx.measureText(obj.name).width;
-			ctx.fillStyle = RENDER.LABEL.BG_COLOR;
-			ctx.fillRect(labelX - 2, labelY - 6, textWidth + 4, 12);
+			ctx.fillStyle = LBL.BG_COLOR;
+			ctx.fillRect(
+				labelX - LBL.BG_PAD_X, 
+				labelY - LBL.BG_PAD_Y, 
+				textWidth + LBL.BG_EXTRA_W, 
+				LBL.BG_H
+			);
 
 			ctx.fillStyle = obj.color;
 			ctx.fillText(obj.name, labelX, labelY);
@@ -135,9 +140,10 @@ export class OverlayRenderer {
 		const exp = Math.floor(Math.log10(val));
 		const frac = val / Math.pow(10, exp);
 		let niceFrac;
-		if (frac < 1.5) { niceFrac = 1; }
-		else if (frac < 3.5) { niceFrac = 2; }
-		else if (frac < 7.5) { niceFrac = 5; }
+		const THRESHOLDS = RENDER.SCALE_BAR.FRAC_THRESHOLDS;
+		if (frac < THRESHOLDS[0]) { niceFrac = 1; }
+		else if (frac < THRESHOLDS[1]) { niceFrac = 2; }
+		else if (frac < THRESHOLDS[2]) { niceFrac = 5; }
 		else { niceFrac = 10; }
 		const niceVal = niceFrac * Math.pow(10, exp);
 

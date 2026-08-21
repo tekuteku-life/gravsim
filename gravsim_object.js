@@ -236,39 +236,42 @@ export class Rocket extends GravSimObject {
 	}
 
 	_drawFlame(ctx, x, y, screenRadius) {
-		const flicker = 0.8 + Math.random() * 0.4;
-		const flameLen = screenRadius * 3 * flicker;
+		const conf = RENDER.ROCKET;
+		const range = conf.FLAME_FLICKER_MAX - conf.FLAME_FLICKER_MIN;
+		const flicker = conf.FLAME_FLICKER_MIN + Math.random() * range;
+		const flameLen = screenRadius * conf.FLAME_LEN_MULT * flicker;
 		
 		ctx.save();
 		ctx.translate(x, y);
 		ctx.rotate(this.thrustAngle); // Pointing forward
 
-		ctx.fillStyle = "rgba(255, 100, 0, 0.8)";
+		ctx.fillStyle = conf.FLAME_OUTER_COLOR;
 		ctx.beginPath();
 		ctx.moveTo(-screenRadius, 0);
-		ctx.lineTo(-screenRadius * 0.8, screenRadius * 0.8);
+		ctx.lineTo(-screenRadius * conf.FLAME_OUTER_W_MULT, screenRadius * conf.FLAME_OUTER_W_MULT);
 		ctx.lineTo(-screenRadius - flameLen, 0);
-		ctx.lineTo(-screenRadius * 0.8, -screenRadius * 0.8);
+		ctx.lineTo(-screenRadius * conf.FLAME_OUTER_W_MULT, -screenRadius * conf.FLAME_OUTER_W_MULT);
 		ctx.fill();
 
-		ctx.fillStyle = "rgba(255, 200, 0, 0.9)";
+		ctx.fillStyle = conf.FLAME_INNER_COLOR;
 		ctx.beginPath();
 		ctx.moveTo(-screenRadius, 0);
-		ctx.lineTo(-screenRadius * 0.9, screenRadius * 0.4);
-		ctx.lineTo(-screenRadius - flameLen * 0.6, 0);
-		ctx.lineTo(-screenRadius * 0.9, -screenRadius * 0.4);
+		ctx.lineTo(-screenRadius * conf.FLAME_INNER_W_MULT, screenRadius * conf.FLAME_INNER_Y_MULT);
+		ctx.lineTo(-screenRadius - flameLen * conf.FLAME_INNER_H_MULT, 0);
+		ctx.lineTo(-screenRadius * conf.FLAME_INNER_W_MULT, -screenRadius * conf.FLAME_INNER_Y_MULT);
 		ctx.fill();
 		
 		ctx.restore();
 	}
 
 	_drawBody(ctx, x, y, screenRadius) {
+		const conf = RENDER.ROCKET;
 		ctx.fillStyle = this.color;
 		ctx.beginPath();
 		ctx.save();
 		ctx.translate(x, y);
 		ctx.rotate(this.thrustAngle);
-		ctx.ellipse(0, 0, screenRadius * 2.0, screenRadius * 0.7, 0, 0, Math.PI * 2);
+		ctx.ellipse(0, 0, screenRadius * conf.BODY_LENGTH_MULT, screenRadius * conf.BODY_WIDTH_MULT, 0, 0, Math.PI * 2);
 		ctx.fill();
 		ctx.restore();
 	}
@@ -289,6 +292,7 @@ export class Debris extends GravSimObject {
 	set mass(val) { this._mass = val; }
 
 	_generatePolygonVertices() {
+		const conf = RENDER.DEBRIS_RENDER;
 		let seed = this.id;
 		const random = () => {
 			const x = Math.sin(seed++) * 10000;
@@ -296,15 +300,15 @@ export class Debris extends GravSimObject {
 		};
 
 		// Set random rotation speed (-0.0025 to 0.0025 rad/ms)
-		this.rotationSpeed = (random() - 0.5) * 0.005;
+		this.rotationSpeed = (random() - 0.5) * conf.ROT_SPEED_VAR;
 
-		const vertexCount = 5 + Math.floor(random() * 4);
+		const vertexCount = conf.MIN_VERTICES + Math.floor(random() * conf.VAR_VERTICES);
 		for (let i = 0; i < vertexCount; i++) {
 			const baseAngle = (i / vertexCount) * Math.PI * 2;
 			const angleOffset = (random() - 0.5) * 0.5;
 			const angle = baseAngle + angleOffset;
 
-			const distanceRatio = 0.6 + random() * 0.6;
+			const distanceRatio = conf.RAD_RATIO_MIN + random() * conf.RAD_RATIO_VAR;
 
 			this.polygonVertices.push({
 				x: Math.cos(angle) * distanceRatio,

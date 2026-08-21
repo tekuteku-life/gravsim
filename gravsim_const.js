@@ -63,6 +63,7 @@ export const RENDER = {
 		BOTTOM: 20,
 		COLOR: "rgba(255, 255, 255, 0.9)",
 		VERTICAL_LINE_WIDTH: 5,
+		FRAC_THRESHOLDS: [1.5, 3.5, 7.5]
 	},
 	SCALE_BAR_TEXT: {
 		COLOR: "rgba(255, 255, 255, 0.9)",
@@ -99,7 +100,11 @@ export const RENDER = {
 		BG_COLOR: "rgba(0, 0, 0, 0.5)",
 		OFFSET_X: 10,
 		OFFSET_Y: -10,
-		MARGIN: 100
+		MARGIN: 100,
+		BG_PAD_X: 2,
+		BG_PAD_Y: 6,
+		BG_EXTRA_W: 4,
+		BG_H: 12
 	},
 	DEBUG: {
 		FONT: "10px monospace",
@@ -114,6 +119,38 @@ export const RENDER = {
 		],
 		STEP_DEFAULT: 0.1,
 		STEP_MAX: 1
+	},
+	MARKER: {
+		FREE_RADIUS: 15,
+		FREE_CROSS: 20,
+		FREE_COLOR: "rgba(255, 255, 255, 0.5)",
+		HOST_MIN_SIZE: 10,
+		HOST_BOX_MULT: 1.2,
+		HOST_LINE_FRAC: 0.3,
+		HOST_COLOR: "rgba(0, 255, 255, 0.8)",
+		HOST_FILL: "rgba(0, 255, 255, 0.5)",
+		HOST_DASH: [4, 4],
+		HOST_VECTOR_MULT: 2.5
+	},
+	ROCKET: {
+		BODY_LENGTH_MULT: 2.0,
+		BODY_WIDTH_MULT: 0.7,
+		FLAME_LEN_MULT: 3.0,
+		FLAME_FLICKER_MIN: 0.8,
+		FLAME_FLICKER_MAX: 1.2,
+		FLAME_OUTER_COLOR: "rgba(255, 100, 0, 0.8)",
+		FLAME_INNER_COLOR: "rgba(255, 200, 0, 0.9)",
+		FLAME_OUTER_W_MULT: 0.8,
+		FLAME_INNER_W_MULT: 0.9,
+		FLAME_INNER_H_MULT: 0.6,
+		FLAME_INNER_Y_MULT: 0.4
+	},
+	DEBRIS_RENDER: {
+		MIN_VERTICES: 5,
+		VAR_VERTICES: 4,
+		RAD_RATIO_MIN: 0.6,
+		RAD_RATIO_VAR: 0.6,
+		ROT_SPEED_VAR: 0.005
 	}
 };
 
@@ -380,7 +417,6 @@ export const TRAIL_MODE = {
 	ESCAPE: 2
 };
 
-// Step 3: Implement new FULL_COUNTDOWN sequence definition
 export const LAUNCH_SEQUENCES = {
 	LAUNCH_TO_COMPLETION_TIME: 5,
 	LEGACY_QUICK: {
@@ -413,4 +449,8 @@ export const LAUNCH_SEQUENCES = {
 			{ time: 120, name: "LIFTOFF", command: "RELEASE_HOLD_DOWN" }
 		]
 	}
+};
+
+export const ROCKET_LAUNCHER_CONFIG = {
+	ZOOM_SCREEN_DIV: 4
 };

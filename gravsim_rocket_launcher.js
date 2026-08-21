@@ -3,7 +3,8 @@
 
 import {
 	PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS,
-	ROCKET_FUELS, LAUNCH_SEQUENCES
+	ROCKET_FUELS, LAUNCH_SEQUENCES,
+	ROCKET_LAUNCHER_CONFIG
 } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 
@@ -130,17 +131,18 @@ export class RocketLauncher {
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		const rocketRadiusM = param.RADIUS || 1;
 		const screenRadiusPx = UnitConvertUtils.m2pix(rocketRadiusM) * zoomScale;
-		const mSize = Math.max(10, screenRadiusPx);
+		const conf = RENDER.MARKER;
+		const mSize = Math.max(conf.HOST_MIN_SIZE, screenRadiusPx);
 		
 		ctx.save();
 		ctx.translate(relX, relY);
 
 		// Blueprint-style bounding box
-		ctx.strokeStyle = "rgba(0, 255, 255, 0.8)";
+		ctx.strokeStyle = conf.HOST_COLOR;
 		ctx.lineWidth = 1.5;
 		
-		const b = mSize * 1.2;
-		const l = b * 0.3;
+		const b = mSize * conf.HOST_BOX_MULT;
+		const l = b * conf.HOST_LINE_FRAC;
 
 		ctx.beginPath();
 		ctx.moveTo(-b, -b + l); ctx.lineTo(-b, -b); ctx.lineTo(-b + l, -b);
@@ -150,18 +152,18 @@ export class RocketLauncher {
 		ctx.stroke();
 
 		// Center dot
-		ctx.fillStyle = "rgba(0, 255, 255, 0.5)";
+		ctx.fillStyle = conf.HOST_FILL;
 		ctx.beginPath();
 		ctx.arc(0, 0, 2, 0, Math.PI * 2);
 		ctx.fill();
 
 		// Launch vector line
 		ctx.rotate(this.launchAngleDeg * (Math.PI / 180));
-		ctx.strokeStyle = "rgba(0, 255, 255, 0.5)";
-		ctx.setLineDash([4, 4]);
+		ctx.strokeStyle = conf.HOST_FILL;
+		ctx.setLineDash(conf.HOST_DASH);
 		ctx.beginPath();
 		ctx.moveTo(0, 0);
-		ctx.lineTo(b * 2.5, 0);
+		ctx.lineTo(b * conf.HOST_VECTOR_MULT, 0);
 		ctx.stroke();
 
 		ctx.restore();
@@ -178,16 +180,17 @@ export class RocketLauncher {
 
 			const relX = (transform.x - centerObject.x) * zoomScale;
 			const relY = (transform.y - centerObject.y) * zoomScale;
+			const conf = RENDER.MARKER;
 
 			ctx.save();
-			ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+			ctx.strokeStyle = conf.FREE_COLOR;
 			ctx.lineWidth = 1;
 			ctx.beginPath();
-			ctx.arc(relX, relY, 15, 0, Math.PI * 2);
-			ctx.moveTo(relX - 20, relY);
-			ctx.lineTo(relX + 20, relY);
-			ctx.moveTo(relX, relY - 20);
-			ctx.lineTo(relX, relY + 20);
+			ctx.arc(relX, relY, conf.FREE_RADIUS, 0, Math.PI * 2);
+			ctx.moveTo(relX - conf.FREE_CROSS, relY);
+			ctx.lineTo(relX + conf.FREE_CROSS, relY);
+			ctx.moveTo(relX, relY - conf.FREE_CROSS);
+			ctx.lineTo(relX, relY + conf.FREE_CROSS);
 			ctx.stroke();
 			ctx.restore();
 		}
@@ -234,7 +237,7 @@ export class RocketLauncher {
 		const systemTab = this.universe.ControlPanel.systemTab;
 		if (systemTab && systemTab.ui.zoomScale) {
 			const realRadiusPx = (newRocket.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
-			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 4;
+			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / ROCKET_LAUNCHER_CONFIG.ZOOM_SCREEN_DIV;
 			let idealExp = Math.log10(targetSize / realRadiusPx);
 
 			const maxZoom = parseFloat(systemTab.ui.zoomScale.max);
