@@ -44,6 +44,9 @@ export class RocketLauncher {
 		
 		this.padEffect = new PadEffectRenderer();
 
+		// Register update hook
+		this.universe.addUpdateHook((dt, scaledDt) => this.update(scaledDt));
+
 		// Register hooks using Pub/Sub
 		this.universe.Renderer.addDrawHook('before', (ctx, rc) => {
 			if (!this.isActive || !this.padEffect.isActive) { return; }

@@ -33,6 +33,16 @@ export class InfoPanel {
 		this.universe.on('object-list-changed', (count) => {
 			this.updateObjectCount(count);
 		});
+
+		// Register to the main logic update loop
+		this.universe.addUpdateHook((dt, scaledDt) => {
+			if (this.universe.objects.length === 1) {
+				this.resetElapsedTime();
+			} else {
+				this.updateElapsedTime(scaledDt);
+			}
+			this.updateFPS();
+		});
 	}
 
 	resetElapsedTime() {

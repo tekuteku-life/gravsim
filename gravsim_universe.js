@@ -63,6 +63,7 @@ export class Universe {
 		this.canvas = _canvas;
 		this.cameraOffset = { x: 0, y: 0 };
 		this.uiUpdaters = [];
+		this.updateHooks = [];
 		this.isPaused = false;
 		this.trailLengthAU = 3.0;
 
@@ -86,6 +87,36 @@ export class Universe {
 
 		this.timeScale = this.ControlPanel.getTimeScale();
 		
+		// Hook for Camera/Center Object tracking
+		this.addUpdateHook(() => {
+			const centerStatus = this.ObjectManager.ensureCenterObject(this.cameraOffset);
+			if (centerStatus.changed) {
+				// By pass setter to keep offset
+				this.ObjectManager.centerObject = centerStatus.newCenter;
+				this.cameraOffset = centerStatus.newOffset;
+				this.ControlPanel.updateCenterOptions();
+				this.InfoPanel.updateCamera(this.centerObject ? this.centerObject.name : 'None');
+			}
+		});
+
+		// Hook for rocket flight time update
+		this.addUpdateHook((dt, scaledDt) => {
+			this.objects.forEach(obj => {
+				if (obj.type === OBJECT_TYPES.ROCKET && obj.state === OBJECT_STATE.ACTIVE) {
+					obj.flightTime += scaledDt;
+				}
+			});
+		});
+
+		// Hook for UI Updates
+		this.addUpdateHook(() => this.updateUI(Date.now()));
+
+		// Hook for Zoom Scale polling
+		this.addUpdateHook(() => this.updateZoomScale());
+
+		// Hook for Object Cleanup
+		this.addUpdateHook(() => this.ObjectManager.cleanupObjects());
+
 		this.reset();
 	}
 
@@ -160,6 +191,11 @@ export class Universe {
 		this.Renderer.setZoomScale(this.ControlPanel.getZoomScale());
 	}
 
+	// Register logic updater callback
+	addUpdateHook(callback) {
+		this.updateHooks.push(callback);
+	}
+
 	// Register UI updater callback with specific interval
 	registerUIUpdater(intervalMs, callback) {
 		if (!this.uiUpdaters) {
@@ -209,43 +245,13 @@ export class Universe {
 	}
 
 	update(dt) {
-		// Center Object Check
-		const centerStatus = this.ObjectManager.ensureCenterObject(this.cameraOffset);
-		if (centerStatus.changed) {
-			// By pass setter to keep offset
-			this.ObjectManager.centerObject = centerStatus.newCenter;
-			this.cameraOffset = centerStatus.newOffset;
-			this.ControlPanel.updateCenterOptions();
-			this.InfoPanel.updateCamera(this.centerObject ? this.centerObject.name : 'None');
-		}
-
 		// Time Management
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
 		const scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
 
-		// Launch Sequencer and Rocket Launcher effects
-		this.LaunchSequencer.update(scaledDt);
-		this.RocketLauncher.update(scaledDt);
-
-		// Update flight time for rocket
-		this.objects.forEach(obj => {
-			if (obj.type === OBJECT_TYPES.ROCKET && obj.state === OBJECT_STATE.ACTIVE) {
-				obj.flightTime += scaledDt;
-			}
-		});
-
-		// UI Update
-		this.updateUI(Date.now());
-		if (this.objects.length === 1) {
-			this.InfoPanel.resetElapsedTime();
-		} else {
-			this.InfoPanel.updateElapsedTime(scaledDt);
-		}
-		this.InfoPanel.updateFPS();
-
-		this.updateZoomScale();
-		this.ObjectManager.cleanupObjects();
+		// Process decoupled update hooks (Camera, Modules, Flight time, UI, Cleanup)
+		this.updateHooks.forEach(hook => hook(dt, scaledDt));
 	}
 
 	draw() {

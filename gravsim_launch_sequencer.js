@@ -13,6 +13,9 @@ export class LaunchSequencer {
 		this.timer = 0;
 		this.rocketId = null;
 		this.eventIndex = 0;
+
+		// Register update hook
+		this.universe.addUpdateHook((dt, scaledDt) => this.update(scaledDt));
 	}
 
 	start(sequenceData, rocketId) {
