@@ -51,7 +51,7 @@ export class TelemetryPanel {
 
 		this._bindEvents();
 
-		// Register to the main Pub/Sub manager
+		// Register to the main logic update loop
 		this.universe.registerUIUpdater(UI.UPDATE_INTERVAL.TELEMETRY, () => {
 			if (this.isOpen) {
 				this.update();
@@ -150,7 +150,7 @@ export class TelemetryPanel {
 	_resolveTarget() {
 		let target = this.universe.objects.find(o => o.id === this.targetId && o.type === OBJECT_TYPES.ROCKET);
 		if (!target) {
-			target = this.universe.centerObject;
+			target = this.universe.camera.trackingTarget;
 			if (target && target.type === OBJECT_TYPES.ROCKET) {
 				this.targetId = target.id;
 				this.ui.targetSelect.value = target.id;
@@ -278,7 +278,7 @@ export class TelemetryPanel {
 		}
 
 		let targetObj = this.universe.objects.find(o => o.id === this.targetId);
-		if (!targetObj) { targetObj = this.universe.centerObject; }
+		if (!targetObj) { targetObj = this.universe.camera.trackingTarget; }
 
 		if (targetObj && targetObj.type === OBJECT_TYPES.ROCKET) {
 			const realRadiusPx = UnitConvertUtils.m2pix(targetObj.radius);
@@ -288,7 +288,17 @@ export class TelemetryPanel {
 			subZoom = Math.min(subZoom, TELEMETRY.SUB_VIEW_MAX_ZOOM);
 
 			this.subRenderer.setZoomScale(subZoom);
-			this.subRenderer.draw(this.universe.objects, targetObj);
+
+			// Create a specific render state for the sub canvas
+			const subRenderState = {
+				basis: targetObj,
+				cameraOffset: { x: 0, y: 0 },
+				zoomScale: subZoom,
+				zoomExp: Math.log10(subZoom),
+				rotation: this.subRenderer.rotation || 0
+			};
+
+			this.subRenderer.draw(this.universe.objects, subRenderState);
 
 			// Draw rocket preview
 			if (this.universe.RocketLauncher) {

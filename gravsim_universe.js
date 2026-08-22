@@ -2,6 +2,7 @@
 // gravsim_universe.js
 
 import { PHYSICS, SIMULATION, OBJECT_STATE, OBJECT_TYPES } from './gravsim_const.js';
+import { Camera } from './gravsim_camera.js';
 import { Renderer } from './gravsim_renderer.js';
 import { OverlayRenderer } from './gravsim_overlay_renderer.js';
 import { InfoPanel } from './gravsim_info_panel.js';
@@ -61,13 +62,13 @@ class CalcWorkerManager {
 export class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
-		this.cameraOffset = { x: 0, y: 0 };
 		this.uiUpdaters = [];
 		this.updateHooks = [];
 		this.isPaused = false;
 		this.trailLengthAU = 3.0;
 
 		// Initialize Modules
+		this.camera = new Camera();
 		this.Renderer = new Renderer(_canvas);
 		this.CalcWorkerManager = new CalcWorkerManager((data) => this.updateObjectParams(data));
 		this.InputManager = new InputManager(this.canvas);
@@ -87,15 +88,31 @@ export class Universe {
 
 		this.timeScale = this.ControlPanel.getTimeScale();
 		
-		// Hook for Camera/Center Object tracking
-		this.addUpdateHook(() => {
-			const centerStatus = this.ObjectManager.ensureCenterObject(this.cameraOffset);
-			if (centerStatus.changed) {
-				// By pass setter to keep offset
-				this.ObjectManager.centerObject = centerStatus.newCenter;
-				this.cameraOffset = centerStatus.newOffset;
-				this.ControlPanel.updateCenterOptions();
-				this.InfoPanel.updateCamera(this.centerObject ? this.centerObject.name : 'None');
+		// Hook for Camera interpolation
+		this.addUpdateHook((dt, scaledDt) => {
+			this.camera.update(dt / 1000); // dt is in ms
+			
+			// Fallback ensureCenterObject logic (if target dies)
+			const currentTarget = this.camera.trackingTarget;
+			if (currentTarget && currentTarget.state !== OBJECT_STATE.ACTIVE) {
+				const oldCenter = currentTarget;
+				let nextCenter = null;
+
+				const debrisName = oldCenter.name.endsWith(' Debris') ? oldCenter.name : `${oldCenter.name} Debris`;
+				const debrisList = this.objects.filter(o => o.name === debrisName && o.state === OBJECT_STATE.ACTIVE);
+				if (debrisList.length > 0) {
+					nextCenter = debrisList.reduce((max, obj) => obj.mass > max.mass ? obj : max, debrisList[0]);
+				}
+
+				if (!nextCenter && this.objects.length > 0) {
+					nextCenter = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
+				}
+
+				if (nextCenter) {
+					this.camera.setTrackingTarget(nextCenter);
+					this.ControlPanel.systemTab.updateCenterOptions();
+					this.InfoPanel.updateCamera(nextCenter.name);
+				}
 			}
 		});
 
@@ -111,9 +128,6 @@ export class Universe {
 		// Hook for UI Updates
 		this.addUpdateHook(() => this.updateUI(Date.now()));
 
-		// Hook for Zoom Scale polling
-		this.addUpdateHook(() => this.updateZoomScale());
-
 		// Hook for Object Cleanup
 		this.addUpdateHook(() => this.ObjectManager.cleanupObjects());
 
@@ -124,14 +138,15 @@ export class Universe {
 	// Getters/Setters
 	// ------------------------------------------
 	get objects() { return this.ObjectManager.objects; }
-	get centerObject() { return this.ObjectManager.centerObject; }
+	
+	// Proxy for backward compatibility
+	get centerObject() { return this.camera.trackingTarget; }
 	set centerObject(obj) {
-		this.ObjectManager.centerObject = obj;
-		this.cameraOffset = { x: 0, y: 0 }; // Reset offset when camera target changed
+		this.camera.setTrackingTarget(obj);
 		this.ControlPanel.systemTab.updateCenterOptions();
 		this.InfoPanel.updateCamera(obj ? obj.name : 'None');
 	}
-	get zoomScale() { return this.Renderer.zoomScale; }
+	get zoomScale() { return Math.pow(10, this.camera.currentZoomExp); }
 	
 	// ------------------------------------------
 	// Delegates
@@ -185,10 +200,6 @@ export class Universe {
 			}
 		}
 		toRemove.forEach(obj => this.removeObject(obj));
-	}
-
-	updateZoomScale() {
-		this.Renderer.setZoomScale(this.ControlPanel.getZoomScale());
 	}
 
 	// Register logic updater callback
@@ -255,14 +266,22 @@ export class Universe {
 	}
 
 	draw() {
-		this.Renderer.draw(this.objects, this.centerObject, this.cameraOffset, this.trailLengthAU);
+		const renderState = this.camera.getRenderState();
+		
+		this.Renderer.draw(this.objects, renderState, this.trailLengthAU);
 
 		this.ctx = this.canvas.getContext('2d');
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
-		this.ctx.translate(-this.cameraOffset.x * this.zoomScale, -this.cameraOffset.y * this.zoomScale);
-		this.RocketLauncher.drawPreview(this.ctx, this.centerObject, this.zoomScale);
-		this.ObjectPlacer.drawPreview(this.ctx, this.centerObject, this.zoomScale);
+
+		// Apply rotation FIRST, then pan offset
+		if (renderState.rotation !== 0) {
+			this.ctx.rotate(renderState.rotation);
+		}
+		this.ctx.translate(-renderState.cameraOffset.x * renderState.zoomScale, -renderState.cameraOffset.y * renderState.zoomScale);
+
+		this.RocketLauncher.drawPreview(this.ctx, renderState.basis, renderState.zoomScale);
+		this.ObjectPlacer.drawPreview(this.ctx, renderState.basis, renderState.zoomScale);
 
 		this.ctx.restore();
 
@@ -272,7 +291,7 @@ export class Universe {
 	getState() {
 		return {
 			centerObjectId: this.centerObject ? this.centerObject.id : null,
-			cameraOffset: this.cameraOffset,
+			cameraOffset: this.camera.targetOffset,
 			objectManager: this.ObjectManager.getState(),
 			rocketLauncher: this.RocketLauncher.getState(),
 			controlPanel: this.ControlPanel.getState()
@@ -292,9 +311,8 @@ export class Universe {
 		}
 
 		if (state.cameraOffset) {
-			this.cameraOffset = state.cameraOffset;
-		} else {
-			this.cameraOffset = { x: 0, y: 0 };
+			this.camera.setTargetOffset(state.cameraOffset.x, state.cameraOffset.y);
+			this.camera.currentOffset = { ...state.cameraOffset }; // Apply instantly on load
 		}
 
 		if (state.rocketLauncher) {

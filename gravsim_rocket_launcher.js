@@ -17,6 +17,7 @@ export class RocketLauncher {
 	constructor(universe) {
 		this.universe = universe;
 		this.isActive = false;
+		this.isAutoTracking = false;
 		
 		// Setup parameters
 		this.mode = 'host'; // 'free' or 'host'
@@ -68,13 +69,11 @@ export class RocketLauncher {
 			}
 		});
 
-		// Clear rollout state on liftoff so that the marker can be displayed for the next launch
 		this.universe.on('liftoff', () => {
 			if (this.rolloutedRocketId !== null) {
 				const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
 				if (rocket) rocket.isInternalPower = false;
 			}
-			this.rolloutedRocketId = null;
 			this.padEffect.handleLiftoff();
 		});
 	}
@@ -82,8 +81,8 @@ export class RocketLauncher {
 	togglePreview(forceState = null) {
 		this.isActive = forceState !== null ? forceState : !this.isActive;
 		if (this.isActive && this.mode === 'free') {
-			this.freeX = this.universe.centerObject.x;
-			this.freeY = this.universe.centerObject.y;
+			this.freeX = this.universe.camera.trackingTarget ? this.universe.camera.trackingTarget.x : 0;
+			this.freeY = this.universe.camera.trackingTarget ? this.universe.camera.trackingTarget.y : 0;
 		}
 	}
 
@@ -116,7 +115,7 @@ export class RocketLauncher {
 		}
 
 		if (this.mode === 'host') {
-			const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.centerObject;
+			const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.camera.trackingTarget;
 			if (host) {
 				const angleRad = UnitConvertUtils.deg2rad(this.hostAngleDeg);
 				const distance = host.radius + (param.RADIUS || 1) + this.hostAltitudeM;
@@ -228,6 +227,35 @@ export class RocketLauncher {
 		}
 	}
 
+	_stopAutoTracking(host) {
+		this.isAutoTracking = false;
+		
+		const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
+		if (!rocket || !rocket.isHoldDown) {
+			this.rolloutedRocketId = null;
+		}
+
+		if (host) {
+			this.universe.camera.setTrackingTarget(host);
+			this.universe.camera.setTargetRotation(0);
+			
+			// Calculate zoom to fit host gracefully
+			const hostRadiusPx = UnitConvertUtils.m2pix(host.radius);
+			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 2.2;
+			let idealExp = Math.log10(targetSize / hostRadiusPx);
+
+			const maxZoom = parseFloat(this.universe.ControlPanel.systemTab.ui.zoomScale.max);
+			const minZoom = parseFloat(this.universe.ControlPanel.systemTab.ui.zoomScale.min);
+			idealExp = Math.max(minZoom, Math.min(maxZoom, idealExp));
+			
+			this.universe.camera.setTargetZoomExp(idealExp);
+			
+			// Sync UI
+			this.universe.ControlPanel.systemTab.ui.zoomScale.value = idealExp.toFixed(2);
+			this.universe.ControlPanel.systemTab.updateZoomScaleIndicator(Math.pow(10, idealExp));
+		}
+	}
+
 	rollout() {
 		if (this.mode !== 'host' || this.hostId === null) { return; }
 
@@ -266,26 +294,15 @@ export class RocketLauncher {
 
 		this.padEffect.start(newRocket.id, this.hostId);
 
+		// Activate dynamic auto tracking
+		this.isAutoTracking = true;
+
 		// Set new rocket to center object
-		this.universe.ObjectManager.centerObject = newRocket;
+		this.universe.camera.setTrackingTarget(newRocket);
+		this.universe.camera.setTargetOffset(0, 0);
+
 		this.universe.ControlPanel.systemTab.updateCenterOptions();
 		this.universe.InfoPanel.updateCamera(newRocket.name);
-
-		// Zoom the rocket
-		const systemTab = this.universe.ControlPanel.systemTab;
-		if (systemTab && systemTab.ui.zoomScale) {
-			const realRadiusPx = (newRocket.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
-			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / ROCKET_LAUNCHER_CONFIG.ZOOM_SCREEN_DIV;
-			let idealExp = Math.log10(targetSize / realRadiusPx);
-
-			const maxZoom = parseFloat(systemTab.ui.zoomScale.max);
-			const minZoom = parseFloat(systemTab.ui.zoomScale.min);
-			idealExp = Math.max(minZoom, Math.min(maxZoom, idealExp));
-
-			systemTab.ui.zoomScale.value = idealExp.toFixed(2);
-			systemTab.updateZoomScaleIndicator(systemTab.getZoomScale());
-			this.universe.updateZoomScale();
-		}
 
 		// Open telemetry
 		this.universe.TelemetryPanel.open();
@@ -305,7 +322,8 @@ export class RocketLauncher {
 			this.padEffect.stop();
 			this.universe.ControlPanel.rocketTab.setRolloutState(false);
 
-			this.universe.ControlPanel.rocketTab._setupLaunchEnvironment(this.hostId);
+			const host = this.universe.objects.find(o => o.id === this.hostId);
+			this._stopAutoTracking(host);
 		}
 	}
 
@@ -323,11 +341,61 @@ export class RocketLauncher {
 			rocket: rocket,
 			host: host,
 			m2pix: (m) => UnitConvertUtils.m2pix(m),
-			zoomScale: this.universe.zoomScale
+			zoomScale: this.universe.camera.getRenderState().zoomScale
 		};
 	}
 
+	_autoTracking(dt) {
+		if (this.isAutoTracking) {
+			const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
+			const host = this.universe.objects.find(o => o.id === this.hostId);
+			
+			if (rocket && host) {
+				this.universe.camera.setTrackingTarget(rocket);
+				this.universe.camera.setTargetOffset(0, 0);
+
+				const dx = rocket.x - host.x;
+				const dy = rocket.y - host.y;
+				
+				// Apply rotation to keep the earth at the bottom of the screen
+				const angle = Math.atan2(dy, dx);
+				this.universe.camera.setTargetRotation(-angle - Math.PI / 2);
+
+				// Calculate zoom to keep ground around the bottom 10%
+				const altM = UnitConvertUtils.pix2m(Math.sqrt(dx * dx + dy * dy)) - host.radius;
+				const canvasHeight = this.universe.canvas.height;
+				const minAltM = 200; // clamp minimum virtual altitude for zoom
+				const clampedAltM = Math.max(minAltM, altM);
+				const clampedDistPx = UnitConvertUtils.m2pix(clampedAltM);
+				
+				let targetZoom = (canvasHeight * 0.4) / clampedDistPx;
+
+				// Restrict zoom out limit
+				const minZoom = Math.pow(10, parseFloat(this.universe.ControlPanel.systemTab.ui.zoomScale.min));
+				const maxZoom = Math.pow(10, parseFloat(this.universe.ControlPanel.systemTab.ui.zoomScale.max));
+				targetZoom = Math.max(minZoom, Math.min(maxZoom, targetZoom));
+				
+				this.universe.camera.setTargetZoomExp(Math.log10(targetZoom));
+				
+				// Sync UI slider during tracking
+				this.universe.ControlPanel.systemTab.ui.zoomScale.value = Math.log10(targetZoom).toFixed(2);
+				this.universe.ControlPanel.systemTab.updateZoomScaleIndicator(targetZoom);
+
+				// Reached max altitude limit, stop tracking
+				if (altM > host.radius * 0.2) {
+					this._stopAutoTracking(host);
+				}
+			} else {
+				this._stopAutoTracking(host);
+			}
+		}
+
+	}
+
 	update(dt) {
+
+		this._autoTracking();
+
 		if (this.padEffect && this.padEffect.isActive) {
 			const context = this._buildPadContext();
 			if (context) this.padEffect.update(dt, context);

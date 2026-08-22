@@ -23,7 +23,8 @@ export class Renderer {
 			zoomScale: 1,
 			trailLengthAU: 3.0,
 			centerObjectId: null,
-			cameraOffset: { x: 0, y: 0 }
+			cameraOffset: { x: 0, y: 0 },
+			rotation: 0
 		};
 	}
 
@@ -41,24 +42,30 @@ export class Renderer {
 		}
 	}
 
-	draw(objects, centerObject, cameraOffset = {x: 0, y: 0}, trailLengthAU = 3.0) {
+	draw(objects, renderState, trailLengthAU = 3.0) {
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
 
-		// Apply offset to pan
-		const offsetX_px = -cameraOffset.x * this.zoomScale;
-		const offsetY_px = -cameraOffset.y * this.zoomScale;
+		// Apply rotation FIRST, then apply offset to pan
+		if (renderState.rotation !== 0) { 
+			this.ctx.rotate(renderState.rotation); 
+		}
+
+		const offsetX_px = -renderState.cameraOffset.x * renderState.zoomScale;
+		const offsetY_px = -renderState.cameraOffset.y * renderState.zoomScale;
 		this.ctx.translate(offsetX_px, offsetY_px);
 
-		if (this.rotation !== undefined) { this.ctx.rotate(this.rotation); }
+		this.rotation = renderState.rotation;
+		this.zoomScale = renderState.zoomScale;
 
-		// set up context
-		this.renderContext.basis = centerObject;
-		this.renderContext.zoomScale = this.zoomScale;
+		// Set up context
+		this.renderContext.basis = renderState.basis;
+		this.renderContext.zoomScale = renderState.zoomScale;
 		this.renderContext.trailLengthAU = trailLengthAU;
-		this.renderContext.cameraOffset = cameraOffset;
-		this.renderContext.centerObjectId = centerObject ? centerObject.id : null;
+		this.renderContext.cameraOffset = renderState.cameraOffset;
+		this.renderContext.centerObjectId = renderState.basis ? renderState.basis.id : null;
+		this.renderContext.rotation = renderState.rotation;
 		
 		// 1. Before objects
 		this.drawHooks.before.forEach(hook => hook(this.ctx, this.renderContext));

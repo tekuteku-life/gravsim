@@ -164,7 +164,7 @@ export class ObjectPlacer {
 	}
 
 	placeAtOrbitAroundSun(objName) {
-		const sunObj = this.universe.objects.find(obj => obj.name === "Sun") || this.universe.centerObject;
+		const sunObj = this.universe.objects.find(obj => obj.name === "Sun") || this.universe.camera.trackingTarget;
 		if (!sunObj) {
 			throw new Error("Sun object not found in the universe.");
 		}
@@ -174,12 +174,26 @@ export class ObjectPlacer {
 	getLaunchPosition(clientX, clientY) {
 		const screenCenterX = this.universe.canvas.width / 2;
 		const screenCenterY = this.universe.canvas.height / 2;
-		const centerObj = this.universe.centerObject;
-		const zoomScale = this.universe.zoomScale;
+		const renderState = this.universe.camera.getRenderState();
+		const centerObj = renderState.basis;
+		const zoomScale = renderState.zoomScale;
 		
+		let dx = (clientX - screenCenterX) / zoomScale;
+		let dy = (clientY - screenCenterY) / zoomScale;
+
+		// Apply inverse rotation
+		if (renderState.rotation !== 0) {
+			const cosA = Math.cos(-renderState.rotation);
+			const sinA = Math.sin(-renderState.rotation);
+			const rDx = dx * cosA - dy * sinA;
+			const rDy = dx * sinA + dy * cosA;
+			dx = rDx;
+			dy = rDy;
+		}
+
 		return {
-			x: (clientX - screenCenterX) / zoomScale + centerObj.x + this.universe.cameraOffset.x,
-			y: (clientY - screenCenterY) / zoomScale + centerObj.y + this.universe.cameraOffset.y,
+			x: dx + centerObj.x + renderState.cameraOffset.x,
+			y: dy + centerObj.y + renderState.cameraOffset.y,
 		};
 	}
 
@@ -222,10 +236,11 @@ export class ObjectPlacer {
 		this.startScreenY = clientY;
 
 		const pos = this.getLaunchPosition(clientX, clientY);
+		const basis = this.universe.camera.getRenderState().basis;
 
 		// Keep as relative position
-		this.startRelX = pos.x - this.universe.centerObject.x;
-		this.startRelY = pos.y - this.universe.centerObject.y;
+		this.startRelX = pos.x - basis.x;
+		this.startRelY = pos.y - basis.y;
 	}
 
 	updateDrag(clientX, clientY) {
@@ -241,15 +256,16 @@ export class ObjectPlacer {
 
 		const name = this.getLaunchObjectName();
 		const v = this._calculateSlingshotVelocity(this.startScreenX, this.startScreenY, clientX, clientY);
+		const basis = this.universe.camera.getRenderState().basis;
 
-		const launchX = this.universe.centerObject.x + this.startRelX;
-		const launchY = this.universe.centerObject.y + this.startRelY;
+		const launchX = basis.x + this.startRelX;
+		const launchY = basis.y + this.startRelY;
 		
 		this.placeObject(
 			name,
 			launchX, launchY,
-			UnitConvertUtils.m2pix(v.vx) + this.universe.centerObject.vx,
-			UnitConvertUtils.m2pix(v.vy) + this.universe.centerObject.vy,
+			UnitConvertUtils.m2pix(v.vx) + basis.vx,
+			UnitConvertUtils.m2pix(v.vy) + basis.vy,
 			{ angle: Math.atan2(v.vy, v.vx) }
 		);
 		
@@ -271,13 +287,28 @@ export class ObjectPlacer {
 		const angle_deg = UnitConvertUtils.rad2deg(Math.atan2(v.vy, v.vx));
 		const displayAngle = MathUtils.normalizeAngle360(angle_deg);
 
+		const renderState = this.universe.camera.getRenderState();
+
 		const relStartX = this.startRelX * zoomScale;
 		const relStartY = this.startRelY * zoomScale;
 
 		const screenCenterX = this.universe.canvas.width / 2;
 		const screenCenterY = this.universe.canvas.height / 2;
-		const relCurX = (this.screenCursorX - screenCenterX) + this.universe.cameraOffset.x * zoomScale;
-		const relCurY = (this.screenCursorY - screenCenterY) + this.universe.cameraOffset.y * zoomScale;
+		
+		let dxCur = (this.screenCursorX - screenCenterX) / zoomScale;
+		let dyCur = (this.screenCursorY - screenCenterY) / zoomScale;
+
+		if (renderState.rotation !== 0) {
+			const cosA = Math.cos(-renderState.rotation);
+			const sinA = Math.sin(-renderState.rotation);
+			const rDx = dxCur * cosA - dyCur * sinA;
+			const rDy = dxCur * sinA + dyCur * cosA;
+			dxCur = rDx;
+			dyCur = rDy;
+		}
+
+		const relCurX = (dxCur + renderState.cameraOffset.x) * zoomScale;
+		const relCurY = (dyCur + renderState.cameraOffset.y) * zoomScale;
 
 		const lineLength = Math.sqrt(Math.pow(relStartX - relCurX, 2) + Math.pow(relStartY - relCurY, 2));
 		const endX = relStartX + Math.cos(Math.atan2(v.vy, v.vx)) * lineLength;
@@ -335,9 +366,11 @@ export class ObjectPlacer {
 		const param = DEFAULT_OBJECT_PARAMS[objName];
 		const massText = param.MASS.toExponential(2) + " t";
 
-		// Adjust center offset
-		const hudX = (this.screenCursorX - this.universe.canvas.width / 2) + conf.HUD_OFFSET_X;
-		const hudY = (this.screenCursorY - this.universe.canvas.height / 2) + conf.HUD_OFFSET_Y;
+		// Adjust center offset natively based on screen cursor
+		// Note: The UI is rendered in the rotated and translated context here,
+		// so HUD remains fixed to the world grid instead of the screen borders.
+		const hudX = relCurX + conf.HUD_OFFSET_X;
+		const hudY = relCurY + conf.HUD_OFFSET_Y;
 
 		// HUD background
 		ctx.fillStyle = conf.HUD_BG_COLOR;

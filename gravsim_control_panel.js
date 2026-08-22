@@ -47,9 +47,7 @@ export class ControlPanel {
 		};
 
 		this.universe.InputManager.onPan = (dx, dy) => {
-			const zoomScale = this.universe.zoomScale;
-			this.universe.cameraOffset.x -= dx / zoomScale;
-			this.universe.cameraOffset.y -= dy / zoomScale;
+			this.universe.camera.addPan(dx, dy);
 		};
 
 		// Events for UI

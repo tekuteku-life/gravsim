@@ -16,7 +16,9 @@ export class SystemTab {
 		});
 
 		this.updateTimeScaleIndicator(this.getTimeScale());
-		this.updateZoomScaleIndicator(this.getZoomScale());
+
+		// Setup initial zoom indicator based on camera target
+		this.updateZoomScaleIndicator(Math.pow(10, this.universe.camera.targetZoomExp));
 	}
 
 	_initElements() {
@@ -45,7 +47,13 @@ export class SystemTab {
 
 	_bindEvents() {
 		this.ui.timeScale.addEventListener('input', () => this.updateTimeScaleIndicator(this.getTimeScale()));
-		this.ui.zoomScale.addEventListener('input', () => this.updateZoomScaleIndicator(this.getZoomScale()));
+
+		this.ui.zoomScale.addEventListener('input', (e) => {
+			const exp = parseFloat(e.target.value);
+			this.universe.camera.setTargetZoomExp(exp);
+			this.updateZoomScaleIndicator(Math.pow(10, exp));
+		});
+
 		this.ui.centerSelect.addEventListener('change', (e) => this._onCenterChanged(e));
 
 		// Simulation Control
@@ -132,7 +140,7 @@ export class SystemTab {
 	}
 
 	setZoomScaleByStep(step) {
-		let currentExp = parseFloat(this.ui.zoomScale.value);
+		let currentExp = this.universe.camera.targetZoomExp;
 		const max = parseFloat(this.ui.zoomScale.max);
 		const min = parseFloat(this.ui.zoomScale.min);
 
@@ -140,11 +148,9 @@ export class SystemTab {
 		if (currentExp > max) { currentExp = max; }
 		else if (currentExp < min) { currentExp = min; }
 
+		this.universe.camera.setTargetZoomExp(currentExp);
 		this.ui.zoomScale.value = currentExp.toFixed(2);
-
-		const realZoom = Math.pow(10, currentExp);
-		this.updateZoomScaleIndicator(realZoom);
-		this.universe.updateZoomScale();
+		this.updateZoomScaleIndicator(Math.pow(10, currentExp));
 	}
 
 	updateTimeScaleIndicator(val) {
@@ -218,8 +224,9 @@ export class SystemTab {
 		}
 		if (cpState.zoomScaleVal !== undefined) {
 			this.ui.zoomScale.value = cpState.zoomScaleVal;
-			this.updateZoomScaleIndicator(this.getZoomScale());
-			this.universe.updateZoomScale();
+			this.universe.camera.setTargetZoomExp(cpState.zoomScaleVal);
+			this.universe.camera.currentZoomExp = cpState.zoomScaleVal; // Apply instantly
+			this.updateZoomScaleIndicator(Math.pow(10, cpState.zoomScaleVal));
 		}
 		this.updateCenterOptions();
 	}

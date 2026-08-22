@@ -155,7 +155,7 @@ export class RocketTab {
 			option.value = obj.id;
 			option.textContent = `${obj.name} (ID: ${obj.id})`;
 
-			if (obj.id === currentHostId || (currentHostId === null && this.universe.centerObject && obj.id === this.universe.centerObject.id)) {
+			if (obj.id === currentHostId || (currentHostId === null && this.universe.camera.trackingTarget && obj.id === this.universe.camera.trackingTarget.id)) {
 				option.selected = true;
 				this.universe.RocketLauncher.hostId = obj.id;
 			}
@@ -187,14 +187,14 @@ export class RocketTab {
 		let rMeters = 0;
 
 		if (rl.mode === 'host') {
-			host = this.universe.objects.find(o => o.id === rl.hostId) || this.universe.centerObject;
+			host = this.universe.objects.find(o => o.id === rl.hostId) || this.universe.camera.trackingTarget;
 			if (host) {
 				upAngleRad = UnitConvertUtils.deg2rad(rl.hostAngleDeg);
 				rMeters = host.radius + (param.RADIUS || 1) + rl.hostAltitudeM;
 			}
 		} else {
 			// Center Object is regarded as host
-			host = this.universe.centerObject;
+			host = this.universe.camera.trackingTarget;
 			if (host) {
 				const dx = rl.freeX - host.x;
 				const dy = rl.freeY - host.y;
@@ -246,8 +246,7 @@ export class RocketTab {
 		const host = this.universe.objects.find(o => o.id === hostId);
 		if (!host) return;
 
-		this.universe.ObjectManager.centerObject = host;
-		this.universe.cameraOffset = { x: 0, y: 0 };
+		this.universe.camera.setTrackingTarget(host);
 		this.systemTab.updateCenterOptions();
 		this.universe.InfoPanel.updateCamera(host.name);
 
@@ -267,8 +266,8 @@ export class RocketTab {
 			idealExp = Math.max(minZoom, Math.min(maxZoom, idealExp));
 
 			this.systemTab.ui.zoomScale.value = idealExp.toFixed(2);
+			this.universe.camera.setTargetZoomExp(idealExp);
 			this.systemTab.updateZoomScaleIndicator(this.systemTab.getZoomScale());
-			this.universe.updateZoomScale();
 		}
 	}
 
@@ -307,16 +306,20 @@ export class RocketTab {
 
 		this.universe.RocketLauncher.togglePreview(false);
 
-		if (this.universe.RocketLauncher.rolloutedRocketId !== null || this.universe.LaunchSequencer.isActive) {
+		// Stop auto tracking gracefully
+		if (this.universe.RocketLauncher.isAutoTracking) {
+			const host = this.universe.objects.find(o => o.id === this.universe.RocketLauncher.hostId);
+			this.universe.RocketLauncher._stopAutoTracking(host);
+		} else if (this.universe.RocketLauncher.rolloutedRocketId !== null || this.universe.LaunchSequencer.isActive) {
 			this.previousCameraTarget = null;
 			this.previousTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
 			this.previousZoomScaleVal = null;
+		} else {
+			// Restore time & zoom scale & camera target
+			this.restoreTimeScale();
+			this.restoreZoomScale();
+			this.restoreCameraTarget();
 		}
-
-		// Restore time & zoom scale & camera target
-		this.restoreTimeScale();
-		this.restoreZoomScale();
-		this.restoreCameraTarget();
 
 		this.isOpened = false;
 	}
@@ -334,9 +337,9 @@ export class RocketTab {
 	}
 
 	saveCameraTarget() {
-		if (this.universe.centerObject !== null) {
-			this.previousCameraTarget = this.universe.centerObject;
-			this.previousCameraOffset = { ...this.universe.cameraOffset };
+		if (this.universe.camera.trackingTarget !== null) {
+			this.previousCameraTarget = this.universe.camera.trackingTarget;
+			this.previousCameraOffset = { ...this.universe.camera.targetOffset };
 		}
 	}
 
@@ -351,17 +354,18 @@ export class RocketTab {
 	restoreZoomScale() {
 		if (this.previousZoomScaleVal !== null && this.systemTab.ui.zoomScale) {
 			this.systemTab.ui.zoomScale.value = this.previousZoomScaleVal;
+			this.universe.camera.setTargetZoomExp(parseFloat(this.previousZoomScaleVal));
 			this.systemTab.updateZoomScaleIndicator(this.systemTab.getZoomScale());
-			this.universe.updateZoomScale();
 			this.previousZoomScaleVal = null;
 		}
 	}
 
 	restoreCameraTarget() {
 		if (this.previousCameraTarget !== null) {
-			// By pass setter to reset offset, unintentionally
-			this.universe.ObjectManager.centerObject = this.previousCameraTarget;
-			this.universe.cameraOffset = { ...this.previousCameraOffset };
+			this.universe.camera.setTrackingTarget(this.previousCameraTarget);
+			if (this.previousCameraOffset) {
+				this.universe.camera.setTargetOffset(this.previousCameraOffset.x, this.previousCameraOffset.y);
+			}
 			this.universe.ControlPanel.systemTab.updateCenterOptions();
 			this.universe.InfoPanel.updateCamera(this.previousCameraTarget.name);
 
