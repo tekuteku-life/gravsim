@@ -256,6 +256,10 @@ export class TelemetryPanel {
 	_updateFlightDirectorUI(thrustAngle, progradeAngle, gravityAngle) {
 		const getOffsetPct = (angle, refAngle) => {
 			let diff = MathUtils.normalizeAngle(angle - refAngle);
+			// Stabilize the boundary to prevent the indicator from wildly jumping between 0% and 100%
+			if (Math.abs(diff) > Math.PI - 0.005) {
+				diff = Math.PI;
+			}
 			return 50 + (diff / Math.PI) * 50; 
 		};
 
