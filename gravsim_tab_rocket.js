@@ -183,13 +183,11 @@ export class RocketTab {
 
 		// Calculate Local Gravity and Direction
 		let host;
-		let upAngleRad = 0;
 		let rMeters = 0;
 
 		if (rl.mode === 'host') {
 			host = this.universe.objects.find(o => o.id === rl.hostId) || this.universe.camera.trackingTarget;
 			if (host) {
-				upAngleRad = UnitConvertUtils.deg2rad(rl.hostAngleDeg);
 				rMeters = host.radius + (param.RADIUS || 1) + rl.hostAltitudeM;
 			}
 		} else {
@@ -198,7 +196,6 @@ export class RocketTab {
 			if (host) {
 				const dx = rl.freeX - host.x;
 				const dy = rl.freeY - host.y;
-				upAngleRad = Math.atan2(dy, dx);
 				const distPx = Math.sqrt(dx * dx + dy * dy);
 				rMeters = UnitConvertUtils.pix2m(distPx);
 			}
@@ -218,9 +215,8 @@ export class RocketTab {
 			const weightN = UnitConvertUtils.ton2kg(rl.dryMassT + rl.fuelAmountT) * localG;
 			const thrustN = UnitConvertUtils.kn2n(rl.thrustKN);
 
-			// Transform thrust vector to relative degree
-			const thrustAngleRad = UnitConvertUtils.deg2rad(rl.launchAngleDeg);
-			const relAngleRad = thrustAngleRad - upAngleRad;
+			// Since launchAngleDeg is relative to zenith, we can resolve directly
+			const relAngleRad = UnitConvertUtils.deg2rad(Number(rl.launchAngleDeg) || 0);
 
 			const thrustY = thrustN * Math.cos(relAngleRad);
 			const thrustX = thrustN * Math.sin(relAngleRad);

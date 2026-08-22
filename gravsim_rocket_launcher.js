@@ -27,15 +27,16 @@ export class RocketLauncher {
 		this.freeX = 0;
 		this.freeY = 0;
 
-		// Host mode relative parameters
-		this.hostAngleDeg = 270;
+		// Host mode relative parameters (0: zenith/up, 90: right, 180/-180: down, -90: left)
+		this.hostAngleDeg = 0;
 		this.hostAltitudeM = 10; // (m)
 
 		// Rocket parameters
 		this.dryMassT = 7;	// (t) Payload + empty structure
 		this.fuelAmountT = 550; // (t)
 		this.fuelType = 'liquid';
-		this.launchAngleDeg = 270;
+		// Relative launch angle from the zenith (0: straight up, -90: left, 90: right)
+		this.launchAngleDeg = 0;
 		this.thrustKN = 7000;	// (kN)
 		this.calculatedBurnTime = 0;
 		this.maxGLimit = 4.0;	// G
@@ -117,7 +118,9 @@ export class RocketLauncher {
 		if (this.mode === 'host') {
 			const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.camera.trackingTarget;
 			if (host) {
-				const angleRad = UnitConvertUtils.deg2rad(this.hostAngleDeg);
+				// Canvas 0 deg is right, -90 deg is up. Convert user zenith(0) to canvas(-90).
+				const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
+				const angleRad = UnitConvertUtils.deg2rad(hAngleCanvas);
 				const distance = host.radius + (param.RADIUS || 1) + this.hostAltitudeM;
 				
 				const distPx = UnitConvertUtils.m2pix(distance);
@@ -188,8 +191,12 @@ export class RocketLauncher {
 		ctx.arc(0, 0, 2, 0, Math.PI * 2);
 		ctx.fill();
 
-		// Launch vector line
-		ctx.rotate(UnitConvertUtils.deg2rad(this.launchAngleDeg));
+		// Launch vector line (Absolute angle = Canvas Host Angle + Relative Launch Angle)
+		const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
+		const lAngle = Number(this.launchAngleDeg) || 0;
+		const absLaunchAngleDeg = hAngleCanvas + lAngle;
+
+		ctx.rotate(UnitConvertUtils.deg2rad(absLaunchAngleDeg));
 		ctx.strokeStyle = conf.HOST_FILL;
 		ctx.setLineDash(conf.HOST_DASH);
 		ctx.beginPath();
@@ -269,8 +276,11 @@ export class RocketLauncher {
 		const finalMassTon = this.dryMassT;
 		const massLossRateTon = this.calculatedBurnTime > 0 ? (initialMassTon - finalMassTon) / this.calculatedBurnTime : 0;
 
-		const initialAngleRad = UnitConvertUtils.deg2rad(this.hostAngleDeg);
-		const targetLaunchAngleRad = UnitConvertUtils.deg2rad(this.launchAngleDeg);
+		const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
+		const lAngle = Number(this.launchAngleDeg) || 0;
+
+		const initialAngleRad = UnitConvertUtils.deg2rad(hAngleCanvas);
+		const targetLaunchAngleRad = UnitConvertUtils.deg2rad(hAngleCanvas + lAngle);
 
 		const optParams = {
 			force: UnitConvertUtils.kn2n(this.thrustKN),
@@ -283,7 +293,7 @@ export class RocketLauncher {
 			maxGLimit: this.maxGLimit,
 			autoControl: this.autoControl,
 			hostId: this.hostId,
-			hostAngleRad: UnitConvertUtils.deg2rad(this.hostAngleDeg),
+			hostAngleRad: UnitConvertUtils.deg2rad(hAngleCanvas),
 			hostAltM: this.hostAltitudeM,
 			isHoldDown: true,
 			isIgnited: false
@@ -389,11 +399,9 @@ export class RocketLauncher {
 				this._stopAutoTracking(host);
 			}
 		}
-
 	}
 
 	update(dt) {
-
 		this._autoTracking();
 
 		if (this.padEffect && this.padEffect.isActive) {
@@ -415,9 +423,9 @@ export class RocketLauncher {
 		return {
 			mode: this.mode,
 			hostId: this.hostId,
-			hostAngleDeg: this.hostAngleDeg,
+			hostAngleDeg: Number(this.hostAngleDeg) || 0,
 			hostAltitudeM: this.hostAltitudeM,
-			launchAngleDeg: this.launchAngleDeg,
+			launchAngleDeg: Number(this.launchAngleDeg) || 0,
 			initialMassT: this.dryMassT,
 			thrustKN: this.thrustKN,
 			burnTime: this.calculatedBurnTime,
@@ -430,7 +438,7 @@ export class RocketLauncher {
 		if (!state) return;
 		if (state.mode !== undefined) this.mode = state.mode;
 		if (state.hostId !== undefined) this.hostId = state.hostId;
-		if (state.hostAngleDeg !== undefined) this.hostAngleDeg = state.hostAngleDeg;
+		if (state.hostAngleDeg !== undefined) this.hostAngleDeg = Number(state.hostAngleDeg) || 0;
 		if (state.hostAltitudeM !== undefined) this.hostAltitudeM = state.hostAltitudeM;
 		if (state.launchAngleDeg !== undefined) this.launchAngleDeg = state.launchAngleDeg;
 		if (state.initialMassT !== undefined) this.dryMassT = state.initialMassT;
