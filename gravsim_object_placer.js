@@ -75,10 +75,9 @@ export class ObjectPlacer {
 			if (options.angle !== undefined) {
 				obj.thrustAngle = options.angle;
 			}
-			if (options.launchAngle !== undefined) {
-				obj.launchAngle = options.launchAngle;
-			} else {
-				obj.launchAngle = obj.thrustAngle;
+
+			if (options.flightProfile !== undefined) {
+				obj.flightProfile = options.flightProfile;
 			}
 
 			// Apply active rocket engine parameters if specified

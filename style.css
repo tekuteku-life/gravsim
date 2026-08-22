@@ -616,3 +616,39 @@ button:hover { background: #444; }
 		height: 50vw !important;
 	}
 }
+
+/* Flight Profile Table */
+.profile-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 5px;
+	font-size: 11px;
+}
+.profile-table th, .profile-table td {
+	border: 1px solid #444;
+	padding: 4px;
+	text-align: center;
+}
+.profile-table th {
+	background-color: #222;
+	color: #aaa;
+}
+.profile-table select, .profile-table input {
+	width: 100%;
+	box-sizing: border-box;
+	background: #111;
+	color: #00ffcc;
+	border: 1px solid #333;
+	font-family: monospace;
+	text-align: center;
+}
+.profile-table button.remove-step-btn {
+	background: #5a1a1a;
+	color: #ff5555;
+	border: 1px solid #ff5555;
+	padding: 2px 5px;
+	cursor: pointer;
+}
+.profile-table button.remove-step-btn:hover {
+	background: #7a2020;
+}

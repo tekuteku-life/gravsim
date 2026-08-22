@@ -139,7 +139,7 @@ export class ObjectManager {
 			thrustForce: obj.thrustForce || 0,
 			burnTime: obj.burnTime || 0,
 			thrustAngle: obj.thrustAngle || 0,
-			launchAngle: obj.launchAngle !== undefined ? obj.launchAngle : (obj.thrustAngle || 0),
+			flightProfile: obj.flightProfile || [],
 			massLossRate: UnitConvertUtils.ton2kg(obj.massLossRate || 0),
 			maxGLimit: obj.maxGLimit || 0,
 			autoControl: obj.autoControl !== undefined ? obj.autoControl : true,
@@ -323,7 +323,7 @@ export class ObjectManager {
 				base.thrustForce = obj.thrustForce;
 				base.burnTime = obj.burnTime;
 				base.thrustAngle = obj.thrustAngle;
-				base.launchAngle = obj.launchAngle;
+				base.flightProfile = obj.flightProfile;
 				base.massLossRate = obj.massLossRate;
 				base.maxGLimit = obj.maxGLimit;
 			} else {
@@ -348,7 +348,13 @@ export class ObjectManager {
 					obj.thrustForce = o.thrustForce || 0;
 					obj.burnTime = o.burnTime || 0;
 					obj.thrustAngle = o.thrustAngle || 0;
-					obj.launchAngle = o.launchAngle !== undefined ? o.launchAngle : (o.thrustAngle || 0);
+
+					if (o.flightProfile !== undefined) {
+						obj.flightProfile = o.flightProfile;
+					} else {
+						obj.flightProfile = [];
+					}
+
 					obj.massLossRate = o.massLossRate || 0;
 					obj.maxGLimit = o.maxGLimit || 0;
 				} else if (o.type === OBJECT_TYPES.DEBRIS) {

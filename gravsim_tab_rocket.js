@@ -31,8 +31,8 @@ export class RocketTab {
 			rlHostAngleVal: document.getElementById('rl-host-angle-val'),
 			rlHostAlt: document.getElementById('rl-host-alt'),
 			rlHostAltVal: document.getElementById('rl-host-alt-val'),
-			rlLaunchAngle: document.getElementById('rl-launch-angle'),
-			rlLaunchAngleVal: document.getElementById('rl-launch-angle-val'),
+			rlFlightProfileBody: document.getElementById('rl-flight-profile-body'),
+			rlAddProfileBtn: document.getElementById('rl-add-profile-btn'),
 			rlLaunchMass: document.getElementById('rl-launch-mass'),
 			rlLaunchMassVal: document.getElementById('rl-launch-mass-val'),
 			rlFuelType: document.getElementById('rl-fuel-type'),
@@ -62,6 +62,13 @@ export class RocketTab {
 	}
 
 	_bindEvents() {
+		this.ui.rlAddProfileBtn.addEventListener('click', () => {
+			this.universe.RocketLauncher.flightProfile.push({ type: 'alt', value: 0, thrust: 100, angle: 0 });
+			this._renderProfileTable();
+			this._updateRocketStats();
+		});
+		this._renderProfileTable();
+
 		this.ui.rlModeSelect.addEventListener('change', (e) => {
 			this.universe.RocketLauncher.mode = e.target.value;
 			this.ui.rlHostOptions.style.display = e.target.value === 'host' ? 'block' : 'none';
@@ -136,7 +143,6 @@ export class RocketTab {
 		// Bind all Rocket Launcher sliders
 		bindSlider('rlHostAngle', 'rlHostAngleVal', 'hostAngleDeg');
 		bindSlider('rlHostAlt', 'rlHostAltVal', 'hostAltitudeM', true);
-		bindSlider('rlLaunchAngle', 'rlLaunchAngleVal', 'launchAngleDeg');
 		bindSlider('rlLaunchMass', 'rlLaunchMassVal', 'dryMassT');
 		bindSlider('rlFuelAmount', 'rlFuelAmountVal', 'fuelAmountT');
 		bindSlider('rlLaunchThrust', 'rlLaunchThrustVal', 'thrustKN');
@@ -146,6 +152,58 @@ export class RocketTab {
 
 		document.addEventListener('rocket-preview-updated', () => {
 			this._updateRocketStats();
+		});
+	}
+
+	_renderProfileTable() {
+		if (!this.ui.rlFlightProfileBody) { return; }
+		this.ui.rlFlightProfileBody.innerHTML = '';
+		const profile = this.universe.RocketLauncher.flightProfile;
+		
+		profile.forEach((step, index) => {
+			const tr = document.createElement('tr');
+			
+			const tdType = document.createElement('td');
+			const selType = document.createElement('select');
+			selType.innerHTML = `<option value="alt" ${step.type==='alt'?'selected':''}>Alt(m)</option><option value="time" ${step.type==='time'?'selected':''}>Time(s)</option>`;
+			selType.onchange = (e) => { step.type = e.target.value; this._updateRocketStats(); };
+			tdType.appendChild(selType);
+			
+			const tdVal = document.createElement('td');
+			const inpVal = document.createElement('input');
+			inpVal.type = 'number'; inpVal.value = step.value; inpVal.min = 0;
+			inpVal.onchange = (e) => { step.value = parseFloat(e.target.value) || 0; this._updateRocketStats(); };
+			tdVal.appendChild(inpVal);
+			
+			const tdThrust = document.createElement('td');
+			const inpThrust = document.createElement('input');
+			inpThrust.type = 'number'; inpThrust.value = step.thrust; inpThrust.min = 0; inpThrust.max = 100;
+			inpThrust.onchange = (e) => { step.thrust = parseFloat(e.target.value) || 0; this._updateRocketStats(); };
+			tdThrust.appendChild(inpThrust);
+			
+			const tdAngle = document.createElement('td');
+			const inpAngle = document.createElement('input');
+			inpAngle.type = 'number'; inpAngle.value = step.angle; inpAngle.min = -90; inpAngle.max = 90;
+			inpAngle.onchange = (e) => { step.angle = parseFloat(e.target.value) || 0; this._updateRocketStats(); };
+			tdAngle.appendChild(inpAngle);
+			
+			const tdAct = document.createElement('td');
+			const btnDel = document.createElement('button');
+			btnDel.type = 'button'; btnDel.className = 'remove-step-btn'; btnDel.textContent = 'X';
+			btnDel.onclick = () => { 
+				this.universe.RocketLauncher.flightProfile.splice(index, 1);
+				this._renderProfileTable();
+				this._updateRocketStats();
+			};
+			tdAct.appendChild(btnDel);
+			
+			tr.appendChild(tdType);
+			tr.appendChild(tdVal);
+			tr.appendChild(tdThrust);
+			tr.appendChild(tdAngle);
+			tr.appendChild(tdAct);
+			
+			this.ui.rlFlightProfileBody.appendChild(tr);
 		});
 	}
 
@@ -221,7 +279,8 @@ export class RocketTab {
 			const thrustN = UnitConvertUtils.kn2n(rl.thrustKN);
 
 			// Since launchAngleDeg is relative to zenith, we can resolve directly
-			const relAngleRad = UnitConvertUtils.deg2rad(Number(rl.launchAngleDeg) || 0);
+			const relAngleDeg = rl.flightProfile.length > 0 ? Number(rl.flightProfile[0].angle) : 0;
+			const relAngleRad = UnitConvertUtils.deg2rad(relAngleDeg);
 
 			const thrustY = thrustN * Math.cos(relAngleRad);
 			const thrustX = thrustN * Math.sin(relAngleRad);
@@ -376,20 +435,39 @@ export class RocketTab {
 			this.ui.rlRolloutBtn.style.display = 'none';
 			this.ui.rlIgnitionGroup.style.display = 'flex';
 			this.ui.rlAbortBtn.style.display = 'block';
+
+			// Ensure launch buttons are enabled ONLY IF sequence is NOT active
+			const isSequencerActive = this.universe.LaunchSequencer && this.universe.LaunchSequencer.isActive;
+			if (!isSequencerActive) {
+				this.ui.rlIgniteQuickBtn.disabled = false;
+				this.ui.rlIgniteFullBtn.disabled = false;
+			}
+
 			sliders.forEach(slider => slider.disabled = true);
 			this.ui.rlModeSelect.disabled = true;
 			this.ui.rlFuelType.disabled = true;
 			this.ui.rlHostSelect.disabled = true;
 			this.ui.rlAutoControl.disabled = true;
+			this.ui.rlAddProfileBtn.disabled = true;
+			const profileInputs = this.ui.rlFlightProfileBody ? this.ui.rlFlightProfileBody.querySelectorAll('input, select, button') : [];
+			profileInputs.forEach(el => el.disabled = true);
 		} else {
 			this.ui.rlRolloutBtn.style.display = 'block';
 			this.ui.rlIgnitionGroup.style.display = 'none';
 			this.ui.rlAbortBtn.style.display = 'none';
+
+			// Reset disabled states just in case
+			this.ui.rlIgniteQuickBtn.disabled = false;
+			this.ui.rlIgniteFullBtn.disabled = false;
+
 			sliders.forEach(slider => slider.disabled = false);
 			this.ui.rlModeSelect.disabled = false;
 			this.ui.rlFuelType.disabled = false;
 			this.ui.rlHostSelect.disabled = false;
 			this.ui.rlAutoControl.disabled = false;
+			this.ui.rlAddProfileBtn.disabled = false;
+			const profileInputs = this.ui.rlFlightProfileBody ? this.ui.rlFlightProfileBody.querySelectorAll('input, select, button') : [];
+			profileInputs.forEach(el => el.disabled = false);
 		}
 	}
 
@@ -408,9 +486,21 @@ export class RocketTab {
 			if (this.ui[valId]) { this.ui[valId].textContent = val; }
 		};
 
-		updateSlider('rlHostAngle', 'rlHostAngleVal', rlState.hostAngleDeg);
+		if (rlState.hostAngleDeg !== undefined) {
+			let hAngle = Number(rlState.hostAngleDeg) || 0;
+			// Normalize to -180 ~ 180 to fit the new specification
+			while (hAngle > 180) hAngle -= 360;
+			while (hAngle <= -180) hAngle += 360;
+			this.universe.RocketLauncher.hostAngleDeg = hAngle;
+
+			this.ui.rlHostAngle.value = this.universe.RocketLauncher.hostAngleDeg;
+			this.ui.rlHostAngleVal.textContent = this.universe.RocketLauncher.hostAngleDeg;
+		}
 		updateSlider('rlHostAlt', 'rlHostAltVal', rlState.hostAltitudeM);
-		updateSlider('rlLaunchAngle', 'rlLaunchAngleVal', rlState.launchAngleDeg);
+		if (rlState.flightProfile !== undefined) {
+			this.universe.RocketLauncher.flightProfile = JSON.parse(JSON.stringify(rlState.flightProfile));
+			this._renderProfileTable();
+		}
 		updateSlider('rlLaunchMass', 'rlLaunchMassVal', rlState.dryMassT);
 		updateSlider('rlLaunchThrust', 'rlLaunchThrustVal', rlState.thrustKN);
 		updateSlider('rlFuelAmount', 'rlFuelAmountVal', rlState.fuelAmountT);

@@ -240,7 +240,7 @@ export class Rocket extends GravSimObject {
 		this.thrustForce = 0; // N
 		this.burnTime = 0;
 		this.thrustAngle = 0;
-		this.launchAngle = 0; // Target launch angle separate from current thrust angle
+		this.flightProfile = [];
 		this.massLossRate = 0; // t/s
 		this.maxGLimit = 0;
 		this.thrustRatio = 0;

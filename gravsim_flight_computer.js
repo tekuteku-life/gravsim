@@ -13,9 +13,11 @@ export class FlightComputer {
 		};
 
 		this.currentThrustAngle = config.thrustAngle || 0;
-		this.targetLaunchAngle = config.launchAngle !== undefined ? config.launchAngle : this.currentThrustAngle;
+		this.targetLaunchAngle = this.currentThrustAngle;
 		this.flightTime = 0;
-		
+		this.flightProfile = config.flightProfile || [];
+		this.hostAngleRad = config.hostAngleRad || 0;
+
 		this.telemetryCache = {
 			status: TELEMETRY.STATUS.PRE_LAUNCH,
 			qAxialKpa: 0,
@@ -35,6 +37,59 @@ export class FlightComputer {
 		};
 	}
 
+	_evaluateProfile(sensor) {
+		let baseThrottle = 1.0;
+		let relAngleDeg = 0;
+
+		if (this.flightProfile.length === 0) {
+			return { throttle: baseThrottle, relAngleDeg: relAngleDeg };
+		}
+
+		let currentIndex = -1;
+		for (let i = 0; i < this.flightProfile.length; i++) {
+			const step = this.flightProfile[i];
+			const currentVal = step.type === 'time' ? this.flightTime : this.telemetryCache.altM;
+			if (currentVal >= step.value) {
+				currentIndex = i;
+			} else {
+				break;
+			}
+		}
+
+		if (currentIndex === -1) {
+			// Before the first step
+			const firstStep = this.flightProfile[0];
+			return { throttle: firstStep.thrust / 100, relAngleDeg: firstStep.angle };
+		}
+
+		if (currentIndex === this.flightProfile.length - 1) {
+			// After the last step
+			const lastStep = this.flightProfile[currentIndex];
+			return { throttle: lastStep.thrust / 100, relAngleDeg: lastStep.angle };
+		}
+
+		// Interpolate between currentIndex and currentIndex + 1
+		const stepA = this.flightProfile[currentIndex];
+		const stepB = this.flightProfile[currentIndex + 1];
+
+		if (stepA.type !== stepB.type) {
+			return { throttle: stepA.thrust / 100, relAngleDeg: stepA.angle };
+		}
+
+		const currentVal = stepA.type === 'time' ? this.flightTime : this.telemetryCache.altM;
+		const progress = Math.max(0, Math.min(1, (currentVal - stepA.value) / (stepB.value - stepA.value)));
+
+		const throttleA = stepA.thrust / 100;
+		const throttleB = stepB.thrust / 100;
+		const angleA = stepA.angle;
+		const angleB = stepB.angle;
+
+		const interpThrottle = throttleA + (throttleB - throttleA) * progress;
+		const interpAngle = angleA + (angleB - angleA) * progress;
+
+		return { throttle: interpThrottle, relAngleDeg: interpAngle };
+	}
+
 	update(sensor) {
 		if (!sensor.isHoldDown || this.flightTime > 0) {
 			this.flightTime += sensor.dt;
@@ -42,16 +97,21 @@ export class FlightComputer {
 
 		this._updateTelemetry(sensor);
 
+		const profileState = this._evaluateProfile(sensor);
+
+		// Apply profile state (Convert from relative to absolute angle for physics target)
+		this.targetLaunchAngle = this.hostAngleRad + UnitConvertUtils.deg2rad(profileState.relAngleDeg);
+
 		const thrustAngleRad = this._computeThrustAngle(sensor);
 		this.currentThrustAngle = thrustAngleRad;
 
-		const throttle = this._computeThrottle(sensor);
+		const throttle = this._computeThrottle(sensor, profileState.throttle);
 
 		// Decide mission status
 		let statusInt = TELEMETRY.STATUS.PRE_LAUNCH;
 		if (sensor.isHoldDown) {
 			statusInt = TELEMETRY.STATUS.PRE_LAUNCH;
-		} else if (sensor.burnTime > 0) {
+		} else if (sensor.burnTime > 0 && throttle > 0) {
 			if (this.telemetryCache.structRatio > TELEMETRY.MAX_Q_TH) {
 				statusInt = TELEMETRY.STATUS.MAX_Q;
 			} else {
@@ -158,9 +218,9 @@ export class FlightComputer {
 		}
 	}
 
-	_computeThrottle(sensor) {
+	_computeThrottle(sensor, baseThrottle) {
 		if (sensor.burnTime <= 0) { return 0.0; }
-		let throttle = 1.0;
+		let throttle = baseThrottle;
 
 		// Max-G Limiter (Throttle down)
 		if (this.config.maxGLimit > 0) {

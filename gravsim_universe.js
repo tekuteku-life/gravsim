@@ -83,9 +83,9 @@ export class Universe {
 
 		this.InfoPanel = new InfoPanel(this);
 		this.TelemetryPanel = new TelemetryPanel(this);
+		this.RocketLauncher = new RocketLauncher(this);
 		this.ControlPanel = new ControlPanel(this);
 		this.ObjectPlacer = new ObjectPlacer(this);
-		this.RocketLauncher = new RocketLauncher(this);
 		this.LaunchSequencer = new LaunchSequencer(this);
 		this.SaveManager = new SaveManager(this);
 

@@ -210,7 +210,7 @@ export class CalcRocket extends GravSimCalcObject {
 		this.thrustForce = thrustData?.thrustForce || 0;
 		this.burnTime = thrustData?.burnTime || 0;
 		this.thrustAngle = thrustData?.thrustAngle || 0;
-		this.launchAngle = thrustData?.launchAngle !== undefined ? thrustData.launchAngle : this.thrustAngle;
+		this.flightProfile = thrustData?.flightProfile || [];
 		this.massLossRate = thrustData?.massLossRate || 0;
 		this.maxGLimit = thrustData?.maxGLimit || 0;
 		this.autoControl = thrustData?.autoControl !== undefined ? thrustData.autoControl : true;
@@ -233,7 +233,8 @@ export class CalcRocket extends GravSimCalcObject {
 			maxQAxialLimit: DEFAULT_OBJECT_PARAMS[name]?.MAX_Q_AXIAL || Infinity,
 			maxQLateralLimit: DEFAULT_OBJECT_PARAMS[name]?.MAX_Q_LATERAL || Infinity,
 			thrustAngle: this.thrustAngle,
-			launchAngle: this.launchAngle,
+			flightProfile: this.flightProfile,
+			hostAngleRad: this.hostAngleRad
 		});
 	}
 

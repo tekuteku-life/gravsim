@@ -35,8 +35,14 @@ export class RocketLauncher {
 		this.dryMassT = 7;	// (t) Payload + empty structure
 		this.fuelAmountT = 550; // (t)
 		this.fuelType = 'liquid';
-		// Relative launch angle from the zenith (0: straight up, -90: left, 90: right)
-		this.launchAngleDeg = 0;
+
+		// Default Flight Profile
+		this.flightProfile = [
+			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+			{ type: 'alt', value: 10000, thrust: 100, angle: 45 },
+			{ type: 'alt', value: 50000, thrust: 100, angle: 90 }
+		];
+
 		this.thrustKN = 7000;	// (kN)
 		this.calculatedBurnTime = 0;
 		this.maxGLimit = 4.0;	// G
@@ -193,7 +199,7 @@ export class RocketLauncher {
 
 		// Launch vector line (Absolute angle = Canvas Host Angle + Relative Launch Angle)
 		const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
-		const lAngle = Number(this.launchAngleDeg) || 0;
+		const lAngle = this.flightProfile.length > 0 ? Number(this.flightProfile[0].angle) : 0;
 		const absLaunchAngleDeg = hAngleCanvas + lAngle;
 
 		ctx.rotate(UnitConvertUtils.deg2rad(absLaunchAngleDeg));
@@ -277,17 +283,15 @@ export class RocketLauncher {
 		const massLossRateTon = this.calculatedBurnTime > 0 ? (initialMassTon - finalMassTon) / this.calculatedBurnTime : 0;
 
 		const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
-		const lAngle = Number(this.launchAngleDeg) || 0;
 
 		const initialAngleRad = UnitConvertUtils.deg2rad(hAngleCanvas);
-		const targetLaunchAngleRad = UnitConvertUtils.deg2rad(hAngleCanvas + lAngle);
 
 		const optParams = {
 			force: UnitConvertUtils.kn2n(this.thrustKN),
 			mass: initialMassTon,
 			emptyMass: finalMassTon,
 			angle: initialAngleRad, // Initially set to zenith direction
-			launchAngle: targetLaunchAngleRad, // Target pitch angle for gravity turn
+			flightProfile: this.flightProfile, // Profile is handled dynamically by FlightComputer
 			time: this.calculatedBurnTime,
 			lossRate: massLossRateTon,
 			maxGLimit: this.maxGLimit,
@@ -425,7 +429,7 @@ export class RocketLauncher {
 			hostId: this.hostId,
 			hostAngleDeg: Number(this.hostAngleDeg) || 0,
 			hostAltitudeM: this.hostAltitudeM,
-			launchAngleDeg: Number(this.launchAngleDeg) || 0,
+			flightProfile: JSON.parse(JSON.stringify(this.flightProfile)),
 			initialMassT: this.dryMassT,
 			thrustKN: this.thrustKN,
 			burnTime: this.calculatedBurnTime,
@@ -440,7 +444,7 @@ export class RocketLauncher {
 		if (state.hostId !== undefined) this.hostId = state.hostId;
 		if (state.hostAngleDeg !== undefined) this.hostAngleDeg = Number(state.hostAngleDeg) || 0;
 		if (state.hostAltitudeM !== undefined) this.hostAltitudeM = state.hostAltitudeM;
-		if (state.launchAngleDeg !== undefined) this.launchAngleDeg = state.launchAngleDeg;
+		if (state.flightProfile !== undefined) { this.flightProfile = JSON.parse(JSON.stringify(state.flightProfile)); }
 		if (state.initialMassT !== undefined) this.dryMassT = state.initialMassT;
 		if (state.thrustKN !== undefined) this.thrustKN = state.thrustKN;
 		if (state.burnTime !== undefined) this.calculatedBurnTime = state.burnTime;
