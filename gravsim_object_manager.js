@@ -223,12 +223,12 @@ export class ObjectManager {
 				}
 				
 				target.radius = objData.radius;
-				target.updateHistory(this.physicsSequence);
-
 				target.inAtmosphere = objData.inAtmosphere;
 				target.isEscaping = objData.isEscaping;
 				target.dominantBodyId = objData.dominantBodyId;
 				target.distToDominantM = objData.distToDominantM;
+
+				target.updateHistory(this.physicsSequence, this.objects);
 
 				if (objData.isCollided) {
 					if (objData.isImpact && target.state === OBJECT_STATE.ACTIVE) {

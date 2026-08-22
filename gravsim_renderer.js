@@ -24,7 +24,8 @@ export class Renderer {
 			trailLengthAU: 3.0,
 			centerObjectId: null,
 			cameraOffset: { x: 0, y: 0 },
-			rotation: 0
+			rotation: 0,
+			objectsMap: null
 		};
 	}
 
@@ -59,6 +60,9 @@ export class Renderer {
 		this.rotation = renderState.rotation;
 		this.zoomScale = renderState.zoomScale;
 
+		const objectsMap = new Map();
+		objects.forEach(obj => objectsMap.set(obj.id, obj));
+
 		// Set up context
 		this.renderContext.basis = renderState.basis;
 		this.renderContext.zoomScale = renderState.zoomScale;
@@ -66,6 +70,7 @@ export class Renderer {
 		this.renderContext.cameraOffset = renderState.cameraOffset;
 		this.renderContext.centerObjectId = renderState.basis ? renderState.basis.id : null;
 		this.renderContext.rotation = renderState.rotation;
+		this.renderContext.objectsMap = objectsMap;
 		
 		// 1. Before objects
 		this.drawHooks.before.forEach(hook => hook(this.ctx, this.renderContext));

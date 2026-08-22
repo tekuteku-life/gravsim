@@ -2,7 +2,7 @@
 // gravsim_trajectory.js
 
 import { RENDER } from './gravsim_const.js';
-import { TrailRenderer } from './gravsim_trail_renderer.js';
+import { TrailLineRenderer } from './gravsim_trail_renderer.js';
 
 export class Trajectory {
 	constructor(id, config) {
@@ -92,6 +92,6 @@ export class Trajectory {
 
 	draw(renderContext) {
 		if (this.count < 2) { return; }
-		TrailRenderer.draw(this, renderContext);
+		TrailLineRenderer.draw(this, renderContext);
 	}
 }

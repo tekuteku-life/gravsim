@@ -6,7 +6,8 @@ import {
 	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE, PAD_EFFECT
 } from './gravsim_const.js';
 import { Trajectory } from './gravsim_trajectory.js';
-import { ColorUtils } from './gravsim_utils.js';
+import { EffectTrail } from './gravsim_effect_trail.js';
+import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * GravSimObject class which is base class
@@ -38,6 +39,7 @@ export class GravSimObject {
 			baseSize: size
 		};
 		this.trajectory = new Trajectory(id, rendering_config);
+		this.effectTrail = new EffectTrail(id, rendering_config);
 	}
 
 	get mass() { return 1; }
@@ -46,7 +48,7 @@ export class GravSimObject {
 		return renderContext && renderContext.centerObjectId === this.id;
 	}
 
-	updateHistory(currentFrame) {
+	updateHistory(currentFrame, objects) {
 		let mode = TRAIL_MODE.NORMAL;
 		if (this.inAtmosphere) {
 			mode = TRAIL_MODE.ATMOSPHERE;
@@ -54,18 +56,53 @@ export class GravSimObject {
 			mode = TRAIL_MODE.ESCAPE;
 		}
 		this.trajectory.addPoint(this.x, this.y, currentFrame, mode);
+
+		let refId = -1;
+		let refX = 0;
+		let refY = 0;
+		let refAngle = 0;
+
+		// Find the dominant body to record the effect position as a relative coordinate
+		if (this.dominantBodyId !== undefined && this.dominantBodyId !== -1 && objects) {
+			const refBody = objects.find(o => o.id === this.dominantBodyId);
+			if (refBody) {
+				refId = refBody.id;
+				refX = refBody.x;
+				refY = refBody.y;
+				refAngle = refBody.rotationAngle || 0;
+			}
+		}
+
+		let relX = this.x - refX;
+		let relY = this.y - refY;
+
+		// Rotate back to the reference body's local coordinate system (Atmosphere follows rotation)
+		if (mode === TRAIL_MODE.ATMOSPHERE && refAngle !== 0) {
+			const cosA = Math.cos(-refAngle);
+			const sinA = Math.sin(-refAngle);
+			const localX = relX * cosA - relY * sinA;
+			const localY = relX * sinA + relY * cosA;
+			relX = localX;
+			relY = localY;
+		}
+
+		this.effectTrail.addPoint(refId, relX, relY, currentFrame, mode);
 	}
 
 	clearHistory() {
 		if (this.trajectory) {
 			this.trajectory.clear();
 		}
+		if (this.effectTrail) {
+			this.effectTrail.clear();
+		}
 	}
 
 	finished() {
 		if (this.state === OBJECT_STATE.REMOVED) {
 			this.trajectory.shrink(2);
-			return this.trajectory.count <= 0;
+			this.effectTrail.shrink(2);
+			return this.trajectory.count <= 0 && this.effectTrail.count <= 0;
 		}
 		return false;
 	}
@@ -114,6 +151,7 @@ export class GravSimObject {
 
 		// Draw trajectory even if state == dead
 		this.trajectory.draw(renderContext);
+		this.effectTrail.draw(renderContext);
 	}
 
 	// Calculate switching between fixed size and real physical size
@@ -159,6 +197,7 @@ export class CelestialBody extends GravSimObject {
 	constructor(id, name, x, y, vx, vy, mass, color, size, radius, generation, borderColor, borderWidth) {
 		super(id, name, OBJECT_TYPES.CELESTIAL, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth);
 		this._mass = mass; // t
+		this.rotationAngle = 0; // rad
 	}
 	get mass() { return this._mass; }
 	set mass(val) { this._mass = val; }
@@ -230,6 +269,65 @@ export class Rocket extends GravSimObject {
 	}
 	get mass() { return this.dryMass + this.fuelMass; }
 	set mass(val) {}
+
+	// Override updateHistory exclusively for Rocket logic
+	updateHistory(currentFrame, objects) {
+		if (this.isHoldDown && !this.isIgnited) {
+			return;
+		}
+
+		let mode = TRAIL_MODE.NORMAL;
+		if (this.inAtmosphere) {
+			mode = TRAIL_MODE.ATMOSPHERE;
+		} else if (this.isEscaping) {
+			mode = TRAIL_MODE.ESCAPE;
+		}
+
+		this.trajectory.addPoint(this.x, this.y, currentFrame, mode);
+
+		const isBurning = this.isIgnited && this.burnTime > 0;
+
+		// Record position for effect when ...
+		// * Engine burning
+		// * In atmosphere
+		// * Escaping
+		if (isBurning || this.inAtmosphere || this.isEscaping) {
+			let refId = -1;
+			let refX = 0;
+			let refY = 0;
+			let refAngle = 0;
+
+			if (this.dominantBodyId !== undefined && this.dominantBodyId !== -1 && objects) {
+				const refBody = objects.find(o => o.id === this.dominantBodyId);
+				if (refBody) {
+					refId = refBody.id;
+					refX = refBody.x;
+					refY = refBody.y;
+					refAngle = refBody.rotationAngle || 0;
+				}
+			}
+
+			// Offset to nozzle
+			const conf = RENDER.ROCKET;
+			const nozzleOffsetX = -Math.cos(this.thrustAngle) * UnitConvertUtils.m2pix(this.radius * conf.BODY_LENGTH_MULT);
+			const nozzleOffsetY = -Math.sin(this.thrustAngle) * UnitConvertUtils.m2pix(this.radius * conf.BODY_LENGTH_MULT);
+
+			let relX = (this.x + nozzleOffsetX) - refX;
+			let relY = (this.y + nozzleOffsetY) - refY;
+
+			// Follow rotation
+			if (mode === TRAIL_MODE.ATMOSPHERE && refAngle !== 0) {
+				const cosA = Math.cos(-refAngle);
+				const sinA = Math.sin(-refAngle);
+				const localX = relX * cosA - relY * sinA;
+				const localY = relX * sinA + relY * cosA;
+				relX = localX;
+				relY = localY;
+			}
+
+			this.effectTrail.addPoint(refId, relX, relY, currentFrame, mode);
+		}
+	}
 
 	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
 		if (this.isIgnited && this.burnTime > 0) {

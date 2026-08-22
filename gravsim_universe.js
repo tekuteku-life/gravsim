@@ -1,7 +1,10 @@
 
 // gravsim_universe.js
 
-import { PHYSICS, SIMULATION, OBJECT_STATE, OBJECT_TYPES } from './gravsim_const.js';
+import {
+	PHYSICS, SIMULATION, OBJECT_STATE,
+	OBJECT_TYPES, DEFAULT_OBJECT_PARAMS
+} from './gravsim_const.js';
 import { Camera } from './gravsim_camera.js';
 import { Renderer } from './gravsim_renderer.js';
 import { OverlayRenderer } from './gravsim_overlay_renderer.js';
@@ -121,6 +124,19 @@ export class Universe {
 			this.objects.forEach(obj => {
 				if (obj.type === OBJECT_TYPES.ROCKET && obj.state === OBJECT_STATE.ACTIVE) {
 					obj.flightTime += scaledDt;
+				}
+			});
+		});
+
+		// Hook for celestial body rotation update
+		this.addUpdateHook((dt, scaledDt) => {
+			this.objects.forEach(obj => {
+				if (obj.type === OBJECT_TYPES.CELESTIAL && obj.state === OBJECT_STATE.ACTIVE) {
+					const param = DEFAULT_OBJECT_PARAMS[obj.name];
+					if (param && param.ROTATION_PERIOD) {
+						const omega = (2 * Math.PI) / param.ROTATION_PERIOD;
+						obj.rotationAngle = (obj.rotationAngle || 0) + omega * scaledDt;
+					}
 				}
 			});
 		});
