@@ -15,6 +15,7 @@ export class InputManager {
 		this.onDragMove = null;
 		this.onDragEnd = null;
 		this.onDragCancel = null;
+		this.onResetOffset = null;
 
 		this.isPanning = false;
 		this.hasPanned = false;
@@ -23,6 +24,9 @@ export class InputManager {
 
 		this.lastTouchDist = null;
 		this.lastTouchCenter = null;
+
+		this.lastRightClickTime = 0;
+		this.lastTwoFingerTapTime = 0;
 
 		this._bindEvents();
 	}
@@ -82,6 +86,15 @@ export class InputManager {
 		this.canvas.addEventListener('mouseup', (e) => {
 			if (e.button === 1 || e.button === 2) {
 				this.isPanning = false;
+				if (e.button === 2) {
+					const now = Date.now();
+					if (now - this.lastRightClickTime < UI.DOUBLE_TAP_DURATION) {
+						if (this.onResetOffset) { this.onResetOffset(); }
+						this.lastRightClickTime = 0;
+					} else {
+						this.lastRightClickTime = now;
+					}
+				}
 			} else if (e.button === 0) {
 				if (this.isDragging) {
 					this.isDragging = false;
@@ -109,6 +122,13 @@ export class InputManager {
 				if (this.isDragging) {
 					this.isDragging = false;
 					if (this.onDragCancel) { this.onDragCancel(); }
+				}
+				const now = Date.now();
+				if (now - this.lastTwoFingerTapTime < UI.DOUBLE_TAP_DURATION) {
+					if (this.onResetOffset) { this.onResetOffset(); }
+					this.lastTwoFingerTapTime = 0;
+				} else {
+					this.lastTwoFingerTapTime = now;
 				}
 			} else if (e.touches.length === 1) {
 				if (this._isDeployTabActive()) {

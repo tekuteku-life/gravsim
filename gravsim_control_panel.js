@@ -50,6 +50,10 @@ export class ControlPanel {
 			this.universe.camera.addPan(dx, dy);
 		};
 
+		this.universe.InputManager.onResetOffset = () => {
+			this.universe.camera.setTargetOffset(0, 0);
+		};
+
 		// Events for UI
 		if (this.ui.mobileMenuToggle) {
 			this.ui.mobileMenuToggle.addEventListener('click', () => {
