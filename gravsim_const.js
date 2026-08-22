@@ -453,7 +453,9 @@ export const LAUNCH_SEQUENCES = {
 		tMinusOffset: 3,
 		events: [
 			{ time: 0, name: "TERMINAL COUNTDOWN START", command: "START_COUNTDOWN" },
-			{ time: 3, name: "Ignition & Liftoff", command: "IGNITE_AND_RELEASE" }
+			{ time: 1, name: "TRANSFER TO INTERNAL POWER", command: "" },
+			{ time: 2, name: "MAIN ENGINE START", command: "IGNITE_ENGINE" },
+			{ time: 3, name: "LIFTOFF", command: "RELEASE_HOLD_DOWN" }
 		]
 	},
 	FULL_COUNTDOWN: {
@@ -475,7 +477,7 @@ export const LAUNCH_SEQUENCES = {
 			{ time: 75, name: "TRANSFER TO INTERNAL POWER", command: "" },
 			{ time: 95, name: "WATER DELUGE SYSTEM ON", command: "WATER_DELUGE" },
 			{ time: 110, name: "ROFI IGNITION", command: "ROFI_IGNITION" },
-			{ time: 115, name: "MAIN ENGINE START", command: "IGNITE_ENGINE" },
+			{ time: 117, name: "MAIN ENGINE START", command: "IGNITE_ENGINE" },
 			{ time: 120, name: "LIFTOFF", command: "RELEASE_HOLD_DOWN" }
 		]
 	}

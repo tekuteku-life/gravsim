@@ -109,11 +109,6 @@ export class LaunchSequencer {
 				this.isAutoSequence = false;
 				this.universe.emit('liftoff');
 				break;
-			case 'IGNITE_AND_RELEASE':
-				this.universe.ObjectManager.updateRocketState(this.rocketId, true, false);
-				this.universe.ControlPanel.rocketTab.setRolloutState(false);
-				this.universe.emit('liftoff');
-				break;
 			case 'WATER_DELUGE':
 			case 'ROFI_IGNITION':
 				break;
