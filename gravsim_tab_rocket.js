@@ -83,10 +83,8 @@ export class RocketTab {
 		this.ui.rlAutoControl.addEventListener('change', (e) => {
 			this.universe.RocketLauncher.autoControl = e.target.checked;
 		});
-		if (this.ui.rlRolloutBtn) {
-			this.ui.rlRolloutBtn.addEventListener('click', () => this.universe.RocketLauncher.rollout());
-		}
-		
+		this.ui.rlRolloutBtn.addEventListener('click', () => this.universe.RocketLauncher.rollout());
+
 		const triggerIgnite = (sequenceType) => {
 			// Resume simulation to ensure physics worker runs during sequence
 			this.universe.resumeSimulation();
@@ -104,15 +102,22 @@ export class RocketTab {
 			this.universe.RocketLauncher.ignite(sequenceType);
 		};
 
-		if (this.ui.rlIgniteQuickBtn) {
-			this.ui.rlIgniteQuickBtn.addEventListener('click', () => triggerIgnite('LEGACY_QUICK'));
-		}
-		if (this.ui.rlIgniteFullBtn) {
-			this.ui.rlIgniteFullBtn.addEventListener('click', () => triggerIgnite('FULL_COUNTDOWN'));
-		}
-		if (this.ui.rlAbortBtn) {
-			this.ui.rlAbortBtn.addEventListener('click', () => this.universe.RocketLauncher.abortRollout());
-		}
+		this.ui.rlIgniteQuickBtn.addEventListener('click', () => triggerIgnite('LEGACY_QUICK'));
+		this.ui.rlIgniteFullBtn.addEventListener('click', () => triggerIgnite('FULL_COUNTDOWN'));
+		this.ui.rlAbortBtn.addEventListener('click', () => this.universe.RocketLauncher.abortRollout());
+
+		// Disable ignition buttons during launch sequence
+		this.universe.on('sequencer-start', () => {
+			this.ui.rlIgniteQuickBtn.disabled = true;
+			this.ui.rlIgniteFullBtn.disabled = true;
+		});
+
+		const unlockIgnition = () => {
+			this.ui.rlIgniteQuickBtn.disabled = false;
+			this.ui.rlIgniteFullBtn.disabled = false;
+		};
+		this.universe.on('sequencer-end', unlockIgnition);
+		this.universe.on('sequencer-abort', unlockIgnition);
 
 		// Helper to bind range inputs to RocketLauncher properties
 		const bindSlider = (sliderId, valId, propName, isFloat = false) => {
@@ -240,16 +245,14 @@ export class RocketTab {
 
 	_setupLaunchEnvironment(hostId) {
 		const host = this.universe.objects.find(o => o.id === hostId);
-		if (!host) return;
+		if (!host) { return; }
 
 		this.universe.camera.setTrackingTarget(host);
 		this.systemTab.updateCenterOptions();
 		this.universe.InfoPanel.updateCamera(host.name);
 
-		if (this.systemTab.ui.timeScale) {
-			this.systemTab.ui.timeScale.value = this.systemTab.ui.timeScale.min;
-			this.systemTab.updateTimeScaleIndicator(this.systemTab.getTimeScale());
-		}
+		this.systemTab.ui.timeScale.value = this.systemTab.ui.timeScale.min;
+		this.systemTab.updateTimeScaleIndicator(this.systemTab.getTimeScale());
 
 		if (this.systemTab.ui.zoomScale) {
 			// Adjust zoom-level which the radius of the host is specific value
@@ -321,15 +324,11 @@ export class RocketTab {
 	}
 
 	saveTimeScale() {
-		if (this.systemTab.ui.timeScale) {
-			this.previousTimeScaleVal = this.systemTab.ui.timeScale.value;
-		}
+		this.previousTimeScaleVal = this.systemTab.ui.timeScale.value;
 	}
 
 	saveZoomScale() {
-		if (this.systemTab.ui.zoomScale) {
-			this.previousZoomScaleVal = this.systemTab.ui.zoomScale.value;
-		}
+		this.previousZoomScaleVal = this.systemTab.ui.zoomScale.value;
 	}
 
 	saveCameraTarget() {
@@ -340,7 +339,7 @@ export class RocketTab {
 	}
 
 	restoreTimeScale() {
-		if (this.previousTimeScaleVal !== null && this.systemTab.ui.timeScale) {
+		if (this.previousTimeScaleVal !== null) {
 			this.systemTab.ui.timeScale.value = this.previousTimeScaleVal;
 			this.systemTab.updateTimeScaleIndicator(this.systemTab.getTimeScale());
 			this.previousTimeScaleVal = null;
@@ -348,7 +347,7 @@ export class RocketTab {
 	}
 
 	restoreZoomScale() {
-		if (this.previousZoomScaleVal !== null && this.systemTab.ui.zoomScale) {
+		if (this.previousZoomScaleVal !== null) {
 			this.systemTab.ui.zoomScale.value = this.previousZoomScaleVal;
 			this.universe.camera.setTargetZoomExp(parseFloat(this.previousZoomScaleVal));
 			this.systemTab.updateZoomScaleIndicator(this.systemTab.getZoomScale());
@@ -374,18 +373,18 @@ export class RocketTab {
 		const sliders = this.ui.rlModeSelect.closest('.tab-content').querySelectorAll('input[type="range"]');
 
 		if (isRollouted) {
-			if (this.ui.rlRolloutBtn) this.ui.rlRolloutBtn.style.display = 'none';
-			if (this.ui.rlIgnitionGroup) this.ui.rlIgnitionGroup.style.display = 'flex';
-			if (this.ui.rlAbortBtn) this.ui.rlAbortBtn.style.display = 'block';
+			this.ui.rlRolloutBtn.style.display = 'none';
+			this.ui.rlIgnitionGroup.style.display = 'flex';
+			this.ui.rlAbortBtn.style.display = 'block';
 			sliders.forEach(slider => slider.disabled = true);
 			this.ui.rlModeSelect.disabled = true;
 			this.ui.rlFuelType.disabled = true;
 			this.ui.rlHostSelect.disabled = true;
 			this.ui.rlAutoControl.disabled = true;
 		} else {
-			if (this.ui.rlRolloutBtn) this.ui.rlRolloutBtn.style.display = 'block';
-			if (this.ui.rlIgnitionGroup) this.ui.rlIgnitionGroup.style.display = 'none';
-			if (this.ui.rlAbortBtn) this.ui.rlAbortBtn.style.display = 'none';
+			this.ui.rlRolloutBtn.style.display = 'block';
+			this.ui.rlIgnitionGroup.style.display = 'none';
+			this.ui.rlAbortBtn.style.display = 'none';
 			sliders.forEach(slider => slider.disabled = false);
 			this.ui.rlModeSelect.disabled = false;
 			this.ui.rlFuelType.disabled = false;

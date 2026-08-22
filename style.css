@@ -1,3 +1,6 @@
+
+/* style.css */
+
 /* =========================================
    Base Layout
    ========================================= */
@@ -182,7 +185,13 @@ button:hover { background: #444; }
 	color: #ff5555;
 	border: 1px solid #ff5555;
 }
-.launch-btn:hover { background: #7a2020; }
+.launch-btn:hover:not(:disabled) { background: #7a2020; }
+.launch-btn:disabled {
+	background: #333;
+	color: #777;
+	border-color: #555;
+	cursor: not-allowed;
+}
 
 /* Info Panel (Bottom Left) */
 #info-panel {
