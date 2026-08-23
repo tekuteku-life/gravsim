@@ -457,14 +457,22 @@ export const LAUNCH_SEQUENCES = {
 			{ time: 2, name: "MAIN ENGINE START", command: "IGNITE_ENGINE" },
 			{ time: 3, name: "LIFTOFF", command: "RELEASE_HOLD_DOWN" }
 		],
-		eventAudioMap: {
-			"LIFTOFF": "ev_liftoff"
-		},
-		timeAudioMap: {
-			"-3": "num_3",
-			"-2": "num_2",
-			"-1": "num_1",
-			"0": "num_0",
+		audioProfile: {
+			events: {
+				"LIFTOFF": "ev_liftoff"
+			},
+			times: {
+				"-3": "num_3",
+				"-2": "num_2",
+				"-1": "num_1",
+				"0": "num_0",
+				"1": "num_1",
+				"2": "num_2",
+				"3": "num_3",
+				"4": "num_4",
+				"5": "num_5"
+			},
+			conditions: []
 		}
 	},
 	FULL_COUNTDOWN: {
@@ -489,43 +497,64 @@ export const LAUNCH_SEQUENCES = {
 			{ time: 117, name: "MAIN ENGINE START", command: "IGNITE_ENGINE" },
 			{ time: 120, name: "LIFTOFF", command: "RELEASE_HOLD_DOWN" }
 		],
-		eventAudioMap: {
-			"TERMINAL COUNTDOWN START": "ev_terminal_start",
-			"PROPELLANT LOADING COMPLETE": "ev_prop_loaded",
-			"ENGINE CHILLDOWN START": "ev_chilldown",
-			"TANK PRESSURIZATION START": "ev_pressurize",
-			"POLL: WEATHER - GO": "ev_weather_go",
-			"POLL: RANGE - GO": "ev_range_go",
-			"POLL: GROUND - GO": "ev_ground_go",
-			"POLL: AVIONICS - GO": "ev_avionics_go",
-			"POLL: PROPULSION - GO": "ev_propulsion_go",
-			"POLL: GUIDANCE - GO": "ev_guidance_go",
-			"POLL: FLIGHT - GO": "ev_flight_go",
-			"POLL: LD - GO FOR LAUNCH": "ev_ld_go",
-			"AUTO SEQUENCE START": "ev_auto_seq",
-			"TRANSFER TO INTERNAL POWER": "ev_internal_pwr",
-			"WATER DELUGE SYSTEM ON": "ev_water_deluge",
-			"ROFI IGNITION": "ev_rofi",
-			"MAIN ENGINE START": "ev_main_engine",
-			"LIFTOFF": "ev_liftoff"
-		},
-		timeAudioMap: {
-			"-120": "ms_120",
-			"-60": "ms_60",
-			"-30": "ms_30",
-			"-20": "ms_20",
-			"-15": "ms_15",
-			"-10": "num_10",
-			"-9": "num_9",
-			"-8": "num_8",
-			"-7": "num_7",
-			"-6": "num_6",
-			"-5": "num_5",
-			"-4": "num_4",
-			"-3": "num_3",
-			"-2": "num_2",
-			"-1": "num_1",
-			"0": "num_0",
+		audioProfile: {
+			events: {
+				"TERMINAL COUNTDOWN START": "ev_terminal_start",
+				"PROPELLANT LOADING COMPLETE": "ev_prop_loaded",
+				"ENGINE CHILLDOWN START": "ev_chilldown",
+				"TANK PRESSURIZATION START": "ev_pressurize",
+				"POLL: WEATHER - GO": "ev_weather_go",
+				"POLL: RANGE - GO": "ev_range_go",
+				"POLL: GROUND - GO": "ev_ground_go",
+				"POLL: AVIONICS - GO": "ev_avionics_go",
+				"POLL: PROPULSION - GO": "ev_propulsion_go",
+				"POLL: GUIDANCE - GO": "ev_guidance_go",
+				"POLL: FLIGHT - GO": "ev_flight_go",
+				"POLL: LD - GO FOR LAUNCH": "ev_ld_go",
+				"AUTO SEQUENCE START": "ev_auto_seq",
+				"TRANSFER TO INTERNAL POWER": "ev_internal_pwr",
+				"WATER DELUGE SYSTEM ON": "ev_water_deluge",
+				"ROFI IGNITION": "ev_rofi",
+				"MAIN ENGINE START": "ev_main_engine",
+				"LIFTOFF": "ev_liftoff"
+			},
+			times: {
+				"-120": "ms_120",
+				"-60": "ms_60",
+				"-30": "ms_30",
+				"-20": "ms_20",
+				"-15": "ms_15",
+				"-10": "num_10",
+				"-9": "num_9",
+				"-8": "num_8",
+				"-7": "num_7",
+				"-6": "num_6",
+				"-5": "num_5",
+				"-4": "num_4",
+				"-3": "num_3",
+				"-2": "num_2",
+				"-1": "num_1",
+				"0": "num_0",
+				"1": "num_1",
+				"2": "num_2",
+				"3": "num_3",
+				"4": "num_4",
+				"5": "num_5",
+				"6": "num_6",
+				"7": "num_7",
+				"8": "num_8",
+				"9": "num_9",
+				"10": "num_10"
+			},
+			conditions: [
+				{ id: "tower_clear", type: "altM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
+				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
+				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
+				{ id: "approach_maxq", type: "structRatio", operator: ">", value: 80, audio: "fl_approach_maxq", once: true },
+				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true }, // 3 = TELEMETRY.STATUS.MECO
+				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
+				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }
+			]
 		}
 	}
 };

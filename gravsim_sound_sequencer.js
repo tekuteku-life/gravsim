@@ -1,11 +1,14 @@
+
 // gravsim_sound_sequencer.js
 
 export class SoundSequencer {
 	constructor(universe) {
 		this.universe = universe;
 		this.previousMET = null;
-		this.eventAudioMap = {};
-		this.timeAudioMap = {};
+
+		// Initialize empty profile
+		this.audioProfile = { events: {}, times: {}, conditions: [] };
+		this.conditionFlags = {};
 
 		this._bindEvents();
 		
@@ -14,30 +17,36 @@ export class SoundSequencer {
 	}
 
 	_bindEvents() {
-		// Listen to sequencer events to play corresponding audio
+		// Listen to sequencer events to play corresponding audio based on profile
 		this.universe.on('sequencer-event', (eventName) => {
 			const am = this.universe.AudioManager;
-			if (am && this.eventAudioMap[eventName]) {
-				am.play(this.eventAudioMap[eventName]);
+			if (am && this.audioProfile.events && this.audioProfile.events[eventName]) {
+				am.play(this.audioProfile.events[eventName]);
 			}
 		});
 
-		// Reset time tracking and set audio maps on start
+		// Reset time tracking and set audio profile on start
 		this.universe.on('sequencer-start', (sequenceData) => {
 			if (this.universe.LaunchSequencer) {
 				// Subtract a tiny fraction to ensure the initial integer second is triggered
 				this.previousMET = -this.universe.LaunchSequencer.tMinusOffset - 0.001;
 			}
-			if (sequenceData) {
-				this.eventAudioMap = sequenceData.eventAudioMap || {};
-				this.timeAudioMap = sequenceData.timeAudioMap || {};
+
+			// Load external audio profile
+			if (sequenceData && sequenceData.audioProfile) {
+				this.audioProfile = sequenceData.audioProfile;
+			} else {
+				this.audioProfile = { events: {}, times: {}, conditions: [] };
 			}
+
+			// Reset once flags
+			this.conditionFlags = {};
 		});
 
 		this.universe.on('sequencer-abort', () => {
 			this.previousMET = null;
-			this.eventAudioMap = {};
-			this.timeAudioMap = {};
+			this.audioProfile = { events: {}, times: {}, conditions: [] };
+			this.conditionFlags = {};
 		});
 	}
 
@@ -51,6 +60,8 @@ export class SoundSequencer {
 		if (this.previousMET !== null) {
 			this._checkTimeTriggers(this.previousMET, currentMET);
 		}
+
+		this._checkConditions(currentMET);
 
 		this.previousMET = currentMET;
 	}
@@ -75,7 +86,7 @@ export class SoundSequencer {
 
 	_checkTimeTriggers(prevT, currT) {
 		const am = this.universe.AudioManager;
-		if (!am || !this.timeAudioMap) { return; }
+		if (!am || !this.audioProfile.times) { return; }
 
 		const prevFloor = Math.floor(prevT);
 		const currFloor = Math.floor(currT);
@@ -83,8 +94,60 @@ export class SoundSequencer {
 		// Loop through all integer seconds crossed in the current frame
 		for (let t = prevFloor + 1; t <= currFloor; t++) {
 			const timeKey = t.toString();
-			if (this.timeAudioMap[timeKey]) {
-				am.play(this.timeAudioMap[timeKey]);
+			if (this.audioProfile.times[timeKey]) {
+				am.play(this.audioProfile.times[timeKey]);
+			}
+		}
+	}
+
+	_checkConditions(currentMET) {
+		// Only check flight conditions after liftoff
+		if (currentMET < 0) { return; }
+
+		const am = this.universe.AudioManager;
+		if (!am || !this.audioProfile.conditions) { return; }
+
+		const targetId = this.universe.TelemetryPanel ? this.universe.TelemetryPanel.targetId : null;
+		if (targetId === null) { return; }
+
+		const rocket = this.universe.objects.find(o => o.id === targetId);
+		if (!rocket || !rocket.telemetry) { return; }
+
+		// Evaluate each condition defined in the profile
+		for (const cond of this.audioProfile.conditions) {
+			// Skip if it should only run once and has already been triggered
+			if (cond.once && this.conditionFlags[cond.id]) {
+				continue;
+			}
+
+			let valueToCompare = null;
+			
+			// Resolve the target value based on condition type
+			if (cond.type === 'met') {
+				valueToCompare = currentMET;
+			} else if (rocket.telemetry[cond.type] !== undefined) {
+				valueToCompare = rocket.telemetry[cond.type];
+			}
+
+			if (valueToCompare === null) { continue; }
+
+			// Evaluate operator
+			let isMatched = false;
+			switch(cond.operator) {
+				case '>': isMatched = valueToCompare > cond.value; break;
+				case '<': isMatched = valueToCompare < cond.value; break;
+				case '>=': isMatched = valueToCompare >= cond.value; break;
+				case '<=': isMatched = valueToCompare <= cond.value; break;
+				case '==': isMatched = valueToCompare === cond.value; break;
+				case '!=': isMatched = valueToCompare !== cond.value; break;
+			}
+
+			// Fire audio if matched
+			if (isMatched) {
+				am.play(cond.audio);
+				if (cond.once) {
+					this.conditionFlags[cond.id] = true;
+				}
 			}
 		}
 	}
