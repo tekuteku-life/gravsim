@@ -279,7 +279,12 @@ export class Universe {
 		// Time Management
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
-		const scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
+		let scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
+
+		// If paused, halt simulation time (stops rotation, sequences, animations)
+		if (this.isPaused) {
+			scaledDt = 0;
+		}
 
 		// Process decoupled update hooks (Camera, Modules, Flight time, UI, Cleanup)
 		this.updateHooks.forEach(hook => hook(dt, scaledDt));
