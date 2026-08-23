@@ -37,6 +37,8 @@ export class SystemTab {
 			showLabelsChk: document.getElementById('show-labels-chk'),
 			showDebugChk: document.getElementById('show-debug-chk'),
 			
+			audioVoiceSelect: document.getElementById('audio-voice-select'),
+			
 			clearDebrisChk: document.getElementById('clear-debris-chk'),
 			clearRocketChk: document.getElementById('clear-rocket-chk'),
 			clearCelestialChk: document.getElementById('clear-celestial-chk'),
@@ -88,6 +90,21 @@ export class SystemTab {
 
 		this.ui.showDebugChk.addEventListener('change', (e) => {
 			this.universe.OverlayRenderer.showDebugOverlay = e.target.checked;
+		});
+
+		// Bind Audio Selection
+		this.ui.audioVoiceSelect.addEventListener('change', async (e) => {
+			const val = e.target.value;
+			if (val === 'none') {
+				this.universe.AudioManager.isLoaded = false;
+			} else {
+				const loadingOverlay = document.getElementById('audio-loading-overlay');
+				if (loadingOverlay) { loadingOverlay.style.display = 'flex'; }
+
+				await this.universe.AudioManager.load(val);
+
+				if (loadingOverlay) { loadingOverlay.style.display = 'none'; }
+			}
 		});
 
 		// Clear Objects

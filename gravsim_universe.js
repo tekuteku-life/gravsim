@@ -17,6 +17,8 @@ import { RocketLauncher } from './gravsim_rocket_launcher.js';
 import { LaunchSequencer } from './gravsim_launch_sequencer.js';
 import { SaveManager } from './gravsim_save_manager.js';
 import { InputManager } from './gravsim_input_manager.js';
+import { AudioManager } from './gravsim_audio_manager.js';
+import { SoundSequencer } from './gravsim_sound_sequencer.js';
 
 const GRAVSIM_CALC_JS_FILE = './gravsim_calc.js';
 
@@ -88,6 +90,8 @@ export class Universe {
 		this.ObjectPlacer = new ObjectPlacer(this);
 		this.LaunchSequencer = new LaunchSequencer(this);
 		this.SaveManager = new SaveManager(this);
+		this.AudioManager = new AudioManager(this);
+		this.SoundSequencer = new SoundSequencer(this);
 
 		this.timeScale = this.ControlPanel.getTimeScale();
 		

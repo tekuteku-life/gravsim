@@ -37,7 +37,7 @@ export class LaunchSequencer {
 			this.universe.CalcWorkerManager.setTimeScale(realTimeScale);
 		}
 		
-		this.universe.emit('sequencer-start');
+		this.universe.emit('sequencer-start', sequenceData);
 	}
 
 	abort() {

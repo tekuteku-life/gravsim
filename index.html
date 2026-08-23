@@ -8,6 +8,12 @@
 	<script src="gravsim.js" type="module"></script>
 </head>
 <body>
+	<!-- Loading Overlay -->
+	<div id="audio-loading-overlay" style="display: none;">
+		<div class="spinner"></div>
+		<div id="loading-text">Loading Audio...</div>
+	</div>
+
 	<canvas id="gravsim-canvas"></canvas>
 
 	<!-- Mobile Top UI Container (Panel + Buttons) -->
@@ -130,6 +136,18 @@
 				<label>
 					<input type="checkbox" id="show-debug-chk"> Show Debug Overlay
 				</label>
+			</div>
+
+			<div class="panel-section">
+				<div class="panel-section-header">[ AUDIO OPTIONS ]</div>
+				<label>Announcer Voice:</label>
+				<select id="audio-voice-select" class="full-width">
+					<option value="none" selected>None</option>
+					<option value="edgetts_ja_female">Japanese (Female)</option>
+					<option value="edgetts_ja_male">Japanese (Male)</option>
+					<option value="edgetts_en_female">English (Female)</option>
+					<option value="edgetts_en_male">English (Male)</option>
+				</select>
 			</div>
 
 			<div class="panel-section" style="border:none;">

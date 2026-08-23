@@ -456,7 +456,16 @@ export const LAUNCH_SEQUENCES = {
 			{ time: 1, name: "TRANSFER TO INTERNAL POWER", command: "" },
 			{ time: 2, name: "MAIN ENGINE START", command: "IGNITE_ENGINE" },
 			{ time: 3, name: "LIFTOFF", command: "RELEASE_HOLD_DOWN" }
-		]
+		],
+		eventAudioMap: {
+			"LIFTOFF": "ev_liftoff"
+		},
+		timeAudioMap: {
+			"-3": "num_3",
+			"-2": "num_2",
+			"-1": "num_1",
+			"0": "num_0",
+		}
 	},
 	FULL_COUNTDOWN: {
 		tMinusOffset: 120,
@@ -479,7 +488,45 @@ export const LAUNCH_SEQUENCES = {
 			{ time: 110, name: "ROFI IGNITION", command: "ROFI_IGNITION" },
 			{ time: 117, name: "MAIN ENGINE START", command: "IGNITE_ENGINE" },
 			{ time: 120, name: "LIFTOFF", command: "RELEASE_HOLD_DOWN" }
-		]
+		],
+		eventAudioMap: {
+			"TERMINAL COUNTDOWN START": "ev_terminal_start",
+			"PROPELLANT LOADING COMPLETE": "ev_prop_loaded",
+			"ENGINE CHILLDOWN START": "ev_chilldown",
+			"TANK PRESSURIZATION START": "ev_pressurize",
+			"POLL: WEATHER - GO": "ev_weather_go",
+			"POLL: RANGE - GO": "ev_range_go",
+			"POLL: GROUND - GO": "ev_ground_go",
+			"POLL: AVIONICS - GO": "ev_avionics_go",
+			"POLL: PROPULSION - GO": "ev_propulsion_go",
+			"POLL: GUIDANCE - GO": "ev_guidance_go",
+			"POLL: FLIGHT - GO": "ev_flight_go",
+			"POLL: LD - GO FOR LAUNCH": "ev_ld_go",
+			"AUTO SEQUENCE START": "ev_auto_seq",
+			"TRANSFER TO INTERNAL POWER": "ev_internal_pwr",
+			"WATER DELUGE SYSTEM ON": "ev_water_deluge",
+			"ROFI IGNITION": "ev_rofi",
+			"MAIN ENGINE START": "ev_main_engine",
+			"LIFTOFF": "ev_liftoff"
+		},
+		timeAudioMap: {
+			"-120": "ms_120",
+			"-60": "ms_60",
+			"-30": "ms_30",
+			"-20": "ms_20",
+			"-15": "ms_15",
+			"-10": "num_10",
+			"-9": "num_9",
+			"-8": "num_8",
+			"-7": "num_7",
+			"-6": "num_6",
+			"-5": "num_5",
+			"-4": "num_4",
+			"-3": "num_3",
+			"-2": "num_2",
+			"-1": "num_1",
+			"0": "num_0",
+		}
 	}
 };
 
@@ -542,3 +589,7 @@ export const PAD_EFFECT = {
 		'ice':         { COLOR: "#ffffff", SHAPE: 'square', DRAG: 1.0, GROW_SPEED: 0.0, GRAVITY_MULT: 0.5, SIZE_MULT: 0.2, MAX_ALPHA: 1.0 }
 	}
 };
+
+export const SOUND = {
+	BASEDIR: "./sounds",
+}
