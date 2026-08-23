@@ -130,8 +130,8 @@ PHRASES_JA = {
 	"ev_auto_seq": "自動シーケンス、開始",
 	"ev_internal_pwr": "内部電源に切り替わりました",
 	"ev_water_deluge": "ウォーターカーテン散水、開始",
-	"ev_rofi": "点火スパーク作動",
-	"ev_main_engine": "メインエンジン点火",
+	"ev_rofi": "火工品トーチ点火",
+	"ev_main_engine": "メインエンジンスタート",
 	"ev_liftoff": "リフトオフ",
 
 	"fl_tower_clear": "発射塔をクリアしました",
