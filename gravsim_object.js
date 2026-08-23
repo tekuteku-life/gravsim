@@ -327,6 +327,9 @@ export class Rocket extends GravSimObject {
 
 			this.effectTrail.addPoint(refId, relX, relY, currentFrame, mode);
 		}
+		else {
+			this.effectTrail.clear();
+		}
 	}
 
 	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
