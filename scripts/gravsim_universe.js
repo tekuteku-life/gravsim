@@ -20,7 +20,7 @@ import { InputManager } from './gravsim_input_manager.js';
 import { AudioManager } from './gravsim_audio_manager.js';
 import { SoundSequencer } from './gravsim_sound_sequencer.js';
 
-const GRAVSIM_CALC_JS_FILE = './gravsim_calc.js';
+const GRAVSIM_CALC_JS_FILE = './scripts/gravsim_calc.js';
 
 /*******************************************************************
  * CalcWorkerManager class that manages the calculation worker for physics simulation.
