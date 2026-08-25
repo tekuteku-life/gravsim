@@ -327,7 +327,7 @@ button:hover { background: #444; }
 .auto-sequence-mode .tm-bar-header {
 	color: #cc8800 !important;
 }
-.auto-sequence-mode #tm-fuel-bar {
+.auto-sequence-mode #tm-fuel-bar, .auto-sequence-mode #tm-oxid-bar {
 	background: #ffaa00 !important;
 }
 .auto-sequence-mode #tm-nav-wrapper {
@@ -430,17 +430,25 @@ button:hover { background: #444; }
 	color: #00aa88;
 }
 
-#tm-fuel-bar-wrapper {
+#tm-fuel-bar-wrapper, #tm-oxid-bar-wrapper {
 	width: 100%;
 	height: 6px;
 	background: #222;
 	border: 1px solid #005544;
+	margin-bottom: 2px;
 }
 
 #tm-fuel-bar {
 	width: 100%;
 	height: 100%;
 	background: #00ffcc;
+	transition: width 0.1s;
+}
+
+#tm-oxid-bar {
+	width: 100%;
+	height: 100%;
+	background: #00aaff;
 	transition: width 0.1s;
 }
 

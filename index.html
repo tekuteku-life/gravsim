@@ -64,12 +64,16 @@
 				<div class="tm-col">
 					<div class="tm-section-header">[ PROPULSION ]</div>
 					<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>
-					<div class="telemetry-line">PROP REM : <span id="tm-prop">---</span> t</div>
+					<div class="telemetry-line">FUEL     : <span id="tm-fuel-mass">---</span> t</div>
+					<div class="telemetry-line">OXIDIZER : <span id="tm-oxid-mass">---</span> t</div>
 
 					<div style="margin: 10px 0;">
-						<div class="tm-bar-header">PROPELLANT</div>
+						<div class="tm-bar-header">PROPELLANT (F/O)</div>
 						<div id="tm-fuel-bar-wrapper">
 							<div id="tm-fuel-bar"></div>
+						</div>
+						<div id="tm-oxid-bar-wrapper">
+							<div id="tm-oxid-bar"></div>
 						</div>
 					</div>
 
@@ -232,14 +236,17 @@
 					<option value="ion">Ion (Isp: 3000s, Low Thrust)</option>
 				</select>
 
-				<label>Fuel Amount (t): <span id="rl-fuel-amount-val">550</span></label>
-				<input type="range" id="rl-fuel-amount" min="1" max="4000" step="1" value="550" class="slider-full">
+				<label>Fuel Mass (t): <span id="rl-fuel-mass-val">88</span></label>
+				<input type="range" id="rl-fuel-mass" min="0" max="1500" step="1" value="88" class="slider-full">
+
+				<label>Oxidizer Mass (t): <span id="rl-oxid-mass-val">220</span></label>
+				<input type="range" id="rl-oxid-mass" min="0" max="3000" step="1" value="220" class="slider-full">
 
 				<label>Dry Mass (t): <span id="rl-launch-mass-val">7</span></label>
 				<input type="range" id="rl-launch-mass" min="1" max="500" step="1" value="7" class="slider-full">
 
-				<label>Thrust Force (kN): <span id="rl-launch-thrust-val">7000</span></label>
-				<input type="range" id="rl-launch-thrust" min="600" max="10000" step="50" value="7000" class="slider-full">
+				<label>Thrust Force (kN): <span id="rl-launch-thrust-val">7600</span></label>
+				<input type="range" id="rl-launch-thrust" min="600" max="10000" step="50" value="7600" class="slider-full">
 
 				<label>Max G Limit: <span id="rl-launch-maxg-val">4.0</span></label>
 				<input type="range" id="rl-launch-maxg" min="1.5" max="15.0" step="0.1" value="4.0" class="slider-full">
@@ -253,7 +260,7 @@
 				Total Delta-v: <span id="rl-stat-dv">0.00</span> km/s<br>
 				TWR (<span id="rl-stat-host-name">Earth</span>): Y(Vert) <span id="rl-stat-twr-y">0.00</span> / X(Horz) <span id="rl-stat-twr-x">0.00</span><br>
 				Fuel Type: <span id="rl-stat-fuel-type">Liquid</span><br>
-				Fuel Amount: <span id="rl-stat-fuel-amount">0</span> t<br>
+				Total Propellant: <span id="rl-stat-fuel-amount">0</span> t<br>
 				Isp: <span id="rl-stat-fuel-isp">0</span> s<br>
 				Max Burn: <span id="rl-stat-fuel-max-burn">0</span> s<br>
 			</div>

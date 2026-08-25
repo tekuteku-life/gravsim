@@ -113,8 +113,9 @@ class PhysicsEngine {
 				data.vx || 0, data.vy || 0,
 				data.ax || 0, data.ay || 0,
 				data.radius || 1, data.generation || 0,
-				data.mass || 1, data.fuelMass || 0,
+				data.mass || 1, data.fuelMass || 0, data.oxidMass || 0,
 				{
+					ofRatio: data.ofRatio || 0,
 					thrustForce: data.thrustForce,
 					burnTime: data.burnTime,
 					thrustAngle: data.thrustAngle,

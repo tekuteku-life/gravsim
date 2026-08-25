@@ -12,7 +12,8 @@ export class TelemetryPanel {
 		
 		this.targetId = 0;
 		this.lastObjCount = -1;
-		this.maxProp = {};
+		this.maxFuel = {};
+		this.maxOxid = {};
 
 		this.ui = {
 			toggleBtn: document.getElementById('telemetry-toggle-btn'),
@@ -34,8 +35,10 @@ export class TelemetryPanel {
 			dynAx: document.getElementById('tm-dyn-ax'),
 			dynLat: document.getElementById('tm-dyn-lat'),
 			thrtl: document.getElementById('tm-thrtl'),
-			prop: document.getElementById('tm-prop'),
+			fuelMass: document.getElementById('tm-fuel-mass'),
+			oxidMass: document.getElementById('tm-oxid-mass'),
 			fuelBar: document.getElementById('tm-fuel-bar'),
+			oxidBar: document.getElementById('tm-oxid-bar'),
 			navPrograde: document.getElementById('tm-nav-prograde'),
 			navGravity: document.getElementById('tm-nav-gravity'),
 			subCanvas: document.getElementById('sub-canvas'),
@@ -189,14 +192,23 @@ export class TelemetryPanel {
 		const thrtlPercent = (target.thrustRatio || 0) * 100;
 		DOMUtils.setText(this.ui.thrtl, FormatUtils.numFixPad(thrtlPercent, 1, 6));
 
-		const propRem = target.fuelMass;
-		const displayProp = propRem < 0.01 ? 0 : propRem;
-		DOMUtils.setText(this.ui.prop, FormatUtils.numFixPad(displayProp, 2, 6));
+		const fuelRem = target.fuelMass;
+		const displayFuel = fuelRem < 0.01 ? 0 : fuelRem;
+		DOMUtils.setText(this.ui.fuelMass, FormatUtils.numFixPad(displayFuel, 2, 6));
 
-		if (!this.maxProp[target.id] || propRem > this.maxProp[target.id]) this.maxProp[target.id] = propRem;
-		let pct = this.maxProp[target.id] > 0 ? (propRem / this.maxProp[target.id]) * 100 : 0;
-		if (pct < 0.5) { pct = 0; }
-		DOMUtils.setStyle(this.ui.fuelBar, 'width', `${pct}%`);
+		const oxidRem = target.oxidMass;
+		const displayOxid = oxidRem < 0.01 ? 0 : oxidRem;
+		DOMUtils.setText(this.ui.oxidMass, FormatUtils.numFixPad(displayOxid, 2, 6));
+
+		if (!this.maxFuel[target.id] || fuelRem > this.maxFuel[target.id]) this.maxFuel[target.id] = fuelRem;
+		let pctF = this.maxFuel[target.id] > 0 ? (fuelRem / this.maxFuel[target.id]) * 100 : 0;
+		if (pctF < 0.5) { pctF = 0; }
+		DOMUtils.setStyle(this.ui.fuelBar, 'width', `${pctF}%`);
+
+		if (!this.maxOxid[target.id] || oxidRem > this.maxOxid[target.id]) this.maxOxid[target.id] = oxidRem;
+		let pctO = this.maxOxid[target.id] > 0 ? (oxidRem / this.maxOxid[target.id]) * 100 : 0;
+		if (pctO < 0.5) { pctO = 0; }
+		DOMUtils.setStyle(this.ui.oxidBar, 'width', `${pctO}%`);
 
 		let mStat = TELEMETRY.STATUS_MAP[tm.status] || TELEMETRY.STATUS_MAP[0];
 		
@@ -242,8 +254,10 @@ export class TelemetryPanel {
 		if (this.ui.dynLat) { DOMUtils.setText(this.ui.dynLat, "---".padStart(6, ' ')); }
 
 		DOMUtils.setText(this.ui.thrtl, "---".padStart(6, ' '));
-		DOMUtils.setText(this.ui.prop, "---".padStart(6, ' '));
+		DOMUtils.setText(this.ui.fuelMass, "---".padStart(6, ' '));
+		DOMUtils.setText(this.ui.oxidMass, "---".padStart(6, ' '));
 		DOMUtils.setStyle(this.ui.fuelBar, 'width', `0%`);
+		DOMUtils.setStyle(this.ui.oxidBar, 'width', `0%`);
 
 		DOMUtils.setText(this.ui.missionStatus, TELEMETRY.STATUS_MAP[6]);
 		DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.NORMAL_COLOR);

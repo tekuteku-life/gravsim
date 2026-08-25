@@ -49,6 +49,7 @@ export class WorkerBridge {
 			if (obj.type === OBJECT_TYPES.ROCKET) {
 				buffer[offset + BUFFER_INDEX.MASS] = obj.dryMass;
 				buffer[offset + BUFFER_INDEX.FUEL_MASS] = obj.fuelMass;
+				buffer[offset + BUFFER_INDEX.OXID_MASS] = obj.oxidMass;
 				buffer[offset + BUFFER_INDEX.BURN_TIME] = obj.burnTime > 0 ? obj.burnTime : 0;
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = obj._thrustRatio || 0;
 
@@ -73,6 +74,7 @@ export class WorkerBridge {
 			} else {
 				buffer[offset + BUFFER_INDEX.MASS] = obj.mass;
 				buffer[offset + BUFFER_INDEX.FUEL_MASS] = 0;
+				buffer[offset + BUFFER_INDEX.OXID_MASS] = 0;
 				buffer[offset + BUFFER_INDEX.BURN_TIME] = 0;
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = 0;
 			}
@@ -115,6 +117,7 @@ export class WorkerBridge {
 			
 			this._cache.mass = buffer[offset + BUFFER_INDEX.MASS];
 			this._cache.fuelMass = buffer[offset + BUFFER_INDEX.FUEL_MASS];
+			this._cache.oxidMass = buffer[offset + BUFFER_INDEX.OXID_MASS];
 			this._cache.radius = buffer[offset + BUFFER_INDEX.RADIUS];
 			this._cache.burnTime = buffer[offset + BUFFER_INDEX.BURN_TIME];
 			this._cache.thrustRatio = buffer[offset + BUFFER_INDEX.THRUST_RATIO];

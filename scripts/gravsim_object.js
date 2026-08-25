@@ -233,10 +233,12 @@ export class CelestialBody extends GravSimObject {
  * Rocket class
  *******************************************************************/
 export class Rocket extends GravSimObject {
-	constructor(id, name, x, y, vx, vy, dryMass, fuelMass, color, size, radius, generation, borderColor, borderWidth) {
+	constructor(id, name, x, y, vx, vy, dryMass, fuelMass, oxidMass, color, size, radius, generation, borderColor, borderWidth) {
 		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth);
 		this.dryMass = dryMass; // t
 		this.fuelMass = fuelMass; // t
+		this.oxidMass = oxidMass; // t
+		this.ofRatio = 0;
 		this.thrustForce = 0; // N
 		this.burnTime = 0;
 		this.thrustAngle = 0;
@@ -267,7 +269,7 @@ export class Rocket extends GravSimObject {
 			flightTime: 0, // s
 		};
 	}
-	get mass() { return this.dryMass + this.fuelMass; }
+	get mass() { return this.dryMass + this.fuelMass + this.oxidMass; }
 	set mass(val) {}
 
 	// Override updateHistory exclusively for Rocket logic

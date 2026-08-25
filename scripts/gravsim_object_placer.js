@@ -62,7 +62,8 @@ export class ObjectPlacer {
 				x, y,
 				vx, vy,
 				options.emptyMass || param.MASS,
-				(options.mass || param.MASS) - (options.emptyMass || param.MASS),
+				options.fuelMass !== undefined ? options.fuelMass : (options.mass || param.MASS) - (options.emptyMass || param.MASS),
+				options.oxidMass || 0,
 				param.COLOR,
 				minDrawSize,
 				param.RADIUS || 1,
@@ -70,6 +71,10 @@ export class ObjectPlacer {
 				param.BORDER_COLOR || null,
 				param.BORDER_WIDTH || 0
 			);
+
+			if (options.ofRatio !== undefined) {
+				obj.ofRatio = options.ofRatio;
+			}
 
 			// Apply initial angle if specified
 			if (options.angle !== undefined) {

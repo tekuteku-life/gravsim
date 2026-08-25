@@ -33,7 +33,8 @@ export class RocketLauncher {
 
 		// Rocket parameters
 		this.dryMassT = 7;	// (t) Payload + empty structure
-		this.fuelAmountT = 550; // (t)
+		this.fuelMassT = 88; // (t)
+		this.oxidMassT = 220; // (t)
 		this.fuelType = 'liquid';
 
 		// Default Flight Profile
@@ -43,7 +44,7 @@ export class RocketLauncher {
 			{ type: 'alt', value: 50000, thrust: 100, angle: 90 }
 		];
 
-		this.thrustKN = 7000;	// (kN)
+		this.thrustKN = 7600;	// (kN)
 		this.calculatedBurnTime = 0;
 		this.maxGLimit = 4.0;	// G
 		this.autoControl = true; // Auto Flight Computer flag
@@ -110,12 +111,13 @@ export class RocketLauncher {
 		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
 		const ve = fuel.isp * PHYSICS.G0; // Exhaust velocity
-		const m0 = UnitConvertUtils.ton2kg(this.dryMassT + this.fuelAmountT); // Initial mass in kg
+		const m0 = UnitConvertUtils.ton2kg(this.dryMassT + this.fuelMassT + this.oxidMassT); // Initial mass in kg
 		const mf = UnitConvertUtils.ton2kg(this.dryMassT); // Final mass in kg
 
 		// Calculate Max Burn Time based on Thrust and Isp
 		const massFlowRateKgS = UnitConvertUtils.kn2n(this.thrustKN) / ve;
-		this.calculatedBurnTime = massFlowRateKgS > 0 ? UnitConvertUtils.ton2kg(this.fuelAmountT) / massFlowRateKgS : 0;
+		const totalPropellantT = this.fuelMassT + this.oxidMassT;
+		this.calculatedBurnTime = massFlowRateKgS > 0 ? UnitConvertUtils.ton2kg(totalPropellantT) / massFlowRateKgS : 0;
 		
 		if (this.calculatedBurnTime > 0 && this.thrustKN > 0) {
 			deltaVM = ve * Math.log(m0 / mf);
@@ -278,7 +280,8 @@ export class RocketLauncher {
 		const t = this._calculateTransform();
 		const massName = this.universe.ObjectPlacer.getLaunchObjectName();
 
-		const initialMassTon = this.dryMassT + this.fuelAmountT;
+		const fuelDef = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
+		const initialMassTon = this.dryMassT + this.fuelMassT + this.oxidMassT;
 		const finalMassTon = this.dryMassT;
 		const massLossRateTon = this.calculatedBurnTime > 0 ? (initialMassTon - finalMassTon) / this.calculatedBurnTime : 0;
 
@@ -290,6 +293,9 @@ export class RocketLauncher {
 			force: UnitConvertUtils.kn2n(this.thrustKN),
 			mass: initialMassTon,
 			emptyMass: finalMassTon,
+			fuelMass: this.fuelMassT,
+			oxidMass: this.oxidMassT,
+			ofRatio: fuelDef.ofRatio,
 			angle: initialAngleRad, // Initially set to zenith direction
 			flightProfile: this.flightProfile, // Profile is handled dynamically by FlightComputer
 			time: this.calculatedBurnTime,
@@ -431,6 +437,8 @@ export class RocketLauncher {
 			hostAltitudeM: this.hostAltitudeM,
 			flightProfile: JSON.parse(JSON.stringify(this.flightProfile)),
 			initialMassT: this.dryMassT,
+			fuelMassT: this.fuelMassT,
+			oxidMassT: this.oxidMassT,
 			thrustKN: this.thrustKN,
 			burnTime: this.calculatedBurnTime,
 			maxGLimit: this.maxGLimit,
@@ -446,6 +454,8 @@ export class RocketLauncher {
 		if (state.hostAltitudeM !== undefined) this.hostAltitudeM = state.hostAltitudeM;
 		if (state.flightProfile !== undefined) { this.flightProfile = JSON.parse(JSON.stringify(state.flightProfile)); }
 		if (state.initialMassT !== undefined) this.dryMassT = state.initialMassT;
+		if (state.fuelMassT !== undefined) this.fuelMassT = state.fuelMassT;
+		if (state.oxidMassT !== undefined) this.oxidMassT = state.oxidMassT;
 		if (state.thrustKN !== undefined) this.thrustKN = state.thrustKN;
 		if (state.burnTime !== undefined) this.calculatedBurnTime = state.burnTime;
 		if (state.maxGLimit !== undefined) this.maxGLimit = state.maxGLimit;

@@ -136,6 +136,8 @@ export class ObjectManager {
 		return {
 			mass: UnitConvertUtils.ton2kg(obj.dryMass),
 			fuelMass: UnitConvertUtils.ton2kg(obj.fuelMass),
+			oxidMass: UnitConvertUtils.ton2kg(obj.oxidMass),
+			ofRatio: obj.ofRatio || 0,
 			thrustForce: obj.thrustForce || 0,
 			burnTime: obj.burnTime || 0,
 			thrustAngle: obj.thrustAngle || 0,
@@ -194,6 +196,7 @@ export class ObjectManager {
 				if (objData.type === OBJECT_TYPES.ROCKET) {
 					target.dryMass = UnitConvertUtils.kg2ton(objData.mass);
 					target.fuelMass = UnitConvertUtils.kg2ton(objData.fuelMass);
+					target.oxidMass = UnitConvertUtils.kg2ton(objData.oxidMass);
 					target.burnTime = objData.burnTime;
 					target.thrustRatio = objData.thrustRatio;
 					target.isHoldDown = objData.isHoldDown;
@@ -320,6 +323,8 @@ export class ObjectManager {
 			if (obj.type === OBJECT_TYPES.ROCKET) {
 				base.dryMass = obj.dryMass;
 				base.fuelMass = obj.fuelMass;
+				base.oxidMass = obj.oxidMass;
+				base.ofRatio = obj.ofRatio;
 				base.thrustForce = obj.thrustForce;
 				base.burnTime = obj.burnTime;
 				base.thrustAngle = obj.thrustAngle;
@@ -342,9 +347,10 @@ export class ObjectManager {
 				let obj;
 				if (o.type === OBJECT_TYPES.ROCKET) {
 					obj = new Rocket(
-						o.id, o.name, o.x, o.y, o.vx, o.vy, o.dryMass, o.fuelMass, o.color, o.size, o.radius,
+						o.id, o.name, o.x, o.y, o.vx, o.vy, o.dryMass, o.fuelMass, o.oxidMass || 0, o.color, o.size, o.radius,
 						o.generation, o.borderColor, o.borderWidth
 					);
+					obj.ofRatio = o.ofRatio || 0;
 					obj.thrustForce = o.thrustForce || 0;
 					obj.burnTime = o.burnTime || 0;
 					obj.thrustAngle = o.thrustAngle || 0;

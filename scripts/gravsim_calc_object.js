@@ -203,10 +203,12 @@ export class CalcCelestialBody extends GravSimCalcObject {
  * Calculation Object Class for Rocket
 *******************************************************************/
 export class CalcRocket extends GravSimCalcObject {
-	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, dryMass, fuelMass, thrustData) {
+	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, dryMass, fuelMass, oxidMass, thrustData) {
 		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, ax, ay, radius, generation);
 		this.dryMass = dryMass; // kg
 		this.fuelMass = fuelMass; // kg
+		this.oxidMass = oxidMass; // kg
+		this.ofRatio = thrustData?.ofRatio || 0;
 		this.thrustForce = thrustData?.thrustForce || 0;
 		this.burnTime = thrustData?.burnTime || 0;
 		this.thrustAngle = thrustData?.thrustAngle || 0;
@@ -238,7 +240,7 @@ export class CalcRocket extends GravSimCalcObject {
 		});
 	}
 
-	get mass() { return this.dryMass + this.fuelMass; }
+	get mass() { return this.dryMass + this.fuelMass + this.oxidMass; }
 	set mass(val) {}
 
 	_determinDynamicParam(vRelY, vRelX, vRelSq, rho) {
@@ -299,7 +301,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 		const sensorData = {
 			dt: dt,
-			mass: this.mass, dryMass: this.dryMass, fuelMass: this.fuelMass,
+			mass: this.mass, dryMass: this.dryMass, fuelMass: this.fuelMass + this.oxidMass,
 			thrustForce: this.thrustForce, thrustRatio: this._thrustRatio,
 			burnTime: this.burnTime, massLossRate: this.massLossRate,
 			x: this.x, y: this.y, vx: this.vx, vy: this.vy, ax: this.ax, ay: this.ay,
@@ -332,11 +334,32 @@ export class CalcRocket extends GravSimCalcObject {
 			const consumedTime = dt * throttle;
 			actualDt = Math.min(consumedTime, this.burnTime);
 
-			this.fuelMass -= this.massLossRate * actualDt;
+			let fuelRatio = 1.0;
+			let oxidRatio = 0.0;
+			if (this.ofRatio > 0) {
+				oxidRatio = this.ofRatio / (1.0 + this.ofRatio);
+				fuelRatio = 1.0 / (1.0 + this.ofRatio);
+			}
+
+			let dmTotal = this.massLossRate * actualDt;
+			let dmFuel = dmTotal * fuelRatio;
+			let dmOxid = dmTotal * oxidRatio;
+
+			if (this.fuelMass < dmFuel || (this.ofRatio > 0 && this.oxidMass < dmOxid)) {
+				let maxDtFuel = dmFuel > 0 ? (this.fuelMass / dmFuel) * actualDt : Infinity;
+				let maxDtOxid = dmOxid > 0 ? (this.oxidMass / dmOxid) * actualDt : Infinity;
+				actualDt = Math.min(actualDt, maxDtFuel, maxDtOxid);
+				dmFuel = this.massLossRate * actualDt * fuelRatio;
+				dmOxid = this.massLossRate * actualDt * oxidRatio;
+			}
+
+			this.fuelMass -= dmFuel;
+			this.oxidMass -= dmOxid;
 			this.burnTime -= actualDt;
 
-			if (this.burnTime <= 0 || this.fuelMass <= 0) {
-				this.fuelMass = 0;
+			if (this.burnTime <= 0 || this.fuelMass <= 0 || (this.ofRatio > 0 && this.oxidMass <= 0)) {
+				if (this.fuelMass < 0) { this.fuelMass = 0; }
+				if (this.oxidMass < 0) { this.oxidMass = 0; }
 				this.burnTime = 0;
 			}
 		}

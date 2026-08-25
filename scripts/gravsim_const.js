@@ -245,7 +245,7 @@ export const FLIGHT_COMPUTER_CONFIG = {
 
 // Communication buffer structure
 export const CALC_BUFFER_CONFIG = {
-	OBJ_ATTR_COUNT: 39
+	OBJ_ATTR_COUNT: 40
 };
 
 export const BUFFER_INDEX = {
@@ -257,7 +257,7 @@ export const BUFFER_INDEX = {
 	TM_AOA_DEG: 24, TM_PROGRADE_ANGLE: 25, TM_GRAVITY_ANGLE: 26,
 	TM_REM_DV: 27, TM_TWR: 28, TM_ALT_M: 29, TM_VV: 30, TM_VH: 31,
 	TM_AV: 32, TM_AH: 33, TM_CURRENT_G: 34, TM_FLIGHT_TIME: 35, THRUST_ANGLE: 36,
-	DOMINANT_BODY_ID: 37, DIST_TO_DOMINANT: 38
+	DOMINANT_BODY_ID: 37, DIST_TO_DOMINANT: 38, OXID_MASS: 39
 };
 
 export const OBJECT_STATE = {
@@ -433,10 +433,10 @@ export const DEFAULT_OBJECT_PARAMS = {
 };
 
 export const ROCKET_FUELS = {
-	"solid": { name: "Solid", isp: 250, density: 1.8 },
-	"liquid": { name: "Liquid", isp: 320, density: 1.0 },
-	"hydro": { name: "Cryogenic", isp: 450, density: 0.3 },
-	"ion": { name: "Ion", isp: 3000, density: 0.5 }
+	"solid": { name: "Solid", isp: 250, density: 1.8, ofRatio: 0 },
+	"liquid": { name: "Liquid", isp: 320, density: 1.0, ofRatio: 2.5 },
+	"hydro": { name: "Cryogenic", isp: 450, density: 0.3, ofRatio: 6.0 },
+	"ion": { name: "Ion", isp: 3000, density: 0.5, ofRatio: 0 }
 };
 
 export const OBJECT_TYPES = { CELESTIAL: 0, ROCKET: 1, DEBRIS: 2 };
