@@ -71,12 +71,16 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.TM_CURRENT_G] = tm.currentG;
 				buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME] = obj.flightComputer.flightTime;
 				buffer[offset + BUFFER_INDEX.THRUST_ANGLE] = obj.thrustAngle;
+				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_FUEL] = obj.tankPresFuel || 0;
+				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = obj.tankPresOxid || 0;
 			} else {
 				buffer[offset + BUFFER_INDEX.MASS] = obj.mass;
 				buffer[offset + BUFFER_INDEX.FUEL_MASS] = 0;
 				buffer[offset + BUFFER_INDEX.OXID_MASS] = 0;
 				buffer[offset + BUFFER_INDEX.BURN_TIME] = 0;
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = 0;
+				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_FUEL] = 0;
+				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = 0;
 			}
 			buffer[offset + BUFFER_INDEX.RADIUS] = obj.radius || 1;
 			
@@ -158,6 +162,8 @@ export class WorkerBridge {
 				this._cache.tmCurrentG = buffer[offset + BUFFER_INDEX.TM_CURRENT_G];
 				this._cache.tmFlightTime = buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME];
 				this._cache.thrustAngle = buffer[offset + BUFFER_INDEX.THRUST_ANGLE];
+				this._cache.tmTankPresFuel = buffer[offset + BUFFER_INDEX.TM_TANK_PRES_FUEL];
+				this._cache.tmTankPresOxid = buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID];
 			}
 
 			callback(this._cache);

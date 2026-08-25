@@ -525,6 +525,15 @@ class SimulationController {
 					if (data.isHoldDown !== undefined) { rObj.isHoldDown = data.isHoldDown; }
 				}
 				break;
+			case 'rocketCommand': {
+				const targetRocket = this.engine.objects.find(o => o.id === data.id);
+				if (targetRocket && targetRocket.type === OBJECT_TYPES.ROCKET) {
+					if (targetRocket.handleCommand) {
+						targetRocket.handleCommand(data.command);
+					}
+				}
+				break;
+			}
 			case 'returnBuffer':
 				WorkerBridge.recycleBuffer(data.buffer);
 				break;

@@ -37,6 +37,8 @@ export class TelemetryPanel {
 			thrtl: document.getElementById('tm-thrtl'),
 			fuelMass: document.getElementById('tm-fuel-mass'),
 			oxidMass: document.getElementById('tm-oxid-mass'),
+			tankPresFuel: document.getElementById('tm-tank-pres-fuel'),
+			tankPresOxid: document.getElementById('tm-tank-pres-oxid'),
 			fuelBar: document.getElementById('tm-fuel-bar'),
 			oxidBar: document.getElementById('tm-oxid-bar'),
 			navPrograde: document.getElementById('tm-nav-prograde'),
@@ -200,6 +202,9 @@ export class TelemetryPanel {
 		const displayOxid = oxidRem < 0.01 ? 0 : oxidRem;
 		DOMUtils.setText(this.ui.oxidMass, FormatUtils.numFixPad(displayOxid, 2, 6));
 
+		DOMUtils.setText(this.ui.tankPresFuel, (tm.tankPresFuel || 0).toFixed(0));
+		DOMUtils.setText(this.ui.tankPresOxid, (tm.tankPresOxid || 0).toFixed(0));
+
 		if (!this.maxFuel[target.id] || fuelRem > this.maxFuel[target.id]) this.maxFuel[target.id] = fuelRem;
 		let pctF = this.maxFuel[target.id] > 0 ? (fuelRem / this.maxFuel[target.id]) * 100 : 0;
 		if (pctF < 0.5) { pctF = 0; }
@@ -256,6 +261,8 @@ export class TelemetryPanel {
 		DOMUtils.setText(this.ui.thrtl, "---".padStart(6, ' '));
 		DOMUtils.setText(this.ui.fuelMass, "---".padStart(6, ' '));
 		DOMUtils.setText(this.ui.oxidMass, "---".padStart(6, ' '));
+		DOMUtils.setText(this.ui.tankPresFuel, "---");
+		DOMUtils.setText(this.ui.tankPresOxid, "---");
 		DOMUtils.setStyle(this.ui.fuelBar, 'width', `0%`);
 		DOMUtils.setStyle(this.ui.oxidBar, 'width', `0%`);
 

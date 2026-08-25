@@ -56,6 +56,15 @@ class CalcWorkerManager {
 		});
 	}
 
+	// New interface for sending commands to a specific rocket in the worker
+	sendRocketCommand(rocketId, command) {
+		this.worker.postMessage({
+			cmd: 'rocketCommand',
+			id: rocketId,
+			command: command
+		});
+	}
+
 	destroy() {
 		this.worker.terminate();
 	}

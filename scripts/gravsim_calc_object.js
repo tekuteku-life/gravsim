@@ -3,7 +3,7 @@
 
 import {
 	PHYSICS, ROCHE_LIMIT, AERO_DYNAMIC,
-	DEFAULT_OBJECT_PARAMS,
+	DEFAULT_OBJECT_PARAMS, TANK_PRESSURE_SIM,
 	OBJECT_TYPES, SIMULATION
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
@@ -238,10 +238,28 @@ export class CalcRocket extends GravSimCalcObject {
 			flightProfile: this.flightProfile,
 			hostAngleRad: this.hostAngleRad
 		});
+
+		// Pressure simulation parameters
+		this.tankPresFuel = TANK_PRESSURE_SIM.UNPRESSURIZED_KPA;
+		this.tankPresOxid = TANK_PRESSURE_SIM.UNPRESSURIZED_KPA;
+		this.presState = 'UNPRESSURIZED';
+		this.presTimer = 0;
 	}
 
 	get mass() { return this.dryMass + this.fuelMass + this.oxidMass; }
 	set mass(val) {}
+
+	handleCommand(cmd) {
+		if (cmd === 'PRESSURIZE_TANK') {
+			this.presState = 'PRESSURIZING';
+			this.presTimer = 0;
+		} else if (cmd === 'IGNITE_ENGINE') {
+			if (this.presState === 'NOMINAL' || this.presState === 'PRESSURIZING') {
+				this.presState = 'IGNITION_DROP';
+				this.presTimer = 0;
+			}
+		}
+	}
 
 	_determinDynamicParam(vRelY, vRelX, vRelSq, rho) {
 		let area = 0;
@@ -292,6 +310,57 @@ export class CalcRocket extends GravSimCalcObject {
 
 		if (currentQAxialPa > effectiveMaxQAxial || currentQLateralPa > maxQLateral) {
 			this.shattered = true;
+		}
+	}
+
+	updatePressure(dt, structRatio) {
+		if (this.fuelMass <= 0 && this.oxidMass <= 0 && this.presState !== 'UNPRESSURIZED') {
+			this.presState = 'DEPLETED';
+		}
+
+		const targetPres = TANK_PRESSURE_SIM.TARGET_KPA;
+		const unpres = TANK_PRESSURE_SIM.UNPRESSURIZED_KPA;
+		const noiseF = (Math.random() - 0.5) * 2;
+		const noiseO = (Math.random() - 0.5) * 2;
+		
+		const baseNoiseAmp = targetPres * TANK_PRESSURE_SIM.BASE_NOISE_RATIO;
+		const qNoiseAmp = targetPres * TANK_PRESSURE_SIM.Q_NOISE_RATIO * (structRatio / 100);
+		const totalNoiseAmp = baseNoiseAmp + qNoiseAmp;
+
+		switch (this.presState) {
+			case 'UNPRESSURIZED':
+				this.tankPresFuel = unpres;
+				this.tankPresOxid = unpres;
+				break;
+			case 'PRESSURIZING':
+				this.presTimer += dt;
+				let pRatio = Math.min(this.presTimer / TANK_PRESSURE_SIM.PRESSURIZE_TIME_SEC, 1.0);
+				this.tankPresFuel = unpres + (targetPres - unpres) * pRatio;
+				this.tankPresOxid = unpres + (targetPres - unpres) * pRatio;
+				if (pRatio >= 1.0) this.presState = 'NOMINAL';
+				break;
+			case 'NOMINAL':
+				this.tankPresFuel = targetPres + noiseF * totalNoiseAmp;
+				this.tankPresOxid = targetPres + noiseO * totalNoiseAmp;
+				break;
+			case 'IGNITION_DROP':
+				this.presTimer += dt;
+				let dropF = targetPres * TANK_PRESSURE_SIM.IGNITION_DROP_RATIO;
+				this.tankPresFuel = dropF + noiseF * totalNoiseAmp;
+				this.tankPresOxid = dropF + noiseO * totalNoiseAmp;
+				if (this.presTimer > TANK_PRESSURE_SIM.IGNITION_DROP_TIME_SEC) this.presState = 'NOMINAL';
+				break;
+			case 'MECO_SPIKE':
+				this.presTimer += dt;
+				let spikeF = targetPres * TANK_PRESSURE_SIM.MECO_SPIKE_RATIO;
+				this.tankPresFuel = spikeF + noiseF * totalNoiseAmp;
+				this.tankPresOxid = spikeF + noiseO * totalNoiseAmp;
+				if (this.presTimer > TANK_PRESSURE_SIM.MECO_SPIKE_TIME_SEC) this.presState = 'NOMINAL';
+				break;
+			case 'DEPLETED':
+				this.tankPresFuel = Math.max(unpres, this.tankPresFuel - TANK_PRESSURE_SIM.DEPLETION_DROP_RATE * dt);
+				this.tankPresOxid = Math.max(unpres, this.tankPresOxid - TANK_PRESSURE_SIM.DEPLETION_DROP_RATE * dt);
+				break;
 		}
 	}
 
@@ -358,11 +427,17 @@ export class CalcRocket extends GravSimCalcObject {
 			this.burnTime -= actualDt;
 
 			if (this.burnTime <= 0 || this.fuelMass <= 0 || (this.ofRatio > 0 && this.oxidMass <= 0)) {
+				if (this.presState === 'NOMINAL') {
+					this.presState = 'MECO_SPIKE';
+					this.presTimer = 0;
+				}
 				if (this.fuelMass < 0) { this.fuelMass = 0; }
 				if (this.oxidMass < 0) { this.oxidMass = 0; }
 				this.burnTime = 0;
 			}
 		}
+
+		this.updatePressure(dt, this.flightComputer.getTelemetry().structRatio);
 
 		this._thrustRatio = dt > 0 ? (actualDt / dt) : 0;
 	}

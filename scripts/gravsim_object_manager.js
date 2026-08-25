@@ -219,6 +219,8 @@ export class ObjectManager {
 						aH: objData.tmAh,
 						currentG: objData.tmCurrentG,
 						flightTime: objData.tmFlightTime,
+						tankPresFuel: objData.tmTankPresFuel,
+						tankPresOxid: objData.tmTankPresOxid
 					};
 					target.thrustAngle = objData.thrustAngle;
 				} else {

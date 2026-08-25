@@ -90,6 +90,11 @@ export class LaunchSequencer {
 			this.universe.emit('sequencer-event', name);
 		}
 
+		// Pass ALL commands to the worker for pressure simulation etc.
+		if (this.rocketId !== null && cmd) {
+			this.universe.CalcWorkerManager.sendRocketCommand(this.rocketId, cmd);
+		}
+
 		switch (cmd) {
 			case 'START_COUNTDOWN':
 				this.universe.ControlPanel.rocketTab.setRolloutState(true);
@@ -111,6 +116,8 @@ export class LaunchSequencer {
 				break;
 			case 'WATER_DELUGE':
 			case 'ROFI_IGNITION':
+			case 'PRESSURIZE_TANK':
+				// Visual effects handled via states or specific systems in the future
 				break;
 		}
 	}
