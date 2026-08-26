@@ -2,6 +2,7 @@
 // gravsim_launch_sequencer.js
 
 import { PHYSICS, LAUNCH_SEQUENCES } from './gravsim_const.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class LaunchSequencer {
 	constructor(universe) {
@@ -15,7 +16,7 @@ export class LaunchSequencer {
 		this.eventIndex = 0;
 
 		// Register update hook
-		this.universe.addUpdateHook((dt, scaledDt) => this.update(scaledDt));
+		EventBus.on('simulation:update', (dt, scaledDt) => this.update(scaledDt));
 	}
 
 	start(sequenceData, rocketId) {
@@ -37,14 +38,14 @@ export class LaunchSequencer {
 			this.universe.CalcWorkerManager.setTimeScale(realTimeScale);
 		}
 		
-		this.universe.emit('sequencer-start', sequenceData);
+		EventBus.emit('sequencer-start', sequenceData);
 	}
 
 	abort() {
 		if (!this.isActive) { return; }
 		this.isActive = false;
 		this.isAutoSequence = false;
-		this.universe.emit('sequencer-abort');
+		EventBus.emit('sequencer-abort');
 	}
 
 	update(dtSec) {
@@ -69,7 +70,7 @@ export class LaunchSequencer {
 			latestEventName = this.sequence[this.eventIndex - 1].name;
 		}
 
-		this.universe.emit('sequencer-tick', { timeText, eventName: latestEventName });
+		EventBus.emit('sequencer-tick', { timeText, eventName: latestEventName });
 
 		while (this.eventIndex < this.sequence.length && this.timer >= this.sequence[this.eventIndex].time) {
 			const evt = this.sequence[this.eventIndex];
@@ -81,13 +82,13 @@ export class LaunchSequencer {
 			// Turn off sequencer X seconds after liftoff
 			this.isActive = false;
 			this.isAutoSequence = false;
-			this.universe.emit('sequencer-end');
+			EventBus.emit('sequencer-end');
 		}
 	}
 
 	executeCommand(cmd, name) {
 		if (name) {
-			this.universe.emit('sequencer-event', name);
+			EventBus.emit('sequencer-event', name);
 		}
 
 		// Pass ALL commands to the worker for pressure simulation etc.
@@ -101,7 +102,7 @@ export class LaunchSequencer {
 				break;
 			case 'AUTO_SEQUENCE_START':
 				this.isAutoSequence = true;
-				this.universe.emit('auto-sequence-start');
+				EventBus.emit('auto-sequence-start');
 				break;
 			case 'IGNITE_ENGINE':
 				// Ignite but keep holding down
@@ -112,7 +113,7 @@ export class LaunchSequencer {
 				this.universe.ObjectManager.updateRocketState(this.rocketId, true, false);
 				this.universe.ControlPanel.rocketTab.setRolloutState(false);
 				this.isAutoSequence = false;
-				this.universe.emit('liftoff');
+				EventBus.emit('liftoff');
 				break;
 			case 'WATER_DELUGE':
 			case 'ROFI_IGNITION':

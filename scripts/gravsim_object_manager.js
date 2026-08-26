@@ -10,6 +10,7 @@ import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.j
 import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 import { DebrisGenerator } from './gravsim_debris_generator.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class ObjectManager {
 	constructor(renderer, workerManager) {
@@ -21,7 +22,7 @@ export class ObjectManager {
 		this.shockwaves = [];
 		
 		// Register shockwave drawing to the renderer
-		this.renderer.addDrawHook('after', this.drawShockwaves.bind(this));
+		EventBus.on('draw:after', this.drawShockwaves.bind(this));
 	}
 
 	destroy() {

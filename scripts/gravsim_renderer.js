@@ -1,6 +1,8 @@
 
 // gravsim_renderer.js
 
+import { EventBus } from './gravsim_event_bus.js';
+
 /*******************************************************************
  * Renderer Class
 *******************************************************************/
@@ -10,12 +12,6 @@ export class Renderer {
 		this.ctx = canvas.getContext('2d');
 		this.zoomScale = 1;
 		this.rotation = 0;
-
-		this.drawHooks = {
-			before: [],
-			after: [],
-			overlay: []
-		};
 
 		this.renderContext = {
 			ctx: this.ctx,
@@ -35,12 +31,6 @@ export class Renderer {
 
 	setZoomScale(scale) {
 		this.zoomScale = scale;
-	}
-
-	addDrawHook(timing, callback) {
-		if (this.drawHooks[timing]) {
-			this.drawHooks[timing].push(callback);
-		}
 	}
 
 	draw(objects, renderState, trailLengthAU = 3.0) {
@@ -73,17 +63,17 @@ export class Renderer {
 		this.renderContext.objectsMap = objectsMap;
 		
 		// 1. Before objects
-		this.drawHooks.before.forEach(hook => hook(this.ctx, this.renderContext));
+		EventBus.emit('draw:before', this.ctx, this.renderContext);
 
 		// 2. Draw main objects
 		objects.forEach(obj => obj.draw(this.renderContext));
 
 		// 3. After objects (effects, labels, etc. before restoring transform)
-		this.drawHooks.after.forEach(hook => hook(this.ctx, this.renderContext));
+		EventBus.emit('draw:after', this.ctx, this.renderContext);
 
 		this.ctx.restore();
 
 		// 4. Screen-space overlays (UI, Scalebar)
-		this.drawHooks.overlay.forEach(hook => hook(this.ctx, this.renderContext));
+		EventBus.emit('draw:overlay', this.ctx, this.renderContext);
 	}
 }

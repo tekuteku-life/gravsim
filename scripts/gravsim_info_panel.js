@@ -3,6 +3,7 @@
 
 import { PHYSICS, UI } from './gravsim_const.js';
 import { DOMUtils, FormatUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
  * InfoPanel class that manages the information panel.
@@ -30,12 +31,12 @@ export class InfoPanel {
 		DOMUtils.verifyElements(this.ui, 'InfoPanel');
 
 		// Subscribe to object list changes
-		this.universe.on('object-list-changed', (count) => {
+		EventBus.on('object-list-changed', (count) => {
 			this.updateObjectCount(count);
 		});
 
 		// Register to the main logic update loop
-		this.universe.addUpdateHook((dt, scaledDt) => {
+		EventBus.on('simulation:update', (dt, scaledDt) => {
 			if (this.universe.objects.length === 1) {
 				this.resetElapsedTime();
 			} else {

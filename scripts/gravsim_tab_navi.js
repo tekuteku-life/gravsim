@@ -3,6 +3,7 @@
 
 import { PHYSICS, UI, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class NaviTab {
 	constructor(universe) {
@@ -12,14 +13,14 @@ export class NaviTab {
 		this._bindEvents();
 
 		// Register to the main Pub/Sub manager instead of setInterval
-		this.universe.registerUIUpdater(UI.UPDATE_INTERVAL.NAVI, () => {
+		EventBus.registerInterval(UI.UPDATE_INTERVAL.NAVI, () => {
 			if (this.ui.nvTab && this.ui.nvTab.classList.contains('active')) {
 				this._updateNaviStats();
 			}
 		});
 
 		// Subscribe to object list changes
-		this.universe.on('object-list-changed', () => {
+		EventBus.on('object-list-changed', () => {
 			this.updateTargetOptions();
 		});
 	}

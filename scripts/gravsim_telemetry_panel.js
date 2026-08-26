@@ -4,6 +4,7 @@
 import { PHYSICS, UI, OBJECT_TYPES, TELEMETRY } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
 import { MathUtils, DOMUtils, UnitConvertUtils, FormatUtils } from './gravsim_utils.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class TelemetryPanel {
 	constructor(universe) {
@@ -57,14 +58,14 @@ export class TelemetryPanel {
 		this._bindEvents();
 
 		// Register to the main logic update loop
-		this.universe.registerUIUpdater(UI.UPDATE_INTERVAL.TELEMETRY, () => {
+		EventBus.registerInterval(UI.UPDATE_INTERVAL.TELEMETRY, () => {
 			if (this.isOpen) {
 				this.update();
 			}
 		});
 
 		// Subscribe to object list changes
-		this.universe.on('object-list-changed', () => {
+		EventBus.on('object-list-changed', () => {
 			this._updateTargetOptions();
 		});
 	}
@@ -80,7 +81,7 @@ export class TelemetryPanel {
 		});
 
 		// Event listeners for launch sequence updates and animations
-		this.universe.on('sequencer-start', () => {
+		EventBus.on('sequencer-start', () => {
 			if (this.ui.countdownDisplay) this.ui.countdownDisplay.style.display = 'block';
 		});
 
@@ -88,15 +89,15 @@ export class TelemetryPanel {
 			if (this.ui.countdownDisplay) this.ui.countdownDisplay.style.display = 'none';
 			if (this.ui.panel) this.ui.panel.classList.remove('auto-sequence-mode');
 		};
-		this.universe.on('sequencer-end', resetSequenceUI);
-		this.universe.on('sequencer-abort', resetSequenceUI);
+		EventBus.on('sequencer-end', resetSequenceUI);
+		EventBus.on('sequencer-abort', resetSequenceUI);
 
-		this.universe.on('sequencer-tick', (data) => {
+		EventBus.on('sequencer-tick', (data) => {
 			DOMUtils.setText(this.ui.cdTime, data.timeText);
 			DOMUtils.setText(this.ui.cdEvent, data.eventName);
 		});
 
-		this.universe.on('sequencer-event', () => {
+		EventBus.on('sequencer-event', () => {
 			if (this.ui.countdownDisplay) {
 				// Re-trigger CSS animation
 				this.ui.countdownDisplay.classList.remove('flash');
@@ -105,11 +106,11 @@ export class TelemetryPanel {
 			}
 		});
 
-		this.universe.on('auto-sequence-start', () => {
+		EventBus.on('auto-sequence-start', () => {
 			if (this.ui.panel) this.ui.panel.classList.add('auto-sequence-mode');
 		});
 
-		this.universe.on('liftoff', () => {
+		EventBus.on('liftoff', () => {
 			if (this.ui.panel) this.ui.panel.classList.remove('auto-sequence-mode');
 		});
 	}

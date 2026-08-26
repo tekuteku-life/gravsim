@@ -5,6 +5,7 @@ import { SystemTab } from './gravsim_tab_system.js';
 import { DeployTab } from './gravsim_tab_deploy.js';
 import { RocketTab } from './gravsim_tab_rocket.js';
 import { NaviTab } from './gravsim_tab_navi.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
  * ControlPanel class that manages the simulation control panel UI.
@@ -69,7 +70,7 @@ export class ControlPanel {
 		}
 
 		// Lock tabs during launch sequence
-		this.universe.on('sequencer-start', () => {
+		EventBus.on('sequencer-start', () => {
 			this.ui.tabBtns.forEach(btn => {
 				btn.disabled = true;
 				btn.style.pointerEvents = 'none';
@@ -84,8 +85,8 @@ export class ControlPanel {
 				btn.style.opacity = '1.0';
 			});
 		};
-		this.universe.on('sequencer-end', unlockTabs);
-		this.universe.on('sequencer-abort', unlockTabs);
+		EventBus.on('sequencer-end', unlockTabs);
+		EventBus.on('sequencer-abort', unlockTabs);
 	}
 
 	_tabBtnClick(e) {

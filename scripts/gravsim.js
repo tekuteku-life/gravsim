@@ -1,5 +1,8 @@
 
+// gravsim.js
+
 import { Universe } from './gravsim_universe.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 window.onload = function() {
 	const canvas = document.getElementById('gravsim-canvas');
@@ -21,8 +24,11 @@ window.onload = function() {
 	function animate(now) {
 		const dt = now - lastTime;
 		lastTime = now;
-		universe.update(dt);
-		universe.draw();
+
+		EventBus.emit('app:update', dt);
+		EventBus.emit('app:draw');
+		EventBus.tickIntervals(now);
+
 		requestAnimationFrame(animate);
 	}
 	requestAnimationFrame(animate);

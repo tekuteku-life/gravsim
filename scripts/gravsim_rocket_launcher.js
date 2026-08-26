@@ -8,6 +8,7 @@ import {
 } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 import { PadEffectRenderer } from './gravsim_pad_effect.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
  * RocketLauncher Class
@@ -54,22 +55,22 @@ export class RocketLauncher {
 		this.padEffect = new PadEffectRenderer();
 
 		// Register update hook
-		this.universe.addUpdateHook((dt, scaledDt) => this.update(scaledDt));
+		EventBus.on('simulation:update', (dt, scaledDt) => this.update(scaledDt));
 
 		// Register hooks using Pub/Sub
-		this.universe.Renderer.addDrawHook('before', (ctx, rc) => {
+		EventBus.on('draw:before', (ctx, rc) => {
 			if (!this.isActive || !this.padEffect.isActive) { return; }
 			const context = this._buildPadContext();
 			if (context) { this.padEffect.drawBackground(ctx, rc, context); }
 		});
 
-		this.universe.Renderer.addDrawHook('after', (ctx, rc) => {
+		EventBus.on('draw:after', (ctx, rc) => {
 			if (!this.isActive || !this.padEffect.isActive) { return; }
 			const context = this._buildPadContext();
 			if (context) { this.padEffect.drawForeground(ctx, rc, context); }
 		});
 
-		this.universe.on('sequencer-event', (eventName) => {
+		EventBus.on('sequencer-event', (eventName) => {
 			this.padEffect.handleEvent(eventName);
 			if (eventName.includes('INTERNAL POWER') && this.rolloutedRocketId !== null) {
 				const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
@@ -77,7 +78,7 @@ export class RocketLauncher {
 			}
 		});
 
-		this.universe.on('liftoff', () => {
+		EventBus.on('liftoff', () => {
 			if (this.rolloutedRocketId !== null) {
 				const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
 				if (rocket) rocket.isInternalPower = false;

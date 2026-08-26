@@ -19,6 +19,7 @@ import { SaveManager } from './gravsim_save_manager.js';
 import { InputManager } from './gravsim_input_manager.js';
 import { AudioManager } from './gravsim_audio_manager.js';
 import { SoundSequencer } from './gravsim_sound_sequencer.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 const GRAVSIM_CALC_JS_FILE = './scripts/gravsim_calc.js';
 
@@ -76,8 +77,6 @@ class CalcWorkerManager {
 export class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
-		this.uiUpdaters = [];
-		this.updateHooks = [];
 		this.isPaused = false;
 		this.trailLengthAU = 3.0;
 
@@ -89,8 +88,8 @@ export class Universe {
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
 		
 		this.OverlayRenderer = new OverlayRenderer(this);
-		this.Renderer.addDrawHook('overlay', (ctx, rc) => this.OverlayRenderer.drawOverlay(ctx, rc));
-		this.Renderer.addDrawHook('after', (ctx, rc) => this.OverlayRenderer.drawAfter(ctx, rc));
+		EventBus.on('draw:overlay', (ctx, rc) => this.OverlayRenderer.drawOverlay(ctx, rc));
+		EventBus.on('draw:after', (ctx, rc) => this.OverlayRenderer.drawAfter(ctx, rc));
 
 		this.InfoPanel = new InfoPanel(this);
 		this.TelemetryPanel = new TelemetryPanel(this);
@@ -105,7 +104,7 @@ export class Universe {
 		this.timeScale = this.ControlPanel.getTimeScale();
 		
 		// Hook for Camera interpolation
-		this.addUpdateHook((dt, scaledDt) => {
+		EventBus.on('simulation:update', (dt, scaledDt) => {
 			this.camera.update(dt / 1000); // dt is in ms
 			
 			// Fallback ensureCenterObject logic (if target dies)
@@ -114,12 +113,14 @@ export class Universe {
 				const oldCenter = currentTarget;
 				let nextCenter = null;
 
+				// Tracking debris
 				const debrisName = oldCenter.name.endsWith(' Debris') ? oldCenter.name : `${oldCenter.name} Debris`;
 				const debrisList = this.objects.filter(o => o.name === debrisName && o.state === OBJECT_STATE.ACTIVE);
 				if (debrisList.length > 0) {
 					nextCenter = debrisList.reduce((max, obj) => obj.mass > max.mass ? obj : max, debrisList[0]);
 				}
 
+				// Select lergest object
 				if (!nextCenter && this.objects.length > 0) {
 					nextCenter = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
 				}
@@ -133,7 +134,7 @@ export class Universe {
 		});
 
 		// Hook for rocket flight time update
-		this.addUpdateHook((dt, scaledDt) => {
+		EventBus.on('simulation:update', (dt, scaledDt) => {
 			this.objects.forEach(obj => {
 				if (obj.type === OBJECT_TYPES.ROCKET && obj.state === OBJECT_STATE.ACTIVE) {
 					obj.flightTime += scaledDt;
@@ -142,7 +143,7 @@ export class Universe {
 		});
 
 		// Hook for celestial body rotation update
-		this.addUpdateHook((dt, scaledDt) => {
+		EventBus.on('simulation:update', (dt, scaledDt) => {
 			this.objects.forEach(obj => {
 				if (obj.type === OBJECT_TYPES.CELESTIAL && obj.state === OBJECT_STATE.ACTIVE) {
 					const param = DEFAULT_OBJECT_PARAMS[obj.name];
@@ -155,10 +156,14 @@ export class Universe {
 		});
 
 		// Hook for UI Updates
-		this.addUpdateHook(() => this.updateUI(Date.now()));
+		EventBus.on('simulation:update', () => this.updateUI(Date.now()));
 
 		// Hook for Object Cleanup
-		this.addUpdateHook(() => this.ObjectManager.cleanupObjects());
+		EventBus.on('simulation:update', () => this.ObjectManager.cleanupObjects());
+
+		// Hook for Core Application
+		EventBus.on('app:update', (dt) => this.update(dt));
+		EventBus.on('app:draw', () => this.draw());
 
 		this.reset();
 	}
@@ -197,6 +202,10 @@ export class Universe {
 		this.centerObject = this.objects[0];
 	}
 
+	destroy() {
+		EventBus.clearAll();
+	}
+
 	// Send pause command to worker
 	pauseSimulation() {
 		if (!this.isPaused) {
@@ -231,55 +240,14 @@ export class Universe {
 		toRemove.forEach(obj => this.removeObject(obj));
 	}
 
-	// Register logic updater callback
-	addUpdateHook(callback) {
-		this.updateHooks.push(callback);
-	}
-
-	// Register UI updater callback with specific interval
-	registerUIUpdater(intervalMs, callback) {
-		if (!this.uiUpdaters) {
-			this.uiUpdaters = [];
-		}
-		this.uiUpdaters.push({
-			interval: intervalMs,
-			callback: callback,
-			lastTime: 0
-		});
-	}
-
-	// Simple Event Emitter logic
-	on(eventName, callback) {
-		if (!this.eventListeners) this.eventListeners = {};
-		if (!this.eventListeners[eventName]) this.eventListeners[eventName] = [];
-		this.eventListeners[eventName].push(callback);
-	}
-
-	emit(eventName, data) {
-		if (!this.eventListeners || !this.eventListeners[eventName]) return;
-		for (let i = 0; i < this.eventListeners[eventName].length; i++) {
-			this.eventListeners[eventName][i](data);
-		}
-	}
-
 	// Execute registered updaters (Call this method in the main simulation loop)
 	updateUI(now) {
 		// Detect changes in object count to trigger list updates safely once per frame
 		if (this.ObjectManager) {
 			const currentCount = this.ObjectManager.objects.length;
 			if (this._lastObjCount !== currentCount) {
-				this.emit('object-list-changed', currentCount);
+				EventBus.emit('object-list-changed', currentCount);
 				this._lastObjCount = currentCount;
-			}
-		}
-
-		if (this.uiUpdaters) {
-			for (let i = 0; i < this.uiUpdaters.length; i++) {
-				const updater = this.uiUpdaters[i];
-				if (now - updater.lastTime >= updater.interval) {
-					updater.callback();
-					updater.lastTime = now;
-				}
 			}
 		}
 	}
@@ -296,7 +264,7 @@ export class Universe {
 		}
 
 		// Process decoupled update hooks (Camera, Modules, Flight time, UI, Cleanup)
-		this.updateHooks.forEach(hook => hook(dt, scaledDt));
+		EventBus.emit('simulation:update', dt, scaledDt);
 	}
 
 	draw() {

@@ -3,6 +3,7 @@
 
 import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS } from './gravsim_const.js';
 import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class RocketTab {
 	constructor(universe, systemTab) {
@@ -17,7 +18,7 @@ export class RocketTab {
 		this.isOpened = false;
 
 		// Subscribe to object list changes
-		this.universe.on('object-list-changed', () => {
+		EventBus.on('object-list-changed', () => {
 			this._updateRocketHostOptions();
 		});
 	}
@@ -133,7 +134,7 @@ export class RocketTab {
 		this.ui.rlAbortBtn.addEventListener('click', () => this.universe.RocketLauncher.abortRollout());
 
 		// Disable ignition buttons during launch sequence
-		this.universe.on('sequencer-start', () => {
+		EventBus.on('sequencer-start', () => {
 			this.ui.rlIgniteQuickBtn.disabled = true;
 			this.ui.rlIgniteFullBtn.disabled = true;
 		});
@@ -142,8 +143,8 @@ export class RocketTab {
 			this.ui.rlIgniteQuickBtn.disabled = false;
 			this.ui.rlIgniteFullBtn.disabled = false;
 		};
-		this.universe.on('sequencer-end', unlockIgnition);
-		this.universe.on('sequencer-abort', unlockIgnition);
+		EventBus.on('sequencer-end', unlockIgnition);
+		EventBus.on('sequencer-abort', unlockIgnition);
 
 		// Helper to bind range inputs to RocketLauncher properties
 		const bindSlider = (sliderId, valId, propName, isFloat = false) => {

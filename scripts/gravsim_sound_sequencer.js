@@ -1,6 +1,8 @@
 
 // gravsim_sound_sequencer.js
 
+import { EventBus } from './gravsim_event_bus.js';
+
 export class SoundSequencer {
 	constructor(universe) {
 		this.universe = universe;
@@ -13,12 +15,12 @@ export class SoundSequencer {
 		this._bindEvents();
 		
 		// Register update hook to monitor time for audio triggers
-		this.universe.addUpdateHook(() => this.update());
+		EventBus.on('simulation:update', () => this.update());
 	}
 
 	_bindEvents() {
 		// Listen to sequencer events to play corresponding audio based on profile
-		this.universe.on('sequencer-event', (eventName) => {
+		EventBus.on('sequencer-event', (eventName) => {
 			const am = this.universe.AudioManager;
 			if (am && this.audioProfile.events && this.audioProfile.events[eventName]) {
 				am.play(this.audioProfile.events[eventName]);
@@ -26,7 +28,7 @@ export class SoundSequencer {
 		});
 
 		// Reset time tracking and set audio profile on start
-		this.universe.on('sequencer-start', (sequenceData) => {
+		EventBus.on('sequencer-start', (sequenceData) => {
 			if (this.universe.LaunchSequencer) {
 				// Subtract a tiny fraction to ensure the initial integer second is triggered
 				this.previousMET = -this.universe.LaunchSequencer.tMinusOffset - 0.001;
@@ -43,7 +45,7 @@ export class SoundSequencer {
 			this.conditionFlags = {};
 		});
 
-		this.universe.on('sequencer-abort', () => {
+		EventBus.on('sequencer-abort', () => {
 			this.previousMET = null;
 			this.audioProfile = { events: {}, times: {}, conditions: [] };
 			this.conditionFlags = {};

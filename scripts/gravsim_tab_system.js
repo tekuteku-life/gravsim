@@ -3,6 +3,7 @@
 
 import { PHYSICS, RENDER, SIMULATION, UI } from './gravsim_const.js';
 import { DOMUtils } from './gravsim_utils.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class SystemTab {
 	constructor(universe) {
@@ -11,7 +12,7 @@ export class SystemTab {
 		this._bindEvents();
 
 		// Subscribe to object list changes
-		this.universe.on('object-list-changed', () => {
+		EventBus.on('object-list-changed', () => {
 			this.updateCenterOptions();
 		});
 
@@ -117,7 +118,7 @@ export class SystemTab {
 		});
 
 		// Lock simulation controls during launch sequence
-		this.universe.on('sequencer-start', () => {
+		EventBus.on('sequencer-start', () => {
 			this.ui.timeScale.disabled = true;
 			this.ui.pauseResumeBtn.disabled = true;
 			this.ui.resetAllBtn.disabled = true;
@@ -128,8 +129,8 @@ export class SystemTab {
 			this.ui.pauseResumeBtn.disabled = false;
 			this.ui.resetAllBtn.disabled = false;
 		};
-		this.universe.on('sequencer-end', unlockControls);
-		this.universe.on('sequencer-abort', unlockControls);
+		EventBus.on('sequencer-end', unlockControls);
+		EventBus.on('sequencer-abort', unlockControls);
 	}
 
 	_onCenterChanged(e) {
