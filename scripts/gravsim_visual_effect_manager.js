@@ -1,8 +1,9 @@
 
 // gravsim_visual_effect_manager.js
 
-import { DEBRIS } from './gravsim_const.js';
-import { ColorUtils } from './gravsim_utils.js';
+import { DEBRIS, ROCKET_LAUNCHER_CONFIG } from './gravsim_const.js';
+import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { PadEffectRenderer } from './gravsim_pad_effect.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
@@ -14,12 +15,14 @@ export class VisualEffectManager {
 	constructor(universe) {
 		this.universe = universe;
 		this.shockwaves = [];
+		this.padEffect = new PadEffectRenderer();
 
 		this._bindEvents();
 	}
 
 	destroy() {
 		this.shockwaves = [];
+		this.padEffect.stop();
 	}
 
 	_bindEvents() {
@@ -34,9 +37,74 @@ export class VisualEffectManager {
 			});
 		});
 
+		// --- Pad Effect Events ---
+		EventBus.on('effect:pad-start', (rocketId, hostId) => {
+			this.padEffect.start(rocketId, hostId);
+		});
+
+		EventBus.on('effect:pad-stop', () => {
+			this.padEffect.stop();
+		});
+
+		EventBus.on('sequencer-event', (eventName) => {
+			if (this.padEffect.isActive) {
+				this.padEffect.handleEvent(eventName);
+			}
+		});
+
+		EventBus.on('liftoff', () => {
+			if (this.padEffect.isActive) {
+				this.padEffect.handleLiftoff();
+			}
+		});
+
+		// --- Update and Draw Hooks ---
+		EventBus.on('simulation:update', (dt, scaledDt) => this.update(scaledDt));
+
+		EventBus.on('draw:before', (ctx, rc) => {
+			if (this.padEffect.isActive) {
+				const context = this._buildPadContext(rc);
+				if (context) { this.padEffect.drawBackground(ctx, rc, context); }
+			}
+		});
+
 		EventBus.on('draw:after', (ctx, rc) => {
+			if (this.padEffect.isActive) {
+				const context = this._buildPadContext(rc);
+				if (context) { this.padEffect.drawForeground(ctx, rc, context); }
+			}
 			this.drawShockwaves(ctx, rc);
 		});
+	}
+
+	update(dt) {
+		if (this.padEffect && this.padEffect.isActive) {
+			const context = this._buildPadContext();
+			if (context) { this.padEffect.update(dt, context); }
+			
+			if (this.padEffect.targetRocketId) {
+				const rocket = this.universe.objects.find(o => o.id === this.padEffect.targetRocketId);
+				// Stop pad effect if rocket exceeds a certain altitude or is destroyed
+				if (rocket && rocket.telemetry && rocket.telemetry.altM > ROCKET_LAUNCHER_CONFIG.EFFECT_STOP_ALT_M) {
+					this.padEffect.stop();
+				} else if (!rocket) {
+					this.padEffect.stop();
+				}
+			}
+		}
+	}
+
+	_buildPadContext(renderContext = null) {
+		const rocket = this.universe.objects.find(o => o.id === this.padEffect.targetRocketId);
+		const host = this.universe.objects.find(o => o.id === this.padEffect.hostId);
+		const zoomScale = renderContext ? renderContext.zoomScale : this.universe.camera.getRenderState().zoomScale;
+		
+		return {
+			rocket: rocket,
+			host: host,
+			m2pix: (m) => UnitConvertUtils.m2pix(m),
+			zoomScale: zoomScale
+		};
 	}
 
 	drawShockwaves(ctx, renderContext) {

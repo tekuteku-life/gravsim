@@ -3,11 +3,9 @@
 
 import {
 	PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS,
-	ROCKET_FUELS, LAUNCH_SEQUENCES,
-	ROCKET_LAUNCHER_CONFIG
+	ROCKET_FUELS, LAUNCH_SEQUENCES
 } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
-import { PadEffectRenderer } from './gravsim_pad_effect.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
@@ -52,26 +50,10 @@ export class RocketLauncher {
 
 		this.rolloutedRocketId = null;
 		
-		this.padEffect = new PadEffectRenderer();
-
 		// Register update hook
 		EventBus.on('simulation:update', (dt, scaledDt) => this.update(scaledDt));
 
-		// Register hooks using Pub/Sub
-		EventBus.on('draw:before', (ctx, rc) => {
-			if (!this.isActive || !this.padEffect.isActive) { return; }
-			const context = this._buildPadContext();
-			if (context) { this.padEffect.drawBackground(ctx, rc, context); }
-		});
-
-		EventBus.on('draw:after', (ctx, rc) => {
-			if (!this.isActive || !this.padEffect.isActive) { return; }
-			const context = this._buildPadContext();
-			if (context) { this.padEffect.drawForeground(ctx, rc, context); }
-		});
-
 		EventBus.on('sequencer-event', (eventName) => {
-			this.padEffect.handleEvent(eventName);
 			if (eventName.includes('INTERNAL POWER') && this.rolloutedRocketId !== null) {
 				const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
 				if (rocket) { rocket.isInternalPower = true; }
@@ -83,7 +65,6 @@ export class RocketLauncher {
 				const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
 				if (rocket) rocket.isInternalPower = false;
 			}
-			this.padEffect.handleLiftoff();
 		});
 	}
 
@@ -159,7 +140,7 @@ export class RocketLauncher {
 
 	drawTargetMarker(ctx, centerObject, zoomScale) {
 		if (this.mode !== 'host' || this.hostId === null) { return; }
-		if (this.rolloutedRocketId !== null || this.padEffect.isActive) { return; }
+		if (this.rolloutedRocketId !== null) { return; }
 
 		const host = this.universe.objects.find(o => o.id === this.hostId);
 		if (!host) { return; }
@@ -313,7 +294,8 @@ export class RocketLauncher {
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
 		this.rolloutedRocketId = newRocket.id;
 
-		this.padEffect.start(newRocket.id, this.hostId);
+		// Emit event to start pad effect
+		EventBus.emit('effect:pad-start', newRocket.id, this.hostId);
 
 		// Activate dynamic auto tracking
 		this.isAutoTracking = true;
@@ -340,7 +322,10 @@ export class RocketLauncher {
 				this.universe.ObjectManager.removeObject(obj);
 			}
 			this.rolloutedRocketId = null;
-			this.padEffect.stop();
+
+			// Emit event to stop pad effect
+			EventBus.emit('effect:pad-stop');
+
 			this.universe.ControlPanel.rocketTab.setRolloutState(false);
 
 			const host = this.universe.objects.find(o => o.id === this.hostId);
@@ -353,17 +338,6 @@ export class RocketLauncher {
 		const sequence = LAUNCH_SEQUENCES[sequenceType];
 		if (!sequence) { return; }
 		this.universe.LaunchSequencer.start(sequence, this.rolloutedRocketId);
-	}
-
-	_buildPadContext() {
-		const rocket = this.universe.objects.find(o => o.id === this.padEffect.targetRocketId);
-		const host = this.universe.objects.find(o => o.id === this.padEffect.hostId);
-		return {
-			rocket: rocket,
-			host: host,
-			m2pix: (m) => UnitConvertUtils.m2pix(m),
-			zoomScale: this.universe.camera.getRenderState().zoomScale
-		};
 	}
 
 	_autoTracking(dt) {
@@ -414,20 +388,6 @@ export class RocketLauncher {
 
 	update(dt) {
 		this._autoTracking();
-
-		if (this.padEffect && this.padEffect.isActive) {
-			const context = this._buildPadContext();
-			if (context) this.padEffect.update(dt, context);
-			
-			if (this.padEffect.targetRocketId) {
-				const rocket = this.universe.objects.find(o => o.id === this.padEffect.targetRocketId);
-				if (rocket && rocket.telemetry && rocket.telemetry.altM > ROCKET_LAUNCHER_CONFIG.EFFECT_STOP_ALT_M) {
-					this.padEffect.stop();
-				} else if (!rocket) {
-					this.padEffect.stop();
-				}
-			}
-		}
 	}
 
 	getState() {
