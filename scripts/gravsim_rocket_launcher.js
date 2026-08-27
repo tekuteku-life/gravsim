@@ -16,7 +16,6 @@ export class RocketLauncher {
 	constructor(universe) {
 		this.universe = universe;
 		this.isActive = false;
-		this.isAutoTracking = false;
 		
 		// Setup parameters
 		this.mode = 'host'; // 'free' or 'host'
@@ -49,9 +48,6 @@ export class RocketLauncher {
 		this.autoControl = true; // Auto Flight Computer flag
 
 		this.rolloutedRocketId = null;
-		
-		// Register update hook
-		EventBus.on('simulation:update', (dt, scaledDt) => this.update(scaledDt));
 
 		EventBus.on('sequencer-event', (eventName) => {
 			if (eventName.includes('INTERNAL POWER') && this.rolloutedRocketId !== null) {
@@ -224,35 +220,6 @@ export class RocketLauncher {
 		}
 	}
 
-	_stopAutoTracking(host) {
-		this.isAutoTracking = false;
-		
-		const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
-		if (!rocket || !rocket.isHoldDown) {
-			this.rolloutedRocketId = null;
-		}
-
-		if (host) {
-			this.universe.camera.setTrackingTarget(host);
-			this.universe.camera.setTargetRotation(0);
-			
-			// Calculate zoom to fit host gracefully
-			const hostRadiusPx = UnitConvertUtils.m2pix(host.radius);
-			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 2.2;
-			let idealExp = Math.log10(targetSize / hostRadiusPx);
-
-			const maxZoom = parseFloat(this.universe.ControlPanel.systemTab.ui.zoomScale.max);
-			const minZoom = parseFloat(this.universe.ControlPanel.systemTab.ui.zoomScale.min);
-			idealExp = Math.max(minZoom, Math.min(maxZoom, idealExp));
-			
-			this.universe.camera.setTargetZoomExp(idealExp);
-			
-			// Sync UI
-			this.universe.ControlPanel.systemTab.ui.zoomScale.value = idealExp.toFixed(2);
-			this.universe.ControlPanel.systemTab.updateZoomScaleIndicator(Math.pow(10, idealExp));
-		}
-	}
-
 	rollout() {
 		if (this.mode !== 'host' || this.hostId === null) { return; }
 
@@ -298,11 +265,7 @@ export class RocketLauncher {
 		EventBus.emit('effect:pad-start', newRocket.id, this.hostId);
 
 		// Activate dynamic auto tracking
-		this.isAutoTracking = true;
-
-		// Set new rocket to center object
-		this.universe.camera.setTrackingTarget(newRocket);
-		this.universe.camera.setTargetOffset(0, 0);
+		this.universe.camera.setAutoTracking(newRocket, host);
 
 		this.universe.ControlPanel.systemTab.updateCenterOptions();
 		this.universe.InfoPanel.updateCamera(newRocket.name);
@@ -329,7 +292,7 @@ export class RocketLauncher {
 			this.universe.ControlPanel.rocketTab.setRolloutState(false);
 
 			const host = this.universe.objects.find(o => o.id === this.hostId);
-			this._stopAutoTracking(host);
+			this.universe.camera.stopAutoTracking(host);
 		}
 	}
 
@@ -338,56 +301,6 @@ export class RocketLauncher {
 		const sequence = LAUNCH_SEQUENCES[sequenceType];
 		if (!sequence) { return; }
 		this.universe.LaunchSequencer.start(sequence, this.rolloutedRocketId);
-	}
-
-	_autoTracking(dt) {
-		if (this.isAutoTracking) {
-			const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
-			const host = this.universe.objects.find(o => o.id === this.hostId);
-			
-			if (rocket && host) {
-				this.universe.camera.setTrackingTarget(rocket);
-				this.universe.camera.setTargetOffset(0, 0);
-
-				const dx = rocket.x - host.x;
-				const dy = rocket.y - host.y;
-				
-				// Apply rotation to keep the earth at the bottom of the screen
-				const angle = Math.atan2(dy, dx);
-				this.universe.camera.setTargetRotation(-angle - Math.PI / 2);
-
-				// Calculate zoom to keep ground around the bottom 10%
-				const altM = UnitConvertUtils.pix2m(Math.sqrt(dx * dx + dy * dy)) - host.radius;
-				const canvasHeight = this.universe.canvas.height;
-				const minAltM = 200; // clamp minimum virtual altitude for zoom
-				const clampedAltM = Math.max(minAltM, altM);
-				const clampedDistPx = UnitConvertUtils.m2pix(clampedAltM);
-				
-				let targetZoom = (canvasHeight * 0.4) / clampedDistPx;
-
-				// Restrict zoom out limit
-				const minZoom = Math.pow(10, parseFloat(this.universe.ControlPanel.systemTab.ui.zoomScale.min));
-				const maxZoom = Math.pow(10, parseFloat(this.universe.ControlPanel.systemTab.ui.zoomScale.max));
-				targetZoom = Math.max(minZoom, Math.min(maxZoom, targetZoom));
-				
-				this.universe.camera.setTargetZoomExp(Math.log10(targetZoom));
-				
-				// Sync UI slider during tracking
-				this.universe.ControlPanel.systemTab.ui.zoomScale.value = Math.log10(targetZoom).toFixed(2);
-				this.universe.ControlPanel.systemTab.updateZoomScaleIndicator(targetZoom);
-
-				// Reached max altitude limit, stop tracking
-				if (altM > host.radius * 0.2) {
-					this._stopAutoTracking(host);
-				}
-			} else {
-				this._stopAutoTracking(host);
-			}
-		}
-	}
-
-	update(dt) {
-		this._autoTracking();
 	}
 
 	getState() {

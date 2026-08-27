@@ -416,9 +416,9 @@ export class RocketTab {
 		this.universe.RocketLauncher.togglePreview(false);
 
 		// Stop auto tracking gracefully
-		if (this.universe.RocketLauncher.isAutoTracking) {
+		if (this.universe.camera.autoTrackHost) {
 			const host = this.universe.objects.find(o => o.id === this.universe.RocketLauncher.hostId);
-			this.universe.RocketLauncher._stopAutoTracking(host);
+			this.universe.camera.stopAutoTracking(host);
 		} else if (this.universe.RocketLauncher.rolloutedRocketId !== null || this.universe.LaunchSequencer.isActive) {
 			this.previousCameraTarget = null;
 			this.previousTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);

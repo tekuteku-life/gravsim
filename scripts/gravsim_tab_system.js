@@ -131,6 +131,15 @@ export class SystemTab {
 		};
 		EventBus.on('sequencer-end', unlockControls);
 		EventBus.on('sequencer-abort', unlockControls);
+
+		// Synchronize UI from external camera zoom changes
+		EventBus.on('camera:zoom-changed', (exp) => {
+			const currentVal = parseFloat(this.ui.zoomScale.value);
+			if (Math.abs(currentVal - exp) > 0.001) {
+				this.ui.zoomScale.value = exp.toFixed(2);
+				this.updateZoomScaleIndicator(Math.pow(10, exp));
+			}
+		});
 	}
 
 	_onCenterChanged(e) {
