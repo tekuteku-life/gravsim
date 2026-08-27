@@ -106,8 +106,7 @@ export class Universe {
 		// Hook for Camera interpolation
 		EventBus.on('simulation:update', (dt, scaledDt) => {
 			this.camera.update(dt / 1000); // dt is in ms
-			
-			// Fallback ensureCenterObject logic (if target dies)
+
 			const currentTarget = this.camera.trackingTarget;
 			if (currentTarget && currentTarget.state !== OBJECT_STATE.ACTIVE) {
 				const oldCenter = currentTarget;
