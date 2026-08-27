@@ -19,6 +19,7 @@ import { SaveManager } from './gravsim_save_manager.js';
 import { InputManager } from './gravsim_input_manager.js';
 import { AudioManager } from './gravsim_audio_manager.js';
 import { SoundSequencer } from './gravsim_sound_sequencer.js';
+import { DestructionManager } from './gravsim_destruction_manager.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 const GRAVSIM_CALC_JS_FILE = './scripts/gravsim_calc.js';
@@ -86,6 +87,7 @@ export class Universe {
 		this.CalcWorkerManager = new CalcWorkerManager((data) => this.updateObjectParams(data));
 		this.InputManager = new InputManager(this.canvas);
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
+		this.DestructionManager = new DestructionManager(this);
 		
 		this.OverlayRenderer = new OverlayRenderer(this);
 		EventBus.on('draw:overlay', (ctx, rc) => this.OverlayRenderer.drawOverlay(ctx, rc));

@@ -9,7 +9,6 @@ import {
 import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.js';
 import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
-import { DebrisGenerator } from './gravsim_debris_generator.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 export class ObjectManager {
@@ -157,76 +156,19 @@ export class ObjectManager {
 		WorkerBridge.parseWorkerToMain(data.objectsData, data.validLength, (objData) => {
 			const target = this.objects.find(t => t.id === objData.id);
 			if (target) {
-				target.x = UnitConvertUtils.m2pix(objData.x);
-				target.y = UnitConvertUtils.m2pix(objData.y);
-				target.vx = UnitConvertUtils.m2pix(objData.vx);
-				target.vy = UnitConvertUtils.m2pix(objData.vy);
-				target.ax = UnitConvertUtils.m2pix(objData.ax);
-				target.ay = UnitConvertUtils.m2pix(objData.ay);
+				this._applyBaseState(target, objData);
 
 				if (objData.type === OBJECT_TYPES.ROCKET) {
-					target.dryMass = UnitConvertUtils.kg2ton(objData.mass);
-					target.fuelMass = UnitConvertUtils.kg2ton(objData.fuelMass);
-					target.oxidMass = UnitConvertUtils.kg2ton(objData.oxidMass);
-					target.burnTime = objData.burnTime;
-					target.thrustRatio = objData.thrustRatio;
-					target.isHoldDown = objData.isHoldDown;
-					target.isIgnited = objData.isIgnited;
-
-					target.telemetry = {
-						status: objData.tmStatus,
-						qAxialKpa: objData.tmQAxial,
-						qLateralKpa: objData.tmQLateral,
-						structRatio: objData.tmStructRatio,
-						aoaDeg: objData.tmAoaDeg,
-						progradeAngle: objData.tmProgradeAngle,
-						gravityAngle: objData.tmGravityAngle,
-						remDv: objData.tmRemDv,
-						twr: objData.tmTwr,
-						altM: objData.tmAltM,
-						vV: objData.tmVv,
-						vH: objData.tmVh,
-						aV: objData.tmAv,
-						aH: objData.tmAh,
-						currentG: objData.tmCurrentG,
-						flightTime: objData.tmFlightTime,
-						tankPresFuel: objData.tmTankPresFuel,
-						tankPresOxid: objData.tmTankPresOxid
-					};
-					target.thrustAngle = objData.thrustAngle;
-				} else {
-					target.mass = UnitConvertUtils.kg2ton(objData.mass);
+					this._applyRocketState(target, objData);
 				}
-				
-				target.radius = objData.radius;
-				target.inAtmosphere = objData.inAtmosphere;
-				target.isEscaping = objData.isEscaping;
-				target.dominantBodyId = objData.dominantBodyId;
-				target.distToDominantM = objData.distToDominantM;
 
 				target.updateHistory(this.physicsSequence, this.objects);
 
 				if (objData.isCollided) {
 					if (objData.isImpact && target.state === OBJECT_STATE.ACTIVE) {
 						console.debug(`${target.name} (id:${target.id}) impacted.`);
-
-						// Generate debris and effects via DebrisGenerator
-						const debrisData = DebrisGenerator.generateFromImpact(
-							target,
-							UnitConvertUtils.kg2ton(objData.debrisMass),
-							UnitConvertUtils.m2pix(objData.impactVx),
-							UnitConvertUtils.m2pix(objData.impactVy),
-							UnitConvertUtils.m2pix(objData.impactWinnerX),
-							UnitConvertUtils.m2pix(objData.impactWinnerY),
-							UnitConvertUtils.m2pix(objData.impactWinnerRadius),
-							UnitConvertUtils.m2pix,
-							() => this.getNextId()
-						);
-
-						if (debrisData.shockwave) {
-							this.addShockwave(debrisData.shockwave.x, debrisData.shockwave.y, debrisData.shockwave.color);
-						}
-						debrisData.debrisList.forEach(debris => this.addObject(debris));
+						// Emit event to DestructionManager
+						EventBus.emit('object:impacted', target, objData);
 					}
 					target.setCollided();
 				}
@@ -235,18 +177,8 @@ export class ObjectManager {
 				if (objData.isShattered && target.state === OBJECT_STATE.ACTIVE) {
 					console.debug(`${target.name} (id:${target.id}) shattered.`);
 					this.removeObject(target);
-
-					// Generate debris and effects via DebrisGenerator
-					const debrisData = DebrisGenerator.generateFromShatter(
-						target,
-						UnitConvertUtils.m2pix,
-						() => this.getNextId()
-					);
-
-					if (debrisData.shockwave) {
-						this.addShockwave(debrisData.shockwave.x, debrisData.shockwave.y, debrisData.shockwave.color);
-					}
-					debrisData.debrisList.forEach(debris => this.addObject(debris));
+					// Emit event to DestructionManager
+					EventBus.emit('object:shattered', target);
 				}
 			}
 		});
@@ -256,6 +188,55 @@ export class ObjectManager {
 			{ cmd: 'returnBuffer', buffer: data.objectsData },
 			[data.objectsData]
 		);
+	}
+
+	_applyBaseState(target, objData) {
+		target.x = UnitConvertUtils.m2pix(objData.x);
+		target.y = UnitConvertUtils.m2pix(objData.y);
+		target.vx = UnitConvertUtils.m2pix(objData.vx);
+		target.vy = UnitConvertUtils.m2pix(objData.vy);
+		target.ax = UnitConvertUtils.m2pix(objData.ax);
+		target.ay = UnitConvertUtils.m2pix(objData.ay);
+
+		if (objData.type !== OBJECT_TYPES.ROCKET) {
+			target.mass = UnitConvertUtils.kg2ton(objData.mass);
+		}
+		
+		target.radius = objData.radius;
+		target.inAtmosphere = objData.inAtmosphere;
+		target.isEscaping = objData.isEscaping;
+		target.dominantBodyId = objData.dominantBodyId;
+		target.distToDominantM = objData.distToDominantM;
+	}
+
+	_applyRocketState(target, objData) {
+		target.dryMass = UnitConvertUtils.kg2ton(objData.mass);
+		target.fuelMass = UnitConvertUtils.kg2ton(objData.fuelMass);
+		target.oxidMass = UnitConvertUtils.kg2ton(objData.oxidMass);
+		target.burnTime = objData.burnTime;
+		target.thrustRatio = objData.thrustRatio;
+		target.isHoldDown = objData.isHoldDown;
+		target.isIgnited = objData.isIgnited;
+
+		target.telemetry = {
+			status: objData.tmStatus,
+			qAxialKpa: objData.tmQAxial,
+			qLateralKpa: objData.tmQLateral,
+			structRatio: objData.tmStructRatio,
+			aoaDeg: objData.tmAoaDeg,
+			progradeAngle: objData.tmProgradeAngle,
+			gravityAngle: objData.tmGravityAngle,
+			remDv: objData.tmRemDv,
+			twr: objData.tmTwr,
+			altM: objData.tmAltM,
+			vV: objData.tmVv,
+			vH: objData.tmVh,
+			aV: objData.tmAv,
+			aH: objData.tmAh,
+			currentG: objData.tmCurrentG,
+			flightTime: objData.tmFlightTime,
+		};
+		target.thrustAngle = objData.thrustAngle;
 	}
 
 	cleanupObjects() {
