@@ -2,12 +2,12 @@
 // gravsim_object_manager.js
 
 import {
-	PHYSICS, SIMULATION, DEBRIS, RENDER,
+	PHYSICS, SIMULATION, RENDER,
 	OBJECT_STATE, OBJECT_TYPES,
 	CALC_BUFFER_CONFIG, BUFFER_INDEX
 } from './gravsim_const.js';
 import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.js';
-import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { UnitConvertUtils } from './gravsim_utils.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 import { EventBus } from './gravsim_event_bus.js';
 
@@ -17,56 +17,11 @@ export class ObjectManager {
 		this.workerManager = workerManager;
 		this.objects = [];
 		this.physicsSequence = 0;
-		this.shockwaves = [];
-		
-		// Register shockwave drawing to the renderer
-		EventBus.on('draw:after', this.drawShockwaves.bind(this));
 	}
 
 	destroy() {
 		this.objects.forEach(obj => this.removeObject(obj));
 		this.objects = [];
-		this.shockwaves = [];
-	}
-
-	addShockwave(x, y, color) {
-		this.shockwaves.push({
-			x: x,
-			y: y,
-			color: color,
-			startTime: Date.now(),
-			duration: DEBRIS.SHOCKWAVE_TIME
-		});
-	}
-
-	drawShockwaves(ctx, renderContext) {
-		const now = Date.now();
-		const basis = renderContext.basis;
-		const zoomScale = renderContext.zoomScale;
-		
-		if (!basis) return;
-
-		this.shockwaves = this.shockwaves.filter(eff => {
-			const progress = (now - eff.startTime) / eff.duration;
-
-			if (progress >= 1) { return false; }
-
-			const radius = (progress * DEBRIS.SHOCKWAVE_RADIUS) * zoomScale;
-			const alpha = 1.0 - progress;
-
-			ctx.save();
-			const relX = (eff.x - basis.x) * zoomScale;
-			const relY = (eff.y - basis.y) * zoomScale;
-			
-			ctx.strokeStyle = ColorUtils.hexToRgba(eff.color, alpha);
-			ctx.lineWidth = 2;
-			ctx.beginPath();
-			ctx.arc(relX, relY, radius, 0, Math.PI * 2);
-			ctx.stroke();
-			ctx.restore();
-
-			return true;
-		});
 	}
 
 	getNextId() {
