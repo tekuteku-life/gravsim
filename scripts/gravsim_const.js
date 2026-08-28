@@ -637,3 +637,15 @@ export const TANK_PRESSURE_SIM = {
 	MECO_SPIKE_TIME_SEC: 0.5,
 	DEPLETION_DROP_RATE: 200.0
 };
+
+// Event priority constants
+export const EVENT_PRIORITY = {
+	LOGIC: 10,
+	CAMERA: 20,
+	UI: 30,
+	CLEANUP: 40,
+	
+	DRAW_WORLD_FX: 10,
+	DRAW_OVERLAY: 20,
+	DRAW_HUD: 30
+};

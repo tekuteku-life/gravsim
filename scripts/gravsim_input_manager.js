@@ -2,20 +2,11 @@
 // gravsim_input_manager.js
 
 import { UI } from './gravsim_const.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class InputManager {
 	constructor(canvas) {
 		this.canvas = canvas;
-
-		this.onWheelZoom = null;
-		this.onTouchZoom = null;
-		this.onPan = null;
-
-		this.onDragStart = null;
-		this.onDragMove = null;
-		this.onDragEnd = null;
-		this.onDragCancel = null;
-		this.onResetOffset = null;
 
 		this.isPanning = false;
 		this.hasPanned = false;
@@ -45,9 +36,7 @@ export class InputManager {
 
 		this.canvas.addEventListener('wheel', (e) => {
 			e.preventDefault();
-			if (this.onWheelZoom) {
-				this.onWheelZoom(e.deltaY < 0 ? 1 : -1);
-			}
+			EventBus.emit('input:zoom-wheel', e.deltaY < 0 ? 1 : -1);
 		});
 
 		this.canvas.addEventListener('mousedown', (e) => {
@@ -58,9 +47,7 @@ export class InputManager {
 			} else if (e.button === 0) {
 				if (this._isDeployTabActive()) {
 					this.isDragging = true;
-					if (this.onDragStart) {
-						this.onDragStart(e.clientX, e.clientY);
-					}
+					EventBus.emit('input:drag-start', e.clientX, e.clientY);
 				}
 			}
 		});
@@ -71,15 +58,11 @@ export class InputManager {
 				const dy = e.clientY - this.lastPanPos.y;
 				if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
 					this.hasPanned = true;
+					EventBus.emit('input:pan', dx, dy);
+					this.lastPanPos = { x: e.clientX, y: e.clientY };
 				}
-				if (this.onPan) {
-					this.onPan(dx, dy);
-				}
-				this.lastPanPos = { x: e.clientX, y: e.clientY };
 			} else if (this.isDragging) {
-				if (this.onDragMove) {
-					this.onDragMove(e.clientX, e.clientY);
-				}
+				EventBus.emit('input:drag-move', e.clientX, e.clientY);
 			}
 		});
 
@@ -89,7 +72,7 @@ export class InputManager {
 				if (e.button === 2) {
 					const now = Date.now();
 					if (now - this.lastRightClickTime < UI.DOUBLE_TAP_DURATION) {
-						if (this.onResetOffset) { this.onResetOffset(); }
+						EventBus.emit('input:reset-offset');
 						this.lastRightClickTime = 0;
 					} else {
 						this.lastRightClickTime = now;
@@ -98,9 +81,7 @@ export class InputManager {
 			} else if (e.button === 0) {
 				if (this.isDragging) {
 					this.isDragging = false;
-					if (this.onDragEnd) {
-						this.onDragEnd(e.clientX, e.clientY);
-					}
+					EventBus.emit('input:drag-end', e.clientX, e.clientY);
 				}
 			}
 		});
@@ -109,9 +90,7 @@ export class InputManager {
 			this.isPanning = false;
 			if (this.isDragging) {
 				this.isDragging = false;
-				if (this.onDragCancel) {
-					this.onDragCancel();
-				}
+				EventBus.emit('input:drag-cancel');
 			}
 		});
 
@@ -121,11 +100,11 @@ export class InputManager {
 				// Cancel dragging if two fingers
 				if (this.isDragging) {
 					this.isDragging = false;
-					if (this.onDragCancel) { this.onDragCancel(); }
+					EventBus.emit('input:drag-cancel');
 				}
 				const now = Date.now();
 				if (now - this.lastTwoFingerTapTime < UI.DOUBLE_TAP_DURATION) {
-					if (this.onResetOffset) { this.onResetOffset(); }
+					EventBus.emit('input:reset-offset');
 					this.lastTwoFingerTapTime = 0;
 				} else {
 					this.lastTwoFingerTapTime = now;
@@ -134,9 +113,7 @@ export class InputManager {
 				if (this._isDeployTabActive()) {
 					this.isDragging = true;
 					const touch = e.touches[0];
-					if (this.onDragStart) {
-						this.onDragStart(touch.clientX, touch.clientY);
-					}
+					EventBus.emit('input:drag-start', touch.clientX, touch.clientY);
 				}
 			}
 		}, { passive: false });
@@ -146,7 +123,7 @@ export class InputManager {
 				e.preventDefault();
 				const touch1 = e.touches[0];
 				const touch2 = e.touches[1];
-				
+
 				const dx = touch1.clientX - touch2.clientX;
 				const dy = touch1.clientY - touch2.clientY;
 				const dist = Math.sqrt(dx * dx + dy * dy);
@@ -155,29 +132,24 @@ export class InputManager {
 
 				if (this.lastTouchDist !== null && this.lastTouchCenter !== null) {
 					const delta = dist - this.lastTouchDist;
-					if (this.onTouchZoom) {
-						this.onTouchZoom(delta); 
-					}
+					EventBus.emit('input:zoom-touch', delta);
 
 					const panX = cx - this.lastTouchCenter.x;
 					const panY = cy - this.lastTouchCenter.y;
-					
+
 					if (Math.abs(panX) > 2 || Math.abs(panY) > 2) {
 						this.hasPanned = true;
-					}
-
-					if (this.onPan && (panX !== 0 || panY !== 0)) {
-						this.onPan(panX, panY);
+						if (panX !== 0 || panY !== 0) {
+							EventBus.emit('input:pan', panX, panY);
+						}
 					}
 				}
-				
+
 				this.lastTouchDist = dist;
 				this.lastTouchCenter = { x: cx, y: cy };
 			} else if (e.touches.length === 1 && this.isDragging) {
 				const touch = e.touches[0];
-				if (this.onDragMove) {
-					this.onDragMove(touch.clientX, touch.clientY);
-				}
+				EventBus.emit('input:drag-move', touch.clientX, touch.clientY);
 			}
 		}, { passive: false });
 
@@ -190,9 +162,7 @@ export class InputManager {
 				if (this.isDragging) {
 					this.isDragging = false;
 					const touch = e.changedTouches[0];
-					if (this.onDragEnd) {
-						this.onDragEnd(touch.clientX, touch.clientY);
-					}
+					EventBus.emit('input:drag-end', touch.clientX, touch.clientY);
 				}
 			}
 		});
@@ -202,9 +172,7 @@ export class InputManager {
 			this.lastTouchCenter = null;
 			if (this.isDragging) {
 				this.isDragging = false;
-				if (this.onDragCancel) {
-					this.onDragCancel();
-				}
+				EventBus.emit('input:drag-cancel');
 			}
 		});
 	}

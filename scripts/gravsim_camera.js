@@ -30,6 +30,20 @@ export class Camera {
 
 		// Interpolation factor per second
 		this.lerpFactor = 8.0;
+
+		this._bindEvents();
+	}
+
+	_bindEvents() {
+		EventBus.on('input:pan', (dx, dy) => this.addPan(dx, dy));
+		EventBus.on('input:reset-offset', () => this.setTargetOffset(0, 0));
+
+		EventBus.on('camera:set-tracking-target', (target) => this.setTrackingTarget(target));
+		EventBus.on('camera:set-target-zoom-exp', (exp) => this.setTargetZoomExp(exp));
+		EventBus.on('camera:set-target-offset', (x, y) => this.setTargetOffset(x, y));
+		EventBus.on('camera:set-auto-tracking', (target, host) => this.setAutoTracking(target, host));
+		EventBus.on('camera:stop-auto-tracking', (fallbackHost) => this.stopAutoTracking(fallbackHost));
+		EventBus.on('camera:fit-to-target', (target) => this.fitToTarget(target));
 	}
 
 	setTrackingTarget(newTarget) {
@@ -45,21 +59,21 @@ export class Camera {
 		} else {
 			this.trackingTarget = newTarget;
 		}
-		
+
 		// Reset target offset so the camera smoothly pans to the center of the new target
 		this.targetOffset = { x: 0, y: 0 };
 	}
 
 	addPan(dxPx, dyPx) {
 		const currentZoom = Math.pow(10, this.currentZoomExp);
-		
+
 		// Rotate the pan vector back to world space to align with mouse movement
 		const cosA = Math.cos(this.currentRotation);
 		const sinA = Math.sin(this.currentRotation);
-		
+
 		const wDx = (dxPx * cosA - dyPx * sinA) / currentZoom;
 		const wDy = (dxPx * sinA + dyPx * cosA) / currentZoom;
-		
+
 		this.targetOffset.x -= wDx;
 		this.targetOffset.y -= wDy;
 	}
@@ -89,22 +103,27 @@ export class Camera {
 
 	stopAutoTracking(fallbackHost = null) {
 		this.autoTrackHost = null;
-		
-		if (fallbackHost) {
-			this.setTrackingTarget(fallbackHost);
-			this.setTargetRotation(0);
-			
-			// Calculate zoom to fit host gracefully
-			const hostRadiusPx = UnitConvertUtils.m2pix(fallbackHost.radius);
-			const targetSize = Math.min(window.innerWidth, window.innerHeight) / 2.2;
-			let idealExp = Math.log10(targetSize / hostRadiusPx);
 
-			idealExp = Math.max(this.minZoomExp, Math.min(this.maxZoomExp, idealExp));
-			this.setTargetZoomExp(idealExp);
-			
-			// Sync UI slider during fallback
-			EventBus.emit('camera:zoom-changed', idealExp);
+		if (fallbackHost) {
+			this.fitToTarget(fallbackHost);
 		}
+	}
+
+	fitToTarget(target) {
+		if (!target) { return; }
+		this.setTrackingTarget(target);
+		this.setTargetRotation(0);
+
+		// Calculate zoom to fit host gracefully
+		const radiusPx = UnitConvertUtils.m2pix(target.radius);
+		const targetSize = Math.min(window.innerWidth, window.innerHeight) / 2.2;
+		let idealExp = Math.log10(targetSize / radiusPx);
+
+		idealExp = Math.max(this.minZoomExp, Math.min(this.maxZoomExp, idealExp));
+		this.setTargetZoomExp(idealExp);
+		
+		// Sync UI slider
+		EventBus.emit('camera:zoom-changed', idealExp);
 	}
 
 	_autoTracking() {

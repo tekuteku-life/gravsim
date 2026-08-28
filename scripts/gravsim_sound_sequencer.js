@@ -1,6 +1,7 @@
 
 // gravsim_sound_sequencer.js
 
+import { EVENT_PRIORITY } from './gravsim_const.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 export class SoundSequencer {
@@ -13,17 +14,16 @@ export class SoundSequencer {
 		this.conditionFlags = {};
 
 		this._bindEvents();
-		
+
 		// Register update hook to monitor time for audio triggers
-		EventBus.on('simulation:update', () => this.update());
+		EventBus.onUpdate(() => this.update(), EVENT_PRIORITY.LOGIC);
 	}
 
 	_bindEvents() {
 		// Listen to sequencer events to play corresponding audio based on profile
 		EventBus.on('sequencer-event', (eventName) => {
-			const am = this.universe.AudioManager;
-			if (am && this.audioProfile.events && this.audioProfile.events[eventName]) {
-				am.play(this.audioProfile.events[eventName]);
+			if (this.audioProfile.events && this.audioProfile.events[eventName]) {
+				EventBus.emit('audio:play', this.audioProfile.events[eventName]);
 			}
 		});
 
@@ -32,17 +32,16 @@ export class SoundSequencer {
 			if (this.universe.LaunchSequencer) {
 				// Subtract a tiny fraction to ensure the initial integer second is triggered
 				this.previousMET = -this.universe.LaunchSequencer.tMinusOffset - 0.001;
-			}
 
-			// Load external audio profile
-			if (sequenceData && sequenceData.audioProfile) {
-				this.audioProfile = sequenceData.audioProfile;
-			} else {
-				this.audioProfile = { events: {}, times: {}, conditions: [] };
+				// Load external audio profile
+				if (sequenceData && sequenceData.audioProfile) {
+					this.audioProfile = sequenceData.audioProfile;
+				} else {
+					this.audioProfile = { events: {}, times: {}, conditions: [] };
+				}
+				// Reset once flags
+				this.conditionFlags = {};
 			}
-
-			// Reset once flags
-			this.conditionFlags = {};
 		});
 
 		EventBus.on('sequencer-abort', () => {
@@ -61,9 +60,8 @@ export class SoundSequencer {
 
 		if (this.previousMET !== null) {
 			this._checkTimeTriggers(this.previousMET, currentMET);
+			this._checkConditions(currentMET);
 		}
-
-		this._checkConditions(currentMET);
 
 		this.previousMET = currentMET;
 	}
@@ -87,8 +85,7 @@ export class SoundSequencer {
 	}
 
 	_checkTimeTriggers(prevT, currT) {
-		const am = this.universe.AudioManager;
-		if (!am || !this.audioProfile.times) { return; }
+		if (!this.audioProfile.times) { return; }
 
 		const prevFloor = Math.floor(prevT);
 		const currFloor = Math.floor(currT);
@@ -97,7 +94,7 @@ export class SoundSequencer {
 		for (let t = prevFloor + 1; t <= currFloor; t++) {
 			const timeKey = t.toString();
 			if (this.audioProfile.times[timeKey]) {
-				am.play(this.audioProfile.times[timeKey]);
+				EventBus.emit('audio:play', this.audioProfile.times[timeKey]);
 			}
 		}
 	}
@@ -106,8 +103,7 @@ export class SoundSequencer {
 		// Only check flight conditions after liftoff
 		if (currentMET < 0) { return; }
 
-		const am = this.universe.AudioManager;
-		if (!am || !this.audioProfile.conditions) { return; }
+		if (!this.audioProfile.conditions) { return; }
 
 		const targetId = this.universe.TelemetryPanel ? this.universe.TelemetryPanel.targetId : null;
 		if (targetId === null) { return; }
@@ -146,7 +142,7 @@ export class SoundSequencer {
 
 			// Fire audio if matched
 			if (isMatched) {
-				am.play(cond.audio);
+				EventBus.emit('audio:play', cond.audio);
 				if (cond.once) {
 					this.conditionFlags[cond.id] = true;
 				}

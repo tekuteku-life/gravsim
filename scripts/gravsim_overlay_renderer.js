@@ -1,17 +1,25 @@
 
 // gravsim_overlay_renderer.js
 
-import { PHYSICS, RENDER } from './gravsim_const.js';
+import { PHYSICS, RENDER, EVENT_PRIORITY } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class OverlayRenderer {
 	constructor(universe) {
 		this.universe = universe;
 		this.showLabels = false;
 		this.showDebugOverlay = false;
+
+		EventBus.onDrawAfter((ctx, rc) => this.drawAfter(ctx, rc), EVENT_PRIORITY.DRAW_OVERLAY);
+		EventBus.onDrawOverlay((ctx, rc) => this.drawOverlay(ctx, rc), EVENT_PRIORITY.DRAW_HUD);
+		EventBus.on('render:set-labels-visible', (visible) => { this.showLabels = visible; });
+		EventBus.on('render:set-debug-visible', (visible) => { this.showDebugOverlay = visible; });
 	}
 
 	drawAfter(ctx, renderContext) {
+		if (renderContext.name !== 'main') { return; }
+
 		if (this.showLabels) {
 			this._drawLabels(ctx, renderContext);
 		}
@@ -21,6 +29,8 @@ export class OverlayRenderer {
 	}
 
 	drawOverlay(ctx, renderContext) {
+		if (renderContext.name !== 'main') { return; }
+
 		this._drawScaleBar(ctx, renderContext);
 	}
 
@@ -181,7 +191,7 @@ export class OverlayRenderer {
 		ctx.lineTo(rightX, bottomY); // Bar
 		ctx.lineTo(rightX, bottomY - RENDER.SCALE_BAR.VERTICAL_LINE_WIDTH); // Right-side vertical line
 		ctx.stroke();
-		
+
 		ctx.restore();
 	}
 }

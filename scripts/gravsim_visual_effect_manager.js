@@ -1,7 +1,7 @@
 
 // gravsim_visual_effect_manager.js
 
-import { DEBRIS, ROCKET_LAUNCHER_CONFIG } from './gravsim_const.js';
+import { DEBRIS, ROCKET_LAUNCHER_CONFIG, EVENT_PRIORITY } from './gravsim_const.js';
 import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { PadEffectRenderer } from './gravsim_pad_effect.js';
 import { EventBus } from './gravsim_event_bus.js';
@@ -59,22 +59,24 @@ export class VisualEffectManager {
 		});
 
 		// --- Update and Draw Hooks ---
-		EventBus.on('simulation:update', (dt, scaledDt) => this.update(scaledDt));
+		EventBus.onUpdate((dt, scaledDt) => this.update(scaledDt), EVENT_PRIORITY.LOGIC);
 
-		EventBus.on('draw:before', (ctx, rc) => {
+		EventBus.onDrawBefore((ctx, rc) => {
+			if (rc.name !== 'main') { return; }
 			if (this.padEffect.isActive) {
 				const context = this._buildPadContext(rc);
 				if (context) { this.padEffect.drawBackground(ctx, rc, context); }
 			}
-		});
+		}, EVENT_PRIORITY.DRAW_WORLD_FX);
 
-		EventBus.on('draw:after', (ctx, rc) => {
+		EventBus.onDrawAfter((ctx, rc) => {
+			if (rc.name !== 'main') { return; }
 			if (this.padEffect.isActive) {
 				const context = this._buildPadContext(rc);
 				if (context) { this.padEffect.drawForeground(ctx, rc, context); }
 			}
 			this.drawShockwaves(ctx, rc);
-		});
+		}, EVENT_PRIORITY.DRAW_WORLD_FX);
 	}
 
 	update(dt) {

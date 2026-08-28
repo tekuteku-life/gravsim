@@ -5,15 +5,17 @@ import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
  * Renderer Class
-*******************************************************************/
+ *******************************************************************/
 export class Renderer {
-	constructor(canvas) {
+	constructor(canvas, name = 'main') {
 		this.canvas = canvas;
 		this.ctx = canvas.getContext('2d');
 		this.zoomScale = 1;
 		this.rotation = 0;
+		this.name = name;
 
 		this.renderContext = {
+			name: this.name,
 			ctx: this.ctx,
 			basis: null,
 			zoomScale: 1,
@@ -61,19 +63,19 @@ export class Renderer {
 		this.renderContext.centerObjectId = renderState.basis ? renderState.basis.id : null;
 		this.renderContext.rotation = renderState.rotation;
 		this.renderContext.objectsMap = objectsMap;
-		
+
 		// 1. Before objects
-		EventBus.emit('draw:before', this.ctx, this.renderContext);
+		EventBus.emitDrawBefore(this.ctx, this.renderContext);
 
 		// 2. Draw main objects
 		objects.forEach(obj => obj.draw(this.renderContext));
 
 		// 3. After objects (effects, labels, etc. before restoring transform)
-		EventBus.emit('draw:after', this.ctx, this.renderContext);
+		EventBus.emitDrawAfter(this.ctx, this.renderContext);
 
 		this.ctx.restore();
 
 		// 4. Screen-space overlays (UI, Scalebar)
-		EventBus.emit('draw:overlay', this.ctx, this.renderContext);
+		EventBus.emitDrawOverlay(this.ctx, this.renderContext);
 	}
 }

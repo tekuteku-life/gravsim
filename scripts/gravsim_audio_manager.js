@@ -2,6 +2,7 @@
 // gravsim_audio_manager.js
 
 import { SOUND } from './gravsim_const.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class AudioManager {
 	constructor(universe) {
@@ -10,19 +11,25 @@ export class AudioManager {
 		this.buffers = new Map();
 		this.isLoaded = false;
 		this.currentDir = null;
+
+		EventBus.on('audio:play', (key) => this.play(key));
+		EventBus.on('audio:load', (dirName) => this.load(dirName));
+		EventBus.on('audio:unload', () => { this.isLoaded = false; });
 	}
 
 	_initContext() {
 		if (!this.context) {
 			this.context = new (window.AudioContext || window.webkitAudioContext)();
-		}
-		// AudioContext must be resumed if it was suspended (browser autoplay policy)
-		if (this.context.state === 'suspended') {
-			this.context.resume();
+			// AudioContext must be resumed if it was suspended (browser autoplay policy)
+			if (this.context.state === 'suspended') {
+				this.context.resume();
+			}
 		}
 	}
 
 	async load(dirName) {
+		EventBus.emit('ui:set-loading-overlay', true);
+
 		this._initContext();
 		this.currentDir = `${SOUND.BASEDIR}/${dirName}`;
 		this.buffers.clear();
@@ -48,6 +55,8 @@ export class AudioManager {
 			console.info(`[AudioManager] Audio loaded from ${this.currentDir} (${manifest.length} files)`);
 		} catch (error) {
 			console.error("[AudioManager] Failed to load audio", error);
+		} finally {
+			EventBus.emit('ui:set-loading-overlay', false);
 		}
 	}
 

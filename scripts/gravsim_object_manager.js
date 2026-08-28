@@ -17,6 +17,10 @@ export class ObjectManager {
 		this.workerManager = workerManager;
 		this.objects = [];
 		this.physicsSequence = 0;
+
+		EventBus.on('rocket:update-state', (id, isIgnited, isHoldDown) => {
+			this.updateRocketState(id, isIgnited, isHoldDown);
+		});
 	}
 
 	destroy() {

@@ -16,6 +16,13 @@ export class SystemTab {
 			this.updateCenterOptions();
 		});
 
+		// Subscribe to camera tracking changes to update dropdown UI
+		EventBus.on('camera:set-tracking-target', (targetObj) => {
+			if (targetObj) {
+				this.ui.centerSelect.value = targetObj.id;
+			}
+		});
+
 		this.updateTimeScaleIndicator(this.getTimeScale());
 
 		// Setup initial zoom indicator based on camera target
@@ -39,6 +46,7 @@ export class SystemTab {
 			showDebugChk: document.getElementById('show-debug-chk'),
 			
 			audioVoiceSelect: document.getElementById('audio-voice-select'),
+			audioLoadingOverlay: document.getElementById('audio-loading-overlay'),
 			
 			clearDebrisChk: document.getElementById('clear-debris-chk'),
 			clearRocketChk: document.getElementById('clear-rocket-chk'),
@@ -49,11 +57,15 @@ export class SystemTab {
 	}
 
 	_bindEvents() {
-		this.ui.timeScale.addEventListener('input', () => this.updateTimeScaleIndicator(this.getTimeScale()));
+		this.ui.timeScale.addEventListener('input', () => {
+			const val = this.getTimeScale();
+			EventBus.emit('simulation:set-time-scale', val);
+			this.updateTimeScaleIndicator(val);
+		});
 
 		this.ui.zoomScale.addEventListener('input', (e) => {
 			const exp = parseFloat(e.target.value);
-			this.universe.camera.setTargetZoomExp(exp);
+			EventBus.emit('camera:set-target-zoom-exp', exp);
 			this.updateZoomScaleIndicator(Math.pow(10, exp));
 		});
 
@@ -62,11 +74,11 @@ export class SystemTab {
 		// Simulation Control
 		this.ui.pauseResumeBtn.addEventListener('click', () => {
 			if (!this.universe.isPaused) {
-				this.universe.pauseSimulation();
+				EventBus.emit('simulation:pause');
 				DOMUtils.setText(this.ui.pauseResumeBtn, "Resume");
 				this.ui.pauseResumeBtn.style.color = UI.BUTTON_COLOR.ACTIVE;
 			} else {
-				this.universe.resumeSimulation();
+				EventBus.emit('simulation:resume');
 				DOMUtils.setText(this.ui.pauseResumeBtn, "Pause");
 				this.ui.pauseResumeBtn.style.color = UI.BUTTON_COLOR.DEFAULT;
 			}
@@ -74,7 +86,7 @@ export class SystemTab {
 
 		this.ui.resetAllBtn.addEventListener('click', () => {
 			if (confirm("Are you sure you want to reset the universe?")) {
-				this.universe.reset();
+				EventBus.emit('simulation:reset');
 			}
 		});
 
@@ -86,51 +98,69 @@ export class SystemTab {
 		});
 		
 		this.ui.showLabelsChk.addEventListener('change', (e) => {
-			this.universe.OverlayRenderer.showLabels = e.target.checked;
+			EventBus.emit('render:set-labels-visible', e.target.checked);
 		});
 
 		this.ui.showDebugChk.addEventListener('change', (e) => {
-			this.universe.OverlayRenderer.showDebugOverlay = e.target.checked;
+			EventBus.emit('render:set-debug-visible', e.target.checked);
 		});
 
 		// Bind Audio Selection
-		this.ui.audioVoiceSelect.addEventListener('change', async (e) => {
+		this.ui.audioVoiceSelect.addEventListener('change', (e) => {
 			const val = e.target.value;
 			if (val === 'none') {
-				this.universe.AudioManager.isLoaded = false;
+				EventBus.emit('audio:unload');
 			} else {
-				const loadingOverlay = document.getElementById('audio-loading-overlay');
-				if (loadingOverlay) { loadingOverlay.style.display = 'flex'; }
-
-				await this.universe.AudioManager.load(val);
-
-				if (loadingOverlay) { loadingOverlay.style.display = 'none'; }
+				EventBus.emit('audio:load', val);
 			}
 		});
 
 		// Clear Objects
 		this.ui.clearSelectedBtn.addEventListener('click', () => {
-			this.universe.clearObjects(
+			EventBus.emit('simulation:clear-objects', 
 				this.ui.clearDebrisChk.checked,
 				this.ui.clearRocketChk.checked,
 				this.ui.clearCelestialChk.checked
 			);
 		});
 
-		// Lock simulation controls during launch sequence
-		EventBus.on('sequencer-start', () => {
-			this.ui.timeScale.disabled = true;
-			this.ui.pauseResumeBtn.disabled = true;
-			this.ui.resetAllBtn.disabled = true;
+		EventBus.on('input:zoom-wheel', (dir) => {
+			let step = this.getZoomStep();
+			step = (dir > 0) ? step : -step;
+			this.setZoomScaleByStep(step);
 		});
 
-		const unlockControls = () => {
-			this.ui.timeScale.disabled = false;
-			this.ui.pauseResumeBtn.disabled = false;
-			this.ui.resetAllBtn.disabled = false;
-		};
-		EventBus.on('sequencer-end', unlockControls);
-		EventBus.on('sequencer-abort', unlockControls);
+		EventBus.on('input:zoom-touch', (delta) => {
+			let step = this.getZoomStep() || 0.1;
+			step = (delta > 0 ? step : -step) * Math.abs(delta) * 0.05;
+			this.setZoomScaleByStep(step);
+		});
+
+		EventBus.on('ui:set-controls-locked', (isLocked) => {
+			this.ui.timeScale.disabled = isLocked;
+			this.ui.pauseResumeBtn.disabled = isLocked;
+			this.ui.resetAllBtn.disabled = isLocked;
+		});
+
+		EventBus.on('ui:set-time-scale', (val) => {
+			this.ui.timeScale.value = val;
+			const timeScaleVal = this.getTimeScale();
+			EventBus.emit('simulation:set-time-scale', timeScaleVal);
+			this.updateTimeScaleIndicator(timeScaleVal);
+		});
+
+		EventBus.on('ui:set-time-scale-min', () => {
+			this.ui.timeScale.value = this.ui.timeScale.min;
+			const val = this.getTimeScale();
+			EventBus.emit('simulation:set-time-scale', val);
+			this.updateTimeScaleIndicator(val);
+		});
+
+		EventBus.on('ui:set-loading-overlay', (isVisible) => {
+			if (this.ui.audioLoadingOverlay) {
+				this.ui.audioLoadingOverlay.style.display = isVisible ? 'flex' : 'none';
+			}
+		});
 
 		// Synchronize UI from external camera zoom changes
 		EventBus.on('camera:zoom-changed', (exp) => {
@@ -146,20 +176,20 @@ export class SystemTab {
 		const targetId = parseInt(e.target.value, 10);
 		const targetObj = this.universe.objects.find(obj => obj.id === targetId);
 		if (targetObj) {
-			this.universe.centerObject = targetObj;
+			EventBus.emit('camera:set-tracking-target', targetObj);
 		}
 	}
 
 	updateCenterOptions() {
-		if (!this.universe.centerObject) { return; }
-
+		const currentCenterId = this.ui.centerSelect.value;
 		this.ui.centerSelect.innerHTML = '';
 		for (const obj of this.universe.objects) {
 			const option = document.createElement('option');
 			option.value = obj.id;
 			option.textContent = `${obj.name} (ID: ${obj.id})`;
 
-			if (obj.id === this.universe.centerObject.id) {
+			// Keep existing selection if possible
+			if (obj.id.toString() === currentCenterId) {
 				option.selected = true;
 			}
 			this.ui.centerSelect.appendChild(option);
@@ -175,7 +205,7 @@ export class SystemTab {
 		if (currentExp > max) { currentExp = max; }
 		else if (currentExp < min) { currentExp = min; }
 
-		this.universe.camera.setTargetZoomExp(currentExp);
+		EventBus.emit('camera:set-target-zoom-exp', currentExp);
 		this.ui.zoomScale.value = currentExp.toFixed(2);
 		this.updateZoomScaleIndicator(Math.pow(10, currentExp));
 	}
@@ -200,7 +230,7 @@ export class SystemTab {
 		}
 
 		DOMUtils.setText(this.ui.timeIndicator, text);
-		this.universe.InfoPanel.updateTimeScale(text);
+		EventBus.emit('simulation:set-time-scale-text', text);
 	}
 
 	updateZoomScaleIndicator(val) {
@@ -218,7 +248,7 @@ export class SystemTab {
 		}
 
 		DOMUtils.setText(this.ui.zoomIndicator, text);
-		this.universe.InfoPanel.updateZoomScale(text);
+		EventBus.emit('camera:set-zoom-text', text);
 	}
 
 	getTimeScale() {
@@ -247,12 +277,13 @@ export class SystemTab {
 
 		if (cpState.timeScaleVal !== undefined) {
 			this.ui.timeScale.value = cpState.timeScaleVal;
-			this.updateTimeScaleIndicator(this.getTimeScale());
+			const val = this.getTimeScale();
+			EventBus.emit('simulation:set-time-scale', val);
+			this.updateTimeScaleIndicator(val);
 		}
 		if (cpState.zoomScaleVal !== undefined) {
 			this.ui.zoomScale.value = cpState.zoomScaleVal;
-			this.universe.camera.setTargetZoomExp(cpState.zoomScaleVal);
-			this.universe.camera.currentZoomExp = cpState.zoomScaleVal; // Apply instantly
+			EventBus.emit('camera:set-target-zoom-exp', cpState.zoomScaleVal);
 			this.updateZoomScaleIndicator(Math.pow(10, cpState.zoomScaleVal));
 		}
 		this.updateCenterOptions();

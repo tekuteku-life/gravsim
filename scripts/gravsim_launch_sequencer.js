@@ -1,12 +1,11 @@
 
 // gravsim_launch_sequencer.js
 
-import { PHYSICS, LAUNCH_SEQUENCES } from './gravsim_const.js';
+import { PHYSICS, LAUNCH_SEQUENCES, EVENT_PRIORITY } from './gravsim_const.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 export class LaunchSequencer {
-	constructor(universe) {
-		this.universe = universe;
+	constructor() {
 		this.isActive = false;
 		this.isAutoSequence = false;
 		this.sequence = [];
@@ -16,7 +15,7 @@ export class LaunchSequencer {
 		this.eventIndex = 0;
 
 		// Register update hook
-		EventBus.on('simulation:update', (dt, scaledDt) => this.update(scaledDt));
+		EventBus.onUpdate((dt, scaledDt) => this.update(scaledDt), EVENT_PRIORITY.LOGIC);
 	}
 
 	start(sequenceData, rocketId) {
@@ -28,16 +27,10 @@ export class LaunchSequencer {
 		this.eventIndex = 0;
 		this.timer = 0; 
 
-		const sysTab = this.universe.ControlPanel.systemTab;
-		if (sysTab && sysTab.ui.timeScale) {
-			const realTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
-			sysTab.ui.timeScale.value = realTimeScaleVal;
-			const realTimeScale = Math.pow(10, realTimeScaleVal);
-			sysTab.updateTimeScaleIndicator(realTimeScale);
-			this.universe.timeScale = realTimeScale;
-			this.universe.CalcWorkerManager.setTimeScale(realTimeScale);
-		}
-		
+		// Force time scale to real-time via EventBus
+		const realTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
+		EventBus.emit('ui:set-time-scale', realTimeScaleVal);
+
 		EventBus.emit('sequencer-start', sequenceData);
 	}
 
@@ -93,12 +86,12 @@ export class LaunchSequencer {
 
 		// Pass ALL commands to the worker for pressure simulation etc.
 		if (this.rocketId !== null && cmd) {
-			this.universe.CalcWorkerManager.sendRocketCommand(this.rocketId, cmd);
+			EventBus.emit('worker:send-rocket-command', this.rocketId, cmd);
 		}
 
 		switch (cmd) {
 			case 'START_COUNTDOWN':
-				this.universe.ControlPanel.rocketTab.setRolloutState(true);
+				EventBus.emit('ui:set-rollout-state', true);
 				break;
 			case 'AUTO_SEQUENCE_START':
 				this.isAutoSequence = true;
@@ -106,12 +99,12 @@ export class LaunchSequencer {
 				break;
 			case 'IGNITE_ENGINE':
 				// Ignite but keep holding down
-				this.universe.ObjectManager.updateRocketState(this.rocketId, true, true);
+				EventBus.emit('rocket:update-state', this.rocketId, true, true);
 				break;
 			case 'RELEASE_HOLD_DOWN':
 				// Release vehicle
-				this.universe.ObjectManager.updateRocketState(this.rocketId, true, false);
-				this.universe.ControlPanel.rocketTab.setRolloutState(false);
+				EventBus.emit('rocket:update-state', this.rocketId, true, false);
+				EventBus.emit('ui:set-rollout-state', false);
 				this.isAutoSequence = false;
 				EventBus.emit('liftoff');
 				break;

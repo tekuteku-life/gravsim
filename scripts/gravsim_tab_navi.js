@@ -9,6 +9,8 @@ export class NaviTab {
 	constructor(universe) {
 		this.universe = universe;
 		this.naviTargetId = undefined;
+		this.currentCameraTargetId = undefined;
+
 		this._initElements();
 		this._bindEvents();
 
@@ -22,6 +24,11 @@ export class NaviTab {
 		// Subscribe to object list changes
 		EventBus.on('object-list-changed', () => {
 			this.updateTargetOptions();
+		});
+
+		// Track camera target changes
+		EventBus.on('camera:set-tracking-target', (target) => {
+			this.currentCameraTargetId = target ? target.id : undefined;
 		});
 	}
 
@@ -59,7 +66,7 @@ export class NaviTab {
 			const option = document.createElement('option');
 			option.value = obj.id;
 			option.textContent = `${obj.name.substring(0, 10)} (ID:${obj.id})`;
-			if (obj.id === currentId || (currentId === undefined && this.universe.centerObject && obj.id === this.universe.centerObject.id)) {
+			if (obj.id === currentId || (currentId === undefined && obj.id === this.currentCameraTargetId)) {
 				option.selected = true;
 				this.naviTargetId = obj.id;
 			}
@@ -70,9 +77,12 @@ export class NaviTab {
 	_updateNaviStats() {
 		let target = this.universe.objects.find(o => o.id === this.naviTargetId);
 		if (!target) {
-			target = this.universe.centerObject;
-			if(target) { this.naviTargetId = target.id; }
-			else { return; }
+			target = this.universe.objects.find(o => o.id === this.currentCameraTargetId);
+			if(target) {
+				this.naviTargetId = target.id;
+			} else {
+				return;
+			}
 		}
 
 		DOMUtils.setText(this.ui.nvMass, target.mass.toExponential(2) + " t");
@@ -89,14 +99,15 @@ export class NaviTab {
 		if (target.dominantBodyId !== undefined && target.dominantBodyId !== -1) {
 			refBody = this.universe.objects.find(o => o.id === target.dominantBodyId);
 			distToRefM = target.distToDominantM || 0;
-		}
 
-		if (refBody) {
-			DOMUtils.setText(this.ui.nvRefBody, refBody.name);
-			DOMUtils.setText(this.ui.nvAlt, UnitConvertUtils.m2km(distToRefM - refBody.radius).toLocaleString('en-US', {maximumFractionDigits:0}) + " km");
-			const vx = UnitConvertUtils.pix2m(target.vx - refBody.vx);
-			const vy = UnitConvertUtils.pix2m(target.vy - refBody.vy);
-			DOMUtils.setText(this.ui.nvVel, UnitConvertUtils.m2km(Math.sqrt(vx*vx + vy*vy)).toFixed(2) + " km/s");
+			if (refBody) {
+				DOMUtils.setText(this.ui.nvRefBody, refBody.name);
+				DOMUtils.setText(this.ui.nvAlt, UnitConvertUtils.m2km(distToRefM - refBody.radius).toLocaleString('en-US', {maximumFractionDigits:0}) + " km");
+
+				const vx = UnitConvertUtils.pix2m(target.vx - refBody.vx);
+				const vy = UnitConvertUtils.pix2m(target.vy - refBody.vy);
+				DOMUtils.setText(this.ui.nvVel, UnitConvertUtils.m2km(Math.sqrt(vx*vx + vy*vy)).toFixed(2) + " km/s");
+			}
 		} else {
 			DOMUtils.setText(this.ui.nvRefBody, "NONE");
 			DOMUtils.setText(this.ui.nvAlt, "--- km");

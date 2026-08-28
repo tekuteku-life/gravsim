@@ -6,9 +6,8 @@ import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 export class RocketTab {
-	constructor(universe, systemTab) {
+	constructor(universe) {
 		this.universe = universe;
-		this.systemTab = systemTab;
 		this.previousTimeScaleVal = null;
 		this.previousZoomScaleVal = null;
 		this.previousCameraTarget = null;
@@ -114,7 +113,7 @@ export class RocketTab {
 
 		const triggerIgnite = (sequenceType) => {
 			// Resume simulation to ensure physics worker runs during sequence
-			this.universe.resumeSimulation();
+			EventBus.emit('simulation:resume');
 
 			// Change system setting
 			this.previousCameraTarget = null;
@@ -133,18 +132,14 @@ export class RocketTab {
 		this.ui.rlIgniteFullBtn.addEventListener('click', () => triggerIgnite('FULL_COUNTDOWN'));
 		this.ui.rlAbortBtn.addEventListener('click', () => this.universe.RocketLauncher.abortRollout());
 
-		// Disable ignition buttons during launch sequence
-		EventBus.on('sequencer-start', () => {
-			this.ui.rlIgniteQuickBtn.disabled = true;
-			this.ui.rlIgniteFullBtn.disabled = true;
+		EventBus.on('ui:set-controls-locked', (isLocked) => {
+			this.ui.rlIgniteQuickBtn.disabled = isLocked;
+			this.ui.rlIgniteFullBtn.disabled = isLocked;
 		});
 
-		const unlockIgnition = () => {
-			this.ui.rlIgniteQuickBtn.disabled = false;
-			this.ui.rlIgniteFullBtn.disabled = false;
-		};
-		EventBus.on('sequencer-end', unlockIgnition);
-		EventBus.on('sequencer-abort', unlockIgnition);
+		EventBus.on('ui:set-rollout-state', (isRollouted) => {
+			this.setRolloutState(isRollouted);
+		});
 
 		// Helper to bind range inputs to RocketLauncher properties
 		const bindSlider = (sliderId, valId, propName, isFloat = false) => {
@@ -357,34 +352,17 @@ export class RocketTab {
 		const host = this.universe.objects.find(o => o.id === hostId);
 		if (!host) { return; }
 
-		this.universe.camera.setTrackingTarget(host);
-		this.systemTab.updateCenterOptions();
-		this.universe.InfoPanel.updateCamera(host.name);
+		EventBus.emit('camera:set-tracking-target', host);
 
-		this.systemTab.ui.timeScale.value = this.systemTab.ui.timeScale.min;
-		this.systemTab.updateTimeScaleIndicator(this.systemTab.getTimeScale());
-
-		if (this.systemTab.ui.zoomScale) {
-			// Adjust zoom-level which the radius of the host is specific value
-			const realRadiusPx = (host.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
-			const targetSize = Math.min(this.universe.canvas.width, this.universe.canvas.height) / 2.2;
-			let idealExp = Math.log10(targetSize / realRadiusPx);
-
-			const maxZoom = parseFloat(this.systemTab.ui.zoomScale.max);
-			const minZoom = parseFloat(this.systemTab.ui.zoomScale.min);
-			idealExp = Math.max(minZoom, Math.min(maxZoom, idealExp));
-
-			this.systemTab.ui.zoomScale.value = idealExp.toFixed(2);
-			this.universe.camera.setTargetZoomExp(idealExp);
-			this.systemTab.updateZoomScaleIndicator(this.systemTab.getZoomScale());
-		}
+		EventBus.emit('ui:set-time-scale-min');
+		EventBus.emit('camera:fit-to-target', host);
 	}
 
 	open() {
 		this.isOpened = true;
 
 		// Pause simulation while setting up rocket
-		this.universe.pauseSimulation();
+		EventBus.emit('simulation:pause');
 
 		this.universe.RocketLauncher.togglePreview(true);
 
@@ -411,14 +389,14 @@ export class RocketTab {
 		if (!this.isOpened) { return; }
 
 		// Resume simulation when leaving rocket tab
-		this.universe.resumeSimulation();
+		EventBus.emit('simulation:resume');
 
 		this.universe.RocketLauncher.togglePreview(false);
 
 		// Stop auto tracking gracefully
 		if (this.universe.camera.autoTrackHost) {
 			const host = this.universe.objects.find(o => o.id === this.universe.RocketLauncher.hostId);
-			this.universe.camera.stopAutoTracking(host);
+			EventBus.emit('camera:stop-auto-tracking', host);
 		} else if (this.universe.RocketLauncher.rolloutedRocketId !== null || this.universe.LaunchSequencer.isActive) {
 			this.previousCameraTarget = null;
 			this.previousTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
@@ -434,11 +412,12 @@ export class RocketTab {
 	}
 
 	saveTimeScale() {
-		this.previousTimeScaleVal = this.systemTab.ui.timeScale.value;
+		// Read directly from ControlPanel/Universe instead of SystemTab UI DOM
+		this.previousTimeScaleVal = Math.log10(this.universe.timeScale);
 	}
 
 	saveZoomScale() {
-		this.previousZoomScaleVal = this.systemTab.ui.zoomScale.value;
+		this.previousZoomScaleVal = this.universe.camera.targetZoomExp;
 	}
 
 	saveCameraTarget() {
@@ -450,29 +429,24 @@ export class RocketTab {
 
 	restoreTimeScale() {
 		if (this.previousTimeScaleVal !== null) {
-			this.systemTab.ui.timeScale.value = this.previousTimeScaleVal;
-			this.systemTab.updateTimeScaleIndicator(this.systemTab.getTimeScale());
+			EventBus.emit('ui:set-time-scale', this.previousTimeScaleVal);
 			this.previousTimeScaleVal = null;
 		}
 	}
 
 	restoreZoomScale() {
 		if (this.previousZoomScaleVal !== null) {
-			this.systemTab.ui.zoomScale.value = this.previousZoomScaleVal;
-			this.universe.camera.setTargetZoomExp(parseFloat(this.previousZoomScaleVal));
-			this.systemTab.updateZoomScaleIndicator(this.systemTab.getZoomScale());
+			EventBus.emit('camera:set-target-zoom-exp', parseFloat(this.previousZoomScaleVal));
 			this.previousZoomScaleVal = null;
 		}
 	}
 
 	restoreCameraTarget() {
 		if (this.previousCameraTarget !== null) {
-			this.universe.camera.setTrackingTarget(this.previousCameraTarget);
+			EventBus.emit('camera:set-tracking-target', this.previousCameraTarget);
 			if (this.previousCameraOffset) {
-				this.universe.camera.setTargetOffset(this.previousCameraOffset.x, this.previousCameraOffset.y);
+				EventBus.emit('camera:set-target-offset', this.previousCameraOffset.x, this.previousCameraOffset.y);
 			}
-			this.universe.ControlPanel.systemTab.updateCenterOptions();
-			this.universe.InfoPanel.updateCamera(this.previousCameraTarget.name);
 
 			this.previousCameraTarget = null;
 			this.previousCameraOffset = null;

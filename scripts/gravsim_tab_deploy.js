@@ -3,6 +3,7 @@
 
 import { DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 import { DOMUtils } from './gravsim_utils.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 export class DeployTab {
 	constructor(universe) {
@@ -31,23 +32,18 @@ export class DeployTab {
 	}
 
 	_bindEvents() {
-		// Orbital deploy buttons
+		// Orbital deploy buttons via EventBus
 		for (const [btnId, objName] of Object.entries(this.deployButtons)) {
 			const btn = document.getElementById(btnId);
 			if (btn) {
-				btn.addEventListener('click', () => this.universe.ObjectPlacer.placeAtOrbitAroundSun(objName));
+				btn.addEventListener('click', () => EventBus.emit('object:deploy-orbit-sun', objName));
 			}
 		}
 		this.ui.moonBtn.addEventListener('click', () => this._deployMoon());
 	}
 
 	_deployMoon() {
-		try {
-			this.universe.ObjectPlacer.placeAtOrbitAroundHost("Earth", "Moon");
-		} catch (err) {
-			this.universe.ObjectPlacer.placeAtOrbitAroundSun("Earth");
-			this.universe.ObjectPlacer.placeAtOrbitAroundHost("Earth", "Moon");
-		}
+		EventBus.emit('object:deploy-orbit-host', "Earth", "Moon");
 	}
 
 	generateMassSelect() {

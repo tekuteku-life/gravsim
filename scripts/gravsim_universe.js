@@ -2,7 +2,7 @@
 // gravsim_universe.js
 
 import {
-	PHYSICS, SIMULATION, OBJECT_STATE,
+	EVENT_PRIORITY, PHYSICS, SIMULATION, OBJECT_STATE,
 	OBJECT_TYPES, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
 import { Camera } from './gravsim_camera.js';
@@ -84,7 +84,7 @@ export class Universe {
 
 		// Initialize Modules
 		this.camera = new Camera();
-		this.Renderer = new Renderer(_canvas);
+		this.Renderer = new Renderer(_canvas, 'main');
 		this.CalcWorkerManager = new CalcWorkerManager((data) => this.updateObjectParams(data));
 		this.InputManager = new InputManager(this.canvas);
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
@@ -92,25 +92,36 @@ export class Universe {
 		this.VisualEffectManager = new VisualEffectManager(this);
 		
 		this.OverlayRenderer = new OverlayRenderer(this);
-		EventBus.on('draw:overlay', (ctx, rc) => this.OverlayRenderer.drawOverlay(ctx, rc));
-		EventBus.on('draw:after', (ctx, rc) => this.OverlayRenderer.drawAfter(ctx, rc));
 
 		this.InfoPanel = new InfoPanel(this);
 		this.TelemetryPanel = new TelemetryPanel(this);
 		this.RocketLauncher = new RocketLauncher(this);
 		this.ControlPanel = new ControlPanel(this);
 		this.ObjectPlacer = new ObjectPlacer(this);
-		this.LaunchSequencer = new LaunchSequencer(this);
+		this.LaunchSequencer = new LaunchSequencer();
 		this.SaveManager = new SaveManager(this);
 		this.AudioManager = new AudioManager(this);
 		this.SoundSequencer = new SoundSequencer(this);
 
 		this.timeScale = this.ControlPanel.getTimeScale();
+
+		// Handle Simulation global commands
+		EventBus.on('simulation:pause', () => this.pauseSimulation());
+		EventBus.on('simulation:resume', () => this.resumeSimulation());
+		EventBus.on('simulation:reset', () => this.reset());
+		EventBus.on('simulation:clear-objects', (clearD, clearR, clearC) => this.clearObjects(clearD, clearR, clearC));
+		EventBus.on('simulation:set-time-scale', (val) => { this.timeScale = val; });
+
+		// Hook for worker command
+		EventBus.on('worker:send-rocket-command', (id, cmd) => {
+			this.CalcWorkerManager.sendRocketCommand(id, cmd);
+		});
 		
 		// Hook for Camera interpolation
-		EventBus.on('simulation:update', (dt, scaledDt) => {
+		EventBus.onUpdate((dt, scaledDt) => {
 			this.camera.update(dt / 1000); // dt is in ms
-
+			
+			// Fallback ensureCenterObject logic (if target dies)
 			const currentTarget = this.camera.trackingTarget;
 			if (currentTarget && currentTarget.state !== OBJECT_STATE.ACTIVE) {
 				const oldCenter = currentTarget;
@@ -129,24 +140,22 @@ export class Universe {
 				}
 
 				if (nextCenter) {
-					this.camera.setTrackingTarget(nextCenter);
-					this.ControlPanel.systemTab.updateCenterOptions();
-					this.InfoPanel.updateCamera(nextCenter.name);
+					EventBus.emit('camera:set-tracking-target', nextCenter);
 				}
 			}
-		});
+		}, EVENT_PRIORITY.CAMERA);
 
 		// Hook for rocket flight time update
-		EventBus.on('simulation:update', (dt, scaledDt) => {
+		EventBus.onUpdate((dt, scaledDt) => {
 			this.objects.forEach(obj => {
 				if (obj.type === OBJECT_TYPES.ROCKET && obj.state === OBJECT_STATE.ACTIVE) {
 					obj.flightTime += scaledDt;
 				}
 			});
-		});
+		}, EVENT_PRIORITY.LOGIC);
 
 		// Hook for celestial body rotation update
-		EventBus.on('simulation:update', (dt, scaledDt) => {
+		EventBus.onUpdate((dt, scaledDt) => {
 			this.objects.forEach(obj => {
 				if (obj.type === OBJECT_TYPES.CELESTIAL && obj.state === OBJECT_STATE.ACTIVE) {
 					const param = DEFAULT_OBJECT_PARAMS[obj.name];
@@ -156,13 +165,13 @@ export class Universe {
 					}
 				}
 			});
-		});
+		}, EVENT_PRIORITY.LOGIC);
 
 		// Hook for UI Updates
-		EventBus.on('simulation:update', () => this.updateUI(Date.now()));
+		EventBus.onUpdate(() => this.updateUI(Date.now()), EVENT_PRIORITY.UI);
 
 		// Hook for Object Cleanup
-		EventBus.on('simulation:update', () => this.ObjectManager.cleanupObjects());
+		EventBus.onUpdate(() => this.ObjectManager.cleanupObjects(), EVENT_PRIORITY.CLEANUP);
 
 		// Hook for Core Application
 		EventBus.on('app:update', (dt) => this.update(dt));
@@ -178,11 +187,6 @@ export class Universe {
 	
 	// Proxy for backward compatibility
 	get centerObject() { return this.camera.trackingTarget; }
-	set centerObject(obj) {
-		this.camera.setTrackingTarget(obj);
-		this.ControlPanel.systemTab.updateCenterOptions();
-		this.InfoPanel.updateCamera(obj ? obj.name : 'None');
-	}
 	get zoomScale() { return Math.pow(10, this.camera.currentZoomExp); }
 	
 	// ------------------------------------------
@@ -205,7 +209,8 @@ export class Universe {
 		const centerX = this.canvas.width / 2;
 		const centerY = this.canvas.height / 2;
 		this.ObjectPlacer.placeObject('Sun', centerX, centerY, 0, 0);
-		this.centerObject = this.objects[0];
+
+		EventBus.emit('camera:set-tracking-target', this.objects[0]);
 	}
 
 	destroy() {
@@ -260,7 +265,6 @@ export class Universe {
 
 	update(dt) {
 		// Time Management
-		this.timeScale = this.ControlPanel.getTimeScale();
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
 		let scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
 
@@ -270,30 +274,13 @@ export class Universe {
 		}
 
 		// Process decoupled update hooks (Camera, Modules, Flight time, UI, Cleanup)
-		EventBus.emit('simulation:update', dt, scaledDt);
+		EventBus.emitUpdate(dt, scaledDt);
 	}
 
 	draw() {
 		const renderState = this.camera.getRenderState();
-		
+
 		this.Renderer.draw(this.objects, renderState, this.trailLengthAU);
-
-		this.ctx = this.canvas.getContext('2d');
-		this.ctx.save();
-		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
-
-		// Apply rotation FIRST, then pan offset
-		if (renderState.rotation !== 0) {
-			this.ctx.rotate(renderState.rotation);
-		}
-		this.ctx.translate(-renderState.cameraOffset.x * renderState.zoomScale, -renderState.cameraOffset.y * renderState.zoomScale);
-
-		this.RocketLauncher.drawPreview(this.ctx, renderState.basis, renderState.zoomScale);
-		this.ObjectPlacer.drawPreview(this.ctx, renderState.basis, renderState.zoomScale);
-
-		this.ctx.restore();
-
-		this.TelemetryPanel.draw();
 	}
 
 	getState() {
@@ -315,7 +302,8 @@ export class Universe {
 
 		if (state.centerObjectId !== undefined && state.centerObjectId !== null) {
 			const target = this.objects.find(o => o.id === state.centerObjectId);
-			this.centerObject = target || (this.objects.length > 0 ? this.objects[0] : null);
+			const tgt = target || (this.objects.length > 0 ? this.objects[0] : null);
+			EventBus.emit('camera:set-tracking-target', tgt);
 		}
 
 		if (state.cameraOffset) {

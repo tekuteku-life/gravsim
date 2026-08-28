@@ -14,10 +14,10 @@ export class ControlPanel {
 	constructor(universe) {
 		this.universe = universe;
 		this._initElements();
-		
+
 		this.systemTab = new SystemTab(universe);
 		this.deployTab = new DeployTab(universe);
-		this.rocketTab = new RocketTab(universe, this.systemTab);
+		this.rocketTab = new RocketTab(universe);
 		this.naviTab = new NaviTab(universe);
 
 		this._bindEvents();
@@ -34,27 +34,6 @@ export class ControlPanel {
 	}
 
 	_bindEvents() {
-		// Process by handling events from InputManager
-		this.universe.InputManager.onWheelZoom = (dir) => {
-			let step = this.systemTab.getZoomStep();
-			step = (dir > 0) ? step : -step;
-			this.systemTab.setZoomScaleByStep(step);
-		};
-
-		this.universe.InputManager.onTouchZoom = (delta) => {
-			let step = this.systemTab.getZoomStep() || 0.1;
-			step = (delta > 0 ? step : -step) * Math.abs(delta) * 0.05;
-			this.systemTab.setZoomScaleByStep(step);
-		};
-
-		this.universe.InputManager.onPan = (dx, dy) => {
-			this.universe.camera.addPan(dx, dy);
-		};
-
-		this.universe.InputManager.onResetOffset = () => {
-			this.universe.camera.setTargetOffset(0, 0);
-		};
-
 		// Events for UI
 		if (this.ui.mobileMenuToggle) {
 			this.ui.mobileMenuToggle.addEventListener('click', () => {
@@ -69,24 +48,13 @@ export class ControlPanel {
 			});
 		}
 
-		// Lock tabs during launch sequence
-		EventBus.on('sequencer-start', () => {
+		EventBus.on('ui:set-tabs-locked', (isLocked) => {
 			this.ui.tabBtns.forEach(btn => {
-				btn.disabled = true;
-				btn.style.pointerEvents = 'none';
-				btn.style.opacity = '0.5';
+				btn.disabled = isLocked;
+				btn.style.pointerEvents = isLocked ? 'none' : 'auto';
+				btn.style.opacity = isLocked ? '0.5' : '1.0';
 			});
 		});
-
-		const unlockTabs = () => {
-			this.ui.tabBtns.forEach(btn => {
-				btn.disabled = false;
-				btn.style.pointerEvents = 'auto';
-				btn.style.opacity = '1.0';
-			});
-		};
-		EventBus.on('sequencer-end', unlockTabs);
-		EventBus.on('sequencer-abort', unlockTabs);
 	}
 
 	_tabBtnClick(e) {
@@ -108,16 +76,8 @@ export class ControlPanel {
 		}
 	}
 
-	updateCenterOptions() {
-		this.systemTab.updateCenterOptions();
-	}
-
 	getTimeScale() {
 		return this.systemTab.getTimeScale();
-	}
-
-	getZoomScale() {
-		return this.systemTab.getZoomScale();
 	}
 
 	getState() {

@@ -1,23 +1,23 @@
 
 // gravsim_object_placer.js
 
-import { PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS, RENDER } from './gravsim_const.js';
+import { PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS, RENDER, EVENT_PRIORITY } from './gravsim_const.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
 import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
+import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
  * ObjectPlacer class that manages the placement of objects in the universe.
-*******************************************************************/
+ *******************************************************************/
 export class ObjectPlacer {
 	constructor(universe) {
 		this.universe = universe;
-
 		this.isSlingshotting = false;
 
 		// Relative position to the center object
 		this.startRelX = null;
 		this.startRelY = null;
-		
+
 		// Store screen coordinates for UI dragging calculation
 		this.startScreenX = null;
 		this.startScreenY = null;
@@ -25,25 +25,42 @@ export class ObjectPlacer {
 		this.screenCursorX = 0;
 		this.screenCursorY = 0;
 
-		// Register input events
-		this.universe.InputManager.onDragStart = this.setReadyForLaunch.bind(this);
-		this.universe.InputManager.onDragMove = this.updateDrag.bind(this);
-		this.universe.InputManager.onDragEnd = this.goLaunch.bind(this);
-		this.universe.InputManager.onDragCancel = () => {
-			this.universe.resumeSimulation();
+		// Bind event handlers
+		this._onDragStart = this.setReadyForLaunch.bind(this);
+		this._onDragMove = this.updateDrag.bind(this);
+		this._onDragEnd = this.goLaunch.bind(this);
+		this._onDragCancel = () => {
+			EventBus.emit('simulation:resume');
 			this.isSlingshotting = false;
 			this.startRelX = null;
 			this.startRelY = null;
 			this.startScreenX = null;
 			this.startScreenY = null;
 		};
+
+		// Register input events via EventBus
+		EventBus.on('input:drag-start', this._onDragStart);
+		EventBus.on('input:drag-move', this._onDragMove);
+		EventBus.on('input:drag-end', this._onDragEnd);
+		EventBus.on('input:drag-cancel', this._onDragCancel);
+
+		// Commands from DeployTab
+		EventBus.on('object:deploy-orbit-sun', (objName) => this.placeAtOrbitAroundSun(objName));
+		EventBus.on('object:deploy-orbit-host', (hostName, objName) => this.placeAtOrbitAroundHost(hostName, objName));
+
+		// Hook into the main draw pipeline
+		EventBus.onDrawAfter((ctx, rc) => {
+			if (rc.name === 'main') {
+				this.drawPreview(ctx, rc.basis, rc.zoomScale);
+			}
+		}, EVENT_PRIORITY.DRAW_WORLD_FX);
 	}
 
 	destroy() {
-		this.universe.InputManager.onDragStart = null;
-		this.universe.InputManager.onDragMove = null;
-		this.universe.InputManager.onDragEnd = null;
-		this.universe.InputManager.onDragCancel = null;
+		EventBus.off('input:drag-start', this._onDragStart);
+		EventBus.off('input:drag-move', this._onDragMove);
+		EventBus.off('input:drag-end', this._onDragEnd);
+		EventBus.off('input:drag-cancel', this._onDragCancel);
 	}
 
 	placeObject(objName, x, y, vx = 0, vy = 0, options = {}) {
@@ -231,7 +248,7 @@ export class ObjectPlacer {
 		}
 
 		// Pause simulation during slingshot dragging
-		this.universe.pauseSimulation();
+		EventBus.emit('simulation:pause');
 
 		this.isSlingshotting = true;
 		this.screenCursorX = clientX;
@@ -280,7 +297,7 @@ export class ObjectPlacer {
 		this.startScreenY = null;
 
 		// Resume simulation after launching
-		this.universe.resumeSimulation();
+		EventBus.emit('simulation:resume');
 	}
 
 	drawPreview(ctx, centerObject, zoomScale) {

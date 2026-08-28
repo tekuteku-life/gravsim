@@ -1,13 +1,13 @@
 
 // gravsim_info_panel.js
 
-import { PHYSICS, UI } from './gravsim_const.js';
+import { UI, EVENT_PRIORITY } from './gravsim_const.js';
 import { DOMUtils, FormatUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
  * InfoPanel class that manages the information panel.
-*******************************************************************/
+ *******************************************************************/
 export class InfoPanel {
 	constructor(universe) {
 		this.universe = universe;
@@ -35,15 +35,22 @@ export class InfoPanel {
 			this.updateObjectCount(count);
 		});
 
+		// Subscribe to camera and system UI updates
+		EventBus.on('camera:set-tracking-target', (target) => {
+			this.updateCamera(target ? target.name : 'None');
+		});
+		EventBus.on('simulation:set-time-scale-text', (text) => this.updateTimeScale(text));
+		EventBus.on('camera:set-zoom-text', (text) => this.updateZoomScale(text));
+
 		// Register to the main logic update loop
-		EventBus.on('simulation:update', (dt, scaledDt) => {
+		EventBus.onUpdate((dt, scaledDt) => {
 			if (this.universe.objects.length === 1) {
 				this.resetElapsedTime();
 			} else {
 				this.updateElapsedTime(scaledDt);
 			}
 			this.updateFPS();
-		});
+		}, EVENT_PRIORITY.UI);
 	}
 
 	resetElapsedTime() {

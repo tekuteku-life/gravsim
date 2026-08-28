@@ -3,7 +3,7 @@
 
 import {
 	PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS,
-	ROCKET_FUELS, LAUNCH_SEQUENCES
+	ROCKET_FUELS, LAUNCH_SEQUENCES, EVENT_PRIORITY
 } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
@@ -62,6 +62,25 @@ export class RocketLauncher {
 				if (rocket) rocket.isInternalPower = false;
 			}
 		});
+
+		EventBus.on('sequencer-start', () => {
+			EventBus.emit('ui:set-tabs-locked', true);
+			EventBus.emit('ui:set-controls-locked', true);
+		});
+		
+		const unlockUI = () => {
+			EventBus.emit('ui:set-tabs-locked', false);
+			EventBus.emit('ui:set-controls-locked', false);
+		};
+		EventBus.on('sequencer-end', unlockUI);
+		EventBus.on('sequencer-abort', unlockUI);
+
+		// Hook into the main draw pipeline
+		EventBus.onDrawAfter((ctx, rc) => {
+			if (rc.name === 'main') {
+				this.drawPreview(ctx, rc.basis, rc.zoomScale);
+			}
+		}, EVENT_PRIORITY.DRAW_WORLD_FX);
 	}
 
 	togglePreview(forceState = null) {
@@ -265,7 +284,7 @@ export class RocketLauncher {
 		EventBus.emit('effect:pad-start', newRocket.id, this.hostId);
 
 		// Activate dynamic auto tracking
-		this.universe.camera.setAutoTracking(newRocket, host);
+		EventBus.emit('camera:set-auto-tracking', newRocket, host);
 
 		this.universe.ControlPanel.systemTab.updateCenterOptions();
 		this.universe.InfoPanel.updateCamera(newRocket.name);
@@ -292,7 +311,7 @@ export class RocketLauncher {
 			this.universe.ControlPanel.rocketTab.setRolloutState(false);
 
 			const host = this.universe.objects.find(o => o.id === this.hostId);
-			this.universe.camera.stopAutoTracking(host);
+			EventBus.emit('camera:stop-auto-tracking', host);
 		}
 	}
 

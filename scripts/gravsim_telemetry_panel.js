@@ -1,7 +1,7 @@
 
 // gravsim_telemetry_panel.js
 
-import { PHYSICS, UI, OBJECT_TYPES, TELEMETRY } from './gravsim_const.js';
+import { UI, OBJECT_TYPES, TELEMETRY, EVENT_PRIORITY } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
 import { MathUtils, DOMUtils, UnitConvertUtils, FormatUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
@@ -10,7 +10,7 @@ export class TelemetryPanel {
 	constructor(universe) {
 		this.universe = universe;
 		this.isOpen = false;
-		
+
 		this.targetId = 0;
 		this.lastObjCount = -1;
 		this.maxFuel = {};
@@ -50,9 +50,9 @@ export class TelemetryPanel {
 			cdEvent: document.getElementById('cd-event'),
 		};
 		DOMUtils.verifyElements(this.ui, 'TelemetryPanel');
-		
+
 		if (this.ui.subCanvas) {
-			this.subRenderer = new Renderer(this.ui.subCanvas);
+			this.subRenderer = new Renderer(this.ui.subCanvas, 'telemetry');
 		}
 
 		this._bindEvents();
@@ -68,6 +68,13 @@ export class TelemetryPanel {
 		EventBus.on('object-list-changed', () => {
 			this._updateTargetOptions();
 		});
+
+		// Hook into the main draw pipeline
+		EventBus.onDrawOverlay((ctx, rc) => {
+			if (rc.name === 'main') {
+				this.draw();
+			}
+		}, EVENT_PRIORITY.DRAW_HUD);
 	}
 
 	_bindEvents() {
