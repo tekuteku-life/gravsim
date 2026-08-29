@@ -21,7 +21,7 @@ export class TrailLineRenderer {
 		const cy = renderContext.cameraOffset ? renderContext.cameraOffset.y * renderContext.zoomScale : 0;
 		const halfW = (ctx.canvas.width / 2) + 50;
 		const halfH = (ctx.canvas.height / 2) + 50;
-		
+
 		const minX = cx - halfW;
 		const maxX = cx + halfW;
 		const minY = cy - halfH;
@@ -56,6 +56,7 @@ export class TrailLineRenderer {
 			ctx.lineTo(p2.relX, p2.relY);
 			ctx.stroke();
 		}
+
 		ctx.restore();
 	}
 
@@ -88,7 +89,7 @@ export class TrailLineRenderer {
 
 			const relX = (pt.x - basisPos.x) * zoomScale;
 			const relY = (pt.y - basisPos.y) * zoomScale;
-			
+
 			if (prevPt) {
 				const dx = relX - prevPt.relX;
 				const dy = relY - prevPt.relY;
@@ -117,7 +118,7 @@ export class TrailLineRenderer {
 				if (lastAddedPt && lastAddedPt.logicalIdx !== i) {
 					pointsToDraw.push({ relX, relY, logicalIdx: i, mode: pt.mode });
 				}
-				break; 
+				break;
 			}
 		}
 		
@@ -134,7 +135,6 @@ export class EffectRenderer {
 		if (pointsToDraw.length === 0) { return; }
 
 		const ctx = renderContext.ctx;
-		
 		SmokeEffectRenderer.draw(ctx, pointsToDraw, effectTrail, renderContext);
 		SparkEffectRenderer.draw(ctx, pointsToDraw, effectTrail, renderContext);
 	}
@@ -153,7 +153,6 @@ export class EffectRenderer {
 
 		for (let i = count - 1; i >= 0; i--) {
 			const pt = effectTrail.getPoint(i);
-			
 			let absX = pt.x;
 			let absY = pt.y;
 
@@ -199,7 +198,7 @@ export class EffectRenderer {
 				lastAddedPt = { relX, relY, logicalIdx: i };
 			}
 		}
-		
+
 		return pointsToDraw;
 	}
 }
@@ -217,7 +216,7 @@ class SparkEffectRenderer {
 		const cy = renderContext.cameraOffset ? renderContext.cameraOffset.y * renderContext.zoomScale : 0;
 		const halfW = (ctx.canvas.width / 2) + 50;
 		const halfH = (ctx.canvas.height / 2) + 50;
-		
+
 		const minX = cx - halfW;
 		const maxX = cx + halfW;
 		const minY = cy - halfH;
@@ -254,7 +253,6 @@ class SparkEffectRenderer {
 
 		ctx.globalAlpha = blink * scale;
 		ctx.fillStyle = RENDER.SPARKLE.COLOR;
-
 		ctx.beginPath();
 		ctx.moveTo(0, -starSize);
 		ctx.lineTo(innerSize, -innerSize);
@@ -276,14 +274,11 @@ class SparkEffectRenderer {
 class SmokeEffectRenderer {
 	static draw(ctx, pointsToDraw, effectTrail, renderContext) {
 		const bodyScreenRadius = renderContext.bodyScreenRadius || 1;
-
 		const r = 220, g = 220, b = 220;
-		
 		const cx = renderContext.cameraOffset ? renderContext.cameraOffset.x * renderContext.zoomScale : 0;
 		const cy = renderContext.cameraOffset ? renderContext.cameraOffset.y * renderContext.zoomScale : 0;
 		const halfW = (ctx.canvas.width / 2) + 50;
 		const halfH = (ctx.canvas.height / 2) + 50;
-		
 		const minX = cx - halfW;
 		const maxX = cx + halfW;
 		const minY = cy - halfH;
@@ -320,9 +315,9 @@ class SmokeEffectRenderer {
 			}
 
 			const t = smokeCount / drawLen;
-
 			const peakT = 0.15;
 			let alpha = 0;
+
 			if (t < peakT) {
 				alpha = (t / peakT) * RENDER.SMOKE.ALPHA_RATE + RENDER.SMOKE.ALPHA_BASE;
 			} else {
@@ -342,7 +337,7 @@ class SmokeEffectRenderer {
 
 			smokeCount++;
 		}
-		
+
 		ctx.restore();
 	}
 }

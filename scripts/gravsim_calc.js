@@ -1,13 +1,11 @@
 
 // gravsim_calc.js
 
-import { PHYSICS, SIMULATION, ROCHE_LIMIT, DEBRIS,
-	CALC_BUFFER_CONFIG, BUFFER_INDEX,
+import {
+	PHYSICS, SIMULATION, ROCHE_LIMIT, DEBRIS,
 	OBJECT_TYPES, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js'
-
 import { CalcCelestialBody, CalcRocket, CalcDebris } from './gravsim_calc_object.js'
-import { FlightComputer } from './gravsim_flight_computer.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 
 // QuadTree Data Structures for Spatial Partitioning
@@ -67,12 +65,12 @@ class QuadTree {
 			if (!this.divided) {
 				this.subdivide();
 			}
-			if (this.ne.insert(obj)) return true;
-			if (this.nw.insert(obj)) return true;
-			if (this.se.insert(obj)) return true;
-			if (this.sw.insert(obj)) return true;
+			if (this.ne.insert(obj)) { return true; }
+			if (this.nw.insert(obj)) { return true; }
+			if (this.se.insert(obj)) { return true; }
+			if (this.sw.insert(obj)) { return true; }
+			return false;
 		}
-		return false;
 	}
 
 	query(range, found = []) {
@@ -99,7 +97,7 @@ class QuadTree {
 
 /*******************************************************************
  * Physics Engine Class
-*******************************************************************/
+ *******************************************************************/
 class PhysicsEngine {
 	constructor() {
 		this.objects = [];
@@ -191,12 +189,13 @@ class PhysicsEngine {
 					if (hostParam && hostParam.ROTATION_PERIOD) {
 						omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
 					}
+
 					obj.hostAngleRad += omega * dt;
-					
+
 					const r = host.radius + obj.radius + obj.hostAltM;
 					const dx = r * Math.cos(obj.hostAngleRad);
 					const dy = r * Math.sin(obj.hostAngleRad);
-					
+
 					obj.x = host.x + dx;
 					obj.y = host.y + dy;
 					obj.vx = host.vx - omega * dy;
@@ -221,7 +220,7 @@ class PhysicsEngine {
 
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
-			
+
 			// Calculate bounds including predicted movement
 			const max_v = Math.max(Math.abs(obj.vx), Math.abs(obj.vy)) * dt;
 			const margin = obj.radius + max_v;
@@ -268,14 +267,19 @@ class PhysicsEngine {
 				if (obj.isColliding(other, dt)) {
 					// Winner is bigger one, loser is smaller one
 					let winner, loser;
-					if (obj.mass >= other.mass) { winner = obj; loser = other; }
-					else { winner = other; loser = obj; }
+					if (obj.mass >= other.mass) {
+						winner = obj;
+						loser = other;
+					} else {
+						winner = other;
+						loser = obj;
+					}
 
 					// Calculate velocity according to the law of conservation of momentum
 					const totalMass = winner.mass + loser.mass;
 					const newVx = (winner.mass * winner.vx + loser.mass * loser.vx) / totalMass;
 					const newVy = (winner.mass * winner.vy + loser.mass * loser.vy) / totalMass;
-					
+
 					const dvx = winner.vx - loser.vx;
 					const dvy = winner.vy - loser.vy;
 					const vRelSq = dvx * dvx + dvy * dvy;
@@ -296,35 +300,32 @@ class PhysicsEngine {
 					if (winnerDensity <= ROCHE_LIMIT.UNBREAKABLE_DENSITY && !loser.isDebris) {
 						debrisRatio = massRatio * (energyRatio * 0.5);
 						debrisRatio = Math.max(0.0, Math.min(debrisRatio, 0.9));
-
-						// Ignore tiny debris
-						if (debrisRatio < 1e-4) {
-							debrisRatio = 0;
-						}
 					}
+
+					// Ignore tiny debris
+					if (debrisRatio < 1e-4) { debrisRatio = 0; }
 
 					const debrisMass = loser.mass * debrisRatio;
 					const absorbedMass = loser.mass - debrisMass;
-
 					const oldWinnerMass = winner.mass;
+
 					winner.mass += absorbedMass;
 					winner.radius = winner.radius * Math.cbrt(winner.mass / oldWinnerMass);
-
 					winner.vx = newVx;
 					winner.vy = newVy;
-
 					loser.collided = true;
+
 					if (debrisMass > 0 || !loser.isDebris) {
 						loser.isImpact = true;
-					}
-					loser.debrisMass = debrisMass;
-					loser.impactVx = newVx;
-					loser.impactVy = newVy;
+						loser.debrisMass = debrisMass;
+						loser.impactVx = newVx;
+						loser.impactVy = newVy;
 
-					// Keep winner position to generate impact debris
-					loser.impactWinnerX = winner.x;
-					loser.impactWinnerY = winner.y;
-					loser.impactWinnerRadius = winner.radius;
+						// Keep winner position to generate impact debris
+						loser.impactWinnerX = winner.x;
+						loser.impactWinnerY = winner.y;
+						loser.impactWinnerRadius = winner.radius;
+					}
 				}
 			}
 		}
@@ -350,7 +351,6 @@ class PhysicsEngine {
 
 			for (const fragileObj of candidates) {
 				if (massiveObj.id === fragileObj.id) { continue; }
-
 				if (fragileObj.collided || fragileObj.shattered) { continue; }
 
 				// Decrease calculation cost
@@ -369,6 +369,7 @@ class PhysicsEngine {
 	_updateEscapeStatus() {
 		const massiveBodies = this.objects.filter(o => o.type === OBJECT_TYPES.CELESTIAL && !o.collided && !o.shattered);
 		if (massiveBodies.length === 0) { return; }
+
 		const sun = massiveBodies.reduce((max, obj) => obj.mass > max.mass ? obj : max, massiveBodies[0]);
 
 		for (const obj of this.objects) {
@@ -401,12 +402,14 @@ class PhysicsEngine {
 		// Select the most near object
 		for (const p of this.objects) {
 			if (p.id === obj.id || p.collided || p.shattered) { continue; }
+
 			const param = DEFAULT_OBJECT_PARAMS[p.name];
 			if (!param || !param.ATM_LIMIT_ALT) { continue; }
-			
+
 			const dx = obj.x - p.x;
 			const dy = obj.y - p.y;
 			const distSq = dx * dx + dy * dy;
+
 			if (distSq < minDistSq) {
 				minDistSq = distSq;
 				refBody = p;
@@ -442,6 +445,7 @@ class PhysicsEngine {
 			// Apply gravity, aerodynamics and thrust (Velocity Verlet integration Step 1)
 			this._updateGravityFor(obj);
 			this._updateAerodynamicsFor(obj);
+
 			if (obj.shattered) { continue; }
 
 			const half_vx = obj.vx + obj.ax * dt / 2;
@@ -452,6 +456,7 @@ class PhysicsEngine {
 			// Apply gravity, aerodynamics and thrust (Velocity Verlet integration Step 2)
 			this._updateGravityFor(obj);
 			this._updateAerodynamicsFor(obj);
+
 			if (obj.shattered) { continue; }
 
 			obj.vx = half_vx + obj.ax * dt / 2;
@@ -472,6 +477,7 @@ class PhysicsEngine {
 		obj.maxGForce = -1;
 		obj.dominantBody = null;
 		obj.distToDominantM = 0;
+
 		for (const other of this.objects) {
 			if (obj.id !== other.id && !other.collided && !other.shattered) {
 				obj.applyGravity(other);
@@ -484,7 +490,7 @@ class PhysicsEngine {
 
 /*******************************************************************
  * Simulation Controller
-*******************************************************************/
+ *******************************************************************/
 class SimulationController {
 	constructor() {
 		this.engine = new PhysicsEngine();
@@ -493,7 +499,6 @@ class SimulationController {
 		this.isPaused = false;
 
 		self.onmessage = this.handleMessage.bind(this);
-
 		setInterval(() => this.update(), 1000 / SIMULATION.CALC_INTERVAL);
 	}
 

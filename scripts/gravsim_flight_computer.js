@@ -49,6 +49,7 @@ export class FlightComputer {
 		for (let i = 0; i < this.flightProfile.length; i++) {
 			const step = this.flightProfile[i];
 			const currentVal = step.type === 'time' ? this.flightTime : this.telemetryCache.altM;
+
 			if (currentVal >= step.value) {
 				currentIndex = i;
 			} else {
@@ -154,6 +155,7 @@ export class FlightComputer {
 				// Calculate surface relative velocity
 				let hostVx = sensor.refBody.vx;
 				let hostVy = sensor.refBody.vy;
+
 				const refParam = DEFAULT_OBJECT_PARAMS[sensor.refBody.name];
 				if (refParam && refParam.ROTATION_PERIOD) {
 					const omega = (2 * Math.PI) / refParam.ROTATION_PERIOD;
@@ -163,12 +165,13 @@ export class FlightComputer {
 
 				const dvx = sensor.vx - hostVx;
 				const dvy = sensor.vy - hostVy;
+
 				vV = dvx * uRx + dvy * uRy;
 				vH = dvx * uHx + dvy * uHy;
 
 				aV = sensor.ax * uRx + sensor.ay * uRy;
 				aH = sensor.ax * uHx + sensor.ay * uHy;
-				
+
 				gravityAngle = Math.atan2(-dy, -dx);
 			}
 		}
@@ -188,7 +191,7 @@ export class FlightComputer {
 		this.telemetryCache.qAxialKpa = sensor.qAxialKpa;
 		this.telemetryCache.qLateralKpa = sensor.qLateralKpa;
 		this.telemetryCache.aoaDeg = sensor.aoaDeg;
-		
+
 		let structRatio = 0;
 		if (this.config.maxQAxialLimit !== Infinity && this.config.maxQLateralLimit !== Infinity) {
 			const isTailFirst = Math.cos(UnitConvertUtils.deg2rad(sensor.aoaDeg)) < 0;
@@ -196,10 +199,11 @@ export class FlightComputer {
 
 			const axialRatio = UnitConvertUtils.kpa2pa(sensor.qAxialKpa) / effectiveAxialLimit;
 			const lateralRatio = UnitConvertUtils.kpa2pa(sensor.qLateralKpa) / this.config.maxQLateralLimit;
+
 			structRatio = Math.max(axialRatio, lateralRatio) * 100;
 		}
+
 		this.telemetryCache.structRatio = structRatio;
-		
 		this.telemetryCache.altM = altM;
 		this.telemetryCache.vV = vV;
 		this.telemetryCache.vH = vH;
@@ -207,9 +211,9 @@ export class FlightComputer {
 		this.telemetryCache.aH = aH / PHYSICS.G0;
 		this.telemetryCache.progradeAngle = sensor.progradeAngle;
 		this.telemetryCache.gravityAngle = gravityAngle;
-		
 		this.telemetryCache.remDv = remDv;
 		this.telemetryCache.currentG = currentG;
+
 		if (localG_ms2 > 0) {
 			const previousThrustN = sensor.thrustForce * sensor.thrustRatio;
 			this.telemetryCache.twr = previousThrustN / (sensor.mass * localG_ms2);
@@ -220,6 +224,7 @@ export class FlightComputer {
 
 	_computeThrottle(sensor, baseThrottle) {
 		if (sensor.burnTime <= 0) { return 0.0; }
+
 		let throttle = baseThrottle;
 
 		// Max-G Limiter (Throttle down)
@@ -235,7 +240,7 @@ export class FlightComputer {
 			const isTailFirst = Math.cos(UnitConvertUtils.deg2rad(this.telemetryCache.aoaDeg)) < 0;
 			const effectiveAxialLimitPa = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
 			const qRatio = UnitConvertUtils.kpa2pa(sensor.qAxialKpa) / effectiveAxialLimitPa;
-			
+
 			if (!isTailFirst && qRatio > FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) {
 				let qThrottle = 1.0 - (qRatio - FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) * 5.0;
 
@@ -274,10 +279,12 @@ export class FlightComputer {
 		const Q = sensor.qAxialKpa + sensor.qLateralKpa;
 
 		// Tower Clearance
-		if (this.flightTime < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_TIME || (Q < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MIN_Q && this.telemetryCache.altM < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MAX_ALT)) {
+		if (this.flightTime < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_TIME
+			|| (Q < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MIN_Q
+				&& this.telemetryCache.altM < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MAX_ALT)) {
 			let diff = MathUtils.normalizeAngle(zenithAngle - this.currentThrustAngle);
-			
 			const maxTurn = FLIGHT_COMPUTER_CONFIG.PITCH_KICK_TURN_RATE * sensor.dt;
+
 			if (Math.abs(diff) > maxTurn) {
 				return this.currentThrustAngle + Math.sign(diff) * maxTurn;
 			}
@@ -308,10 +315,9 @@ export class FlightComputer {
 		}
 
 		let angleDiff = MathUtils.normalizeAngle(targetAngle - progradeAngle);
-
 		const isRetrogradeIntent = Math.abs(angleDiff) > Math.PI / 2;
-
 		let safeTargetAngle;
+
 		if (isRetrogradeIntent) {
 			let retroDiff = angleDiff > 0 ? angleDiff - Math.PI : angleDiff + Math.PI;
 			if (retroDiff > maxAoA) retroDiff = maxAoA;

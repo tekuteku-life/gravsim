@@ -79,6 +79,7 @@ export class InfoPanel {
 		const now = new Date();
 		const elapsed = now - this.lastTime;
 		this.fpsCount++;
+
 		// Keep local interval check because frame counting is required
 		if (elapsed >= UI.UPDATE_INTERVAL.INFO_PANEL) {
 			const fps = (this.fpsCount / (elapsed / 1e3)).toFixed(1);

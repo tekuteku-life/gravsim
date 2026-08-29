@@ -27,7 +27,7 @@ const GRAVSIM_CALC_JS_FILE = './scripts/gravsim_calc.js';
 
 /*******************************************************************
  * CalcWorkerManager class that manages the calculation worker for physics simulation.
-*******************************************************************/
+ *******************************************************************/
 class CalcWorkerManager {
 	constructor(onUpdateCallback) {
 		this.worker = new Worker(GRAVSIM_CALC_JS_FILE, {type: 'module'});
@@ -53,19 +53,12 @@ class CalcWorkerManager {
 	}
 
 	setTimeScale(timeScale) {
-		this.worker.postMessage({
-			cmd: 'setTimeScale',
-			timeScale: timeScale
-		});
+		this.worker.postMessage({ cmd: 'setTimeScale', timeScale: timeScale });
 	}
 
 	// New interface for sending commands to a specific rocket in the worker
 	sendRocketCommand(rocketId, command) {
-		this.worker.postMessage({
-			cmd: 'rocketCommand',
-			id: rocketId,
-			command: command
-		});
+		this.worker.postMessage({ cmd: 'rocketCommand', id: rocketId, command: command });
 	}
 
 	destroy() {
@@ -75,7 +68,7 @@ class CalcWorkerManager {
 
 /*******************************************************************
  * Universe Class
-*******************************************************************/
+ *******************************************************************/
 export class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
@@ -90,9 +83,7 @@ export class Universe {
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
 		this.DestructionManager = new DestructionManager(this);
 		this.VisualEffectManager = new VisualEffectManager(this);
-		
 		this.OverlayRenderer = new OverlayRenderer(this);
-
 		this.InfoPanel = new InfoPanel(this);
 		this.TelemetryPanel = new TelemetryPanel(this);
 		this.RocketLauncher = new RocketLauncher(this);
@@ -116,7 +107,7 @@ export class Universe {
 		EventBus.on('worker:send-rocket-command', (id, cmd) => {
 			this.CalcWorkerManager.sendRocketCommand(id, cmd);
 		});
-		
+
 		// Hook for Camera interpolation
 		EventBus.onUpdate((dt, scaledDt) => {
 			this.camera.update(dt / 1000); // dt is in ms
@@ -192,12 +183,8 @@ export class Universe {
 	// ------------------------------------------
 	// Delegates
 	// ------------------------------------------
-	addObject(obj) {
-		this.ObjectManager.addObject(obj);
-	}
-	removeObject(obj) {
-		this.ObjectManager.removeObject(obj);
-	}
+	addObject(obj) { this.ObjectManager.addObject(obj); }
+	removeObject(obj) { this.ObjectManager.removeObject(obj); }
 	updateObject(obj) { this.ObjectManager.updateObject(obj); }
 	updateObjectParams(data) { this.ObjectManager.updateObjectParams(data); }
 
@@ -206,8 +193,10 @@ export class Universe {
 		if (this.VisualEffectManager) {
 			this.VisualEffectManager.destroy();
 		}
+
 		const centerX = this.canvas.width / 2;
 		const centerY = this.canvas.height / 2;
+
 		this.ObjectPlacer.placeObject('Sun', centerX, centerY, 0, 0);
 
 		EventBus.emit('camera:set-tracking-target', this.objects[0]);
@@ -279,7 +268,6 @@ export class Universe {
 
 	draw() {
 		const renderState = this.camera.getRenderState();
-
 		this.Renderer.draw(this.objects, renderState, this.trailLengthAU);
 	}
 

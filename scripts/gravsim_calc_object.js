@@ -11,7 +11,7 @@ import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * Calculation Object Class for Base
-*******************************************************************/
+ *******************************************************************/
 class GravSimCalcObject {
 	constructor(id, name, type, x, y, vx, vy, ax, ay, radius, generation) {
 		this.id = id;
@@ -36,8 +36,10 @@ class GravSimCalcObject {
 		this.impactWinnerX = 0;
 		this.impactWinnerY = 0;
 		this.impactWinnerRadius = 0;
+
 		this.inAtmosphere = false;
 		this.isEscaping = false;
+
 		this.maxGForce = -1;
 		this.dominantBody = null;
 		this.distToDominantM = 0;
@@ -49,7 +51,7 @@ class GravSimCalcObject {
 	getVXt(dt) { return this.vx + this.ax * dt; }
 	getVYt(dt) { return this.vy + this.ay * dt; }
 	getV() { return Math.sqrt(this.vx * this.vx + this.vy * this.vy); }
-	
+
 	applyGravity(other) {
 		const dx = other.x - this.x;
 		const dy = other.y - this.y;
@@ -73,7 +75,7 @@ class GravSimCalcObject {
 			}
 		}
 	}
-	
+
 	applyThrust() {}
 
 	isColliding(other, dt) {
@@ -169,6 +171,7 @@ class GravSimCalcObject {
 		this._currentQ = q;
 
 		this._checkAerodynamicDestruction(q);
+
 		if (this.shattered) {
 			console.info(this.name + "(ID:" + this.id + ") was destructed by dynamic pressure");
 			return;
@@ -189,7 +192,7 @@ class GravSimCalcObject {
 
 /*******************************************************************
  * Calculation Object Class for Celestial
-*******************************************************************/
+ *******************************************************************/
 export class CalcCelestialBody extends GravSimCalcObject {
 	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass) {
 		super(id, name, OBJECT_TYPES.CELESTIAL, x, y, vx, vy, ax, ay, radius, generation);
@@ -201,10 +204,11 @@ export class CalcCelestialBody extends GravSimCalcObject {
 
 /*******************************************************************
  * Calculation Object Class for Rocket
-*******************************************************************/
+ *******************************************************************/
 export class CalcRocket extends GravSimCalcObject {
 	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, dryMass, fuelMass, oxidMass, thrustData) {
 		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, ax, ay, radius, generation);
+
 		this.dryMass = dryMass; // kg
 		this.fuelMass = fuelMass; // kg
 		this.oxidMass = oxidMass; // kg
@@ -216,15 +220,12 @@ export class CalcRocket extends GravSimCalcObject {
 		this.massLossRate = thrustData?.massLossRate || 0;
 		this.maxGLimit = thrustData?.maxGLimit || 0;
 		this.autoControl = thrustData?.autoControl !== undefined ? thrustData.autoControl : true;
-		
 		this.hostId = thrustData?.hostId !== undefined ? thrustData.hostId : null;
 		this.hostAngleRad = thrustData?.hostAngleRad || 0;
 		this.hostAltM = thrustData?.hostAltM || 0;
 		this.isHoldDown = thrustData?.isHoldDown || false;
 		this.isIgnited = thrustData?.isIgnited !== undefined ? thrustData.isIgnited : true;
-		
 		this._thrustRatio = 0;
-		
 		this._qAxialKpa = 0;
 		this._qLateralKpa = 0;
 		this._aoaDeg = 0;
@@ -271,6 +272,7 @@ export class CalcRocket extends GravSimCalcObject {
 		}
 
 		let velAngle;
+
 		// Handle extremely low relative velocity (e.g. hold down on pad)
 		if (vRelSq < 0.01) {
 			velAngle = this.thrustAngle;
@@ -280,12 +282,13 @@ export class CalcRocket extends GravSimCalcObject {
 
 		if (objParam && objParam.AERO_AREA_FRONT) {
 			const angleDiff = Math.abs(MathUtils.normalizeAngle(this.thrustAngle - velAngle));
-			
 			const aoa = Math.min(angleDiff, Math.PI - angleDiff);
 			const sinAoA = Math.sin(aoa);
+
 			area = objParam.AERO_AREA_FRONT * (1 - sinAoA) + objParam.AERO_AREA_SIDE * sinAoA;
 
 			this._aoaDeg = UnitConvertUtils.rad2deg(angleDiff);
+
 			const q = 0.5 * rho * vRelSq;
 			this._qAxialKpa = UnitConvertUtils.pa2kpa(q * Math.pow(Math.cos(angleDiff), 2));
 			this._qLateralKpa = UnitConvertUtils.pa2kpa(q * Math.pow(Math.sin(angleDiff), 2));
@@ -320,9 +323,9 @@ export class CalcRocket extends GravSimCalcObject {
 
 		const targetPres = TANK_PRESSURE_SIM.TARGET_KPA;
 		const unpres = TANK_PRESSURE_SIM.UNPRESSURIZED_KPA;
+
 		const noiseF = (Math.random() - 0.5) * 2;
 		const noiseO = (Math.random() - 0.5) * 2;
-		
 		const baseNoiseAmp = targetPres * TANK_PRESSURE_SIM.BASE_NOISE_RATIO;
 		const qNoiseAmp = targetPres * TANK_PRESSURE_SIM.Q_NOISE_RATIO * (structRatio / 100);
 		const totalNoiseAmp = baseNoiseAmp + qNoiseAmp;
@@ -385,7 +388,7 @@ export class CalcRocket extends GravSimCalcObject {
 		};
 
 		const command = this.flightComputer.update(sensorData);
-		
+
 		if (this.autoControl) {
 			throttle = command.throttle;
 			this.thrustAngle = command.thrustAngleRad;
@@ -418,6 +421,7 @@ export class CalcRocket extends GravSimCalcObject {
 				let maxDtFuel = dmFuel > 0 ? (this.fuelMass / dmFuel) * actualDt : Infinity;
 				let maxDtOxid = dmOxid > 0 ? (this.oxidMass / dmOxid) * actualDt : Infinity;
 				actualDt = Math.min(actualDt, maxDtFuel, maxDtOxid);
+
 				dmFuel = this.massLossRate * actualDt * fuelRatio;
 				dmOxid = this.massLossRate * actualDt * oxidRatio;
 			}
@@ -438,7 +442,6 @@ export class CalcRocket extends GravSimCalcObject {
 		}
 
 		this.updatePressure(dt, this.flightComputer.getTelemetry().structRatio);
-
 		this._thrustRatio = dt > 0 ? (actualDt / dt) : 0;
 	}
 
@@ -463,6 +466,7 @@ export class CalcRocket extends GravSimCalcObject {
 			const dvx = this.vx - this.dominantBody.vx;
 			const dvy = this.vy - this.dominantBody.vy;
 			const vSq = dvx * dvx + dvy * dvy;
+
 			if (vSq < 0.01) {
 				velAngle = this.thrustAngle;
 			} else {
@@ -480,7 +484,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 /*******************************************************************
  * Calculation Object Class for Debris
-*******************************************************************/
+ *******************************************************************/
 export class CalcDebris extends GravSimCalcObject {
 	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass) {
 		super(id, name, OBJECT_TYPES.DEBRIS, x, y, vx, vy, ax, ay, radius, generation);
