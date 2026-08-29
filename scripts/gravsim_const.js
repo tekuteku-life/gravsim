@@ -649,3 +649,47 @@ export const EVENT_PRIORITY = {
 	DRAW_OVERLAY: 20,
 	DRAW_HUD: 30
 };
+
+// Object Deployment Profiles
+export const DEPLOY_PROFILES = {
+	"DEBUG_STRESS_TEST": {
+		name: "Stress Test",
+		clearPrevious: true,
+		generators: [
+			{
+				type: "elliptical_swarm",
+				template: "Rocket",
+				count: 120,
+				host: "Sun",
+				perihelionAuMin: 0.05,
+				perihelionAuMax: 1.2,
+				aphelionAuMin: 1.0,
+				aphelionAuMax: 4.8,
+				options: { autoControl: true, isIgnited: false }
+			},
+			{
+				type: "circular_swarm",
+				templates: ["Moon", "Mars"],
+				count: 150,
+				host: "Sun",
+				radiusAuMin: 5.2,
+				radiusAuMax: 9.2
+			}
+		]
+	},
+	"SOLAR_SYSTEM": {
+		name: "Inner Solar System",
+		clearPrevious: false,
+		staticObjects: [
+			{ template: "Mercury", host: "Sun" },
+			{ template: "Venus", host: "Sun" },
+			{ template: "Earth", host: "Sun" },
+			{ template: "Moon", host: "Earth" },
+			{ template: "Mars", host: "Sun" },
+			{ template: "Jupiter", host: "Sun" },
+			{ template: "Saturn", host: "Sun" },
+			{ template: "Uranus", host: "Sun" },
+			{ template: "Neptune", host: "Sun" }
+		]
+	}
+};

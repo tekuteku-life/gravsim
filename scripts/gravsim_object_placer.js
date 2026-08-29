@@ -1,7 +1,10 @@
 
 // gravsim_object_placer.js
 
-import { PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS, RENDER, EVENT_PRIORITY } from './gravsim_const.js';
+import {
+	PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS,
+	DEPLOY_PROFILES, RENDER, EVENT_PRIORITY
+} from './gravsim_const.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
 import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
@@ -47,8 +50,10 @@ export class ObjectPlacer {
 		// Commands from DeployTab
 		EventBus.on('object:deploy-orbit-sun', (objName) => this.placeAtOrbitAroundSun(objName));
 		EventBus.on('object:deploy-orbit-host', (hostName, objName) => this.placeAtOrbitAroundHost(hostName, objName));
+		
+		// Map the deploy-profile command
+		EventBus.on('object:deploy-profile', (profileId) => this.deployProfile(profileId));
 
-		// Hook into the main draw pipeline
 		EventBus.onDrawAfter((ctx, rc) => {
 			if (rc.name === 'main') {
 				this.drawPreview(ctx, rc.basis, rc.zoomScale);
@@ -191,6 +196,110 @@ export class ObjectPlacer {
 		}
 		return this.placeAtOrbit(objName, sunObj);
 	}
+
+	// Profile Deployer Engine
+	deployProfile(profileId) {
+		const profile = DEPLOY_PROFILES[profileId];
+		if (!profile) {
+			console.error(`Deployment profile '${profileId}' not found.`);
+			return;
+		}
+
+		EventBus.emit('simulation:pause');
+
+		if (profile.clearPrevious) {
+			// Clear debris, rockets, and celestials (excluding Sun)
+			EventBus.emit('simulation:clear-objects', true, true, true);
+		}
+
+		// 1. Process Static Objects
+		if (profile.staticObjects) {
+			profile.staticObjects.forEach(objDef => {
+				if (objDef.host) {
+					this.placeAtOrbitAroundHost(objDef.host, objDef.template);
+				} else {
+					this.placeObject(objDef.template, objDef.x || 0, objDef.y || 0, objDef.vx || 0, objDef.vy || 0, objDef.options || {});
+				}
+			});
+		}
+
+		// 2. Process Procedural Generators (Swarms)
+		if (profile.generators) {
+			profile.generators.forEach(gen => {
+				const hostObj = this.universe.objects.find(obj => obj.name === gen.host);
+				if (!hostObj) return;
+
+				if (gen.type === 'elliptical_swarm') {
+					this._deployEllipticalSwarm(hostObj, gen);
+				} else if (gen.type === 'circular_swarm') {
+					this._deployCircularSwarm(hostObj, gen);
+				}
+			});
+		}
+
+		EventBus.emit('simulation:resume');
+		console.info(`Profile deployed: ${profile.name}`);
+	}
+
+	_deployEllipticalSwarm(hostObj, genConfig) {
+		const templateMass = DEFAULT_OBJECT_PARAMS[genConfig.template].MASS;
+		const totalMassKg = UnitConvertUtils.ton2kg(hostObj.mass + templateMass);
+
+		for (let i = 0; i < genConfig.count; i++) {
+			const rp_au = genConfig.perihelionAuMin + Math.random() * (genConfig.perihelionAuMax - genConfig.perihelionAuMin);
+			const ra_au = genConfig.aphelionAuMin + Math.random() * (genConfig.aphelionAuMax - genConfig.aphelionAuMin);
+
+			const a_m = UnitConvertUtils.au2m((rp_au + ra_au) / 2);
+			const rp_m = UnitConvertUtils.au2m(rp_au);
+
+			const vp_m = Math.sqrt(PHYSICS.G * totalMassKg * (2 / rp_m - 1 / a_m));
+
+			// Random direction (360 degrees)
+			const phi = Math.random() * Math.PI * 2;
+			
+			const rp_px = UnitConvertUtils.m2pix(rp_m);
+			const vp_px = UnitConvertUtils.m2pix(vp_m);
+
+			const relX = rp_px * Math.cos(phi);
+			const relY = rp_px * Math.sin(phi);
+			const relVx = -vp_px * Math.sin(phi);
+			const relVy = vp_px * Math.cos(phi);
+
+			const angle = Math.atan2(relVy, relVx);
+			const options = Object.assign({ angle: angle }, genConfig.options || {});
+
+			this.placeObject(genConfig.template, hostObj.x + relX, hostObj.y + relY, hostObj.vx + relVx, hostObj.vy + relVy, options);
+		}
+	}
+
+	_deployCircularSwarm(hostObj, genConfig) {
+		for (let i = 0; i < genConfig.count; i++) {
+			const template = genConfig.templates[Math.floor(Math.random() * genConfig.templates.length)];
+			const templateMass = DEFAULT_OBJECT_PARAMS[template].MASS;
+			
+			const r_au = genConfig.radiusAuMin + Math.random() * (genConfig.radiusAuMax - genConfig.radiusAuMin);
+			const r_m = UnitConvertUtils.au2m(r_au);
+
+			const totalMassKg = UnitConvertUtils.ton2kg(hostObj.mass + templateMass);
+			const vc_m = Math.sqrt(PHYSICS.G * totalMassKg / r_m);
+
+			const theta = Math.random() * Math.PI * 2;
+
+			const r_px = UnitConvertUtils.m2pix(r_m);
+			const vc_px = UnitConvertUtils.m2pix(vc_m);
+
+			const relX = r_px * Math.cos(theta);
+			const relY = r_px * Math.sin(theta);
+			const relVx = -vc_px * Math.sin(theta);
+			const relVy = vc_px * Math.cos(theta);
+
+			const options = Object.assign({}, genConfig.options || {});
+
+			this.placeObject(template, hostObj.x + relX, hostObj.y + relY, hostObj.vx + relVx, hostObj.vy + relVy, options);
+		}
+	}
+
+	// --- Below are internal calculation/rendering methods ---
 
 	getLaunchPosition(clientX, clientY) {
 		const screenCenterX = this.universe.canvas.width / 2;

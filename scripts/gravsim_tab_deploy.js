@@ -26,7 +26,8 @@ export class DeployTab {
 	_initElements() {
 		this.ui = {
 			massSelect: document.getElementById('mass-select'),
-			moonBtn: document.getElementById('put-moon-btn')
+			moonBtn: document.getElementById('put-moon-btn'),
+			stressTestBtn: document.getElementById('stress-test-btn'),
 		};
 		DOMUtils.verifyElements(this.ui, 'DeployTab');
 	}
@@ -40,6 +41,11 @@ export class DeployTab {
 			}
 		}
 		this.ui.moonBtn.addEventListener('click', () => this._deployMoon());
+
+		this.ui.stressTestBtn.addEventListener('click', () => {
+			// Trigger the profile deployer with the debug stress test profile
+			EventBus.emit('object:deploy-profile', 'DEBUG_STRESS_TEST');
+		});
 	}
 
 	_deployMoon() {

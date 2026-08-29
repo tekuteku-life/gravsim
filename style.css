@@ -692,3 +692,13 @@ button:hover { background: #444; }
 	0% { transform: rotate(0deg); }
 	100% { transform: rotate(360deg); }
 }
+
+.stress-test-btn {
+	margin-top: 15px;
+	background-color: rgba(255, 100, 0, 0.2);
+	border-color: rgba(255, 100, 0, 0.5);
+	color: #fff;
+}
+.stress-test-btn:hover {
+	background-color: rgba(255, 100, 0, 0.4);
+}
