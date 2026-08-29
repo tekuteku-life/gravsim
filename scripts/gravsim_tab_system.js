@@ -20,13 +20,13 @@ export class SystemTab {
 		EventBus.on('camera:set-tracking-target', (targetObj) => {
 			if (targetObj) {
 				this.ui.centerSelect.value = targetObj.id;
+
+				this.updateTimeScaleIndicator(this.getTimeScale());
+
+				// Setup initial zoom indicator based on camera target
+				this.updateZoomScaleIndicator(Math.pow(10, this.universe.camera.targetZoomExp));
 			}
 		});
-
-		this.updateTimeScaleIndicator(this.getTimeScale());
-
-		// Setup initial zoom indicator based on camera target
-		this.updateZoomScaleIndicator(Math.pow(10, this.universe.camera.targetZoomExp));
 	}
 
 	_initElements() {
@@ -96,7 +96,7 @@ export class SystemTab {
 			DOMUtils.setText(this.ui.trailLengthVal, val.toFixed(1));
 			this.universe.trailLengthAU = val;
 		});
-		
+
 		this.ui.showLabelsChk.addEventListener('change', (e) => {
 			EventBus.emit('render:set-labels-visible', e.target.checked);
 		});
@@ -183,6 +183,7 @@ export class SystemTab {
 	updateCenterOptions() {
 		const currentCenterId = this.ui.centerSelect.value;
 		this.ui.centerSelect.innerHTML = '';
+
 		for (const obj of this.universe.objects) {
 			const option = document.createElement('option');
 			option.value = obj.id;

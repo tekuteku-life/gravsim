@@ -40,6 +40,7 @@ export class DeployTab {
 				btn.addEventListener('click', () => EventBus.emit('object:deploy-orbit-sun', objName));
 			}
 		}
+
 		this.ui.moonBtn.addEventListener('click', () => this._deployMoon());
 
 		this.ui.stressTestBtn.addEventListener('click', () => {
