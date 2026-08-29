@@ -3,6 +3,9 @@
 
 import { EventBus } from './gravsim_event_bus.js';
 
+/*******************************************************************
+ * Main Profiler for Performance Tuning
+ *******************************************************************/
 export class MainProfiler {
 	constructor() {
 		this.metrics = {}; // ms
@@ -51,6 +54,55 @@ export class MainProfiler {
 			console.log("======================================");
 
 			this.metrics = {};
+			this.frames = 0;
+		}
+	}
+}
+
+/*******************************************************************
+ * Worker Profiler for Performance Tuning
+ *******************************************************************/
+export class WorkerProfiler {
+	constructor() {
+		this.enabled = false;
+		this.metrics = {
+			QuadTreeAndCollisions: 0,
+			Integration: 0,
+			BufferFormat: 0,
+			PostMessage: 0,
+			TotalUpdate: 0
+		};
+		this.frames = 0;
+	}
+
+	start() {
+		if (!this.enabled) { return 0; }
+		return performance.now();
+	}
+
+	end(key, startMs) {
+		if (!this.enabled) { return; }
+		this.metrics[key] += (performance.now() - startMs);
+	}
+
+	report() {
+		if (!this.enabled) { return; }
+
+		this.frames++;
+		if (this.frames >= 60) {
+			console.log("=== Worker Physics Profile (ms/frame) ===");
+			for (const key in this.metrics) {
+				if (key !== 'TotalUpdate') {
+					const avgMs = this.metrics[key] / 60;
+					console.log(` - ${key.padEnd(25)}: ${avgMs.toFixed(2)} ms`);
+				}
+			}
+			console.log(` - ${"TOTAL UPDATE".padEnd(25)}: ${(this.metrics.TotalUpdate / 60).toFixed(2)} ms`);
+			console.log("=========================================");
+
+			for (const key in this.metrics) {
+				this.metrics[key] = 0;
+			}
 			this.frames = 0;
 		}
 	}
