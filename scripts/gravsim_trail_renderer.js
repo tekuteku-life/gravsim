@@ -29,12 +29,22 @@ export class TrailLineRenderer {
 
 		ctx.save();
 
+		let isDrawing = false;
+		let currentAlpha = -1;
+		let currentWidth = -1;
+
 		for (let i = pointsToDraw.length - 1; i > 0; i--) {
 			const p1 = pointsToDraw[i];
 			const p2 = pointsToDraw[i - 1];
 
 			// Do not connect lines if either point is ATMOSPHERE
-			if (p1.mode === TRAIL_MODE.ATMOSPHERE || p2.mode === TRAIL_MODE.ATMOSPHERE) { continue; }
+			if (p1.mode === TRAIL_MODE.ATMOSPHERE || p2.mode === TRAIL_MODE.ATMOSPHERE) {
+				if (isDrawing) {
+					ctx.stroke();
+					isDrawing = false;
+				}
+				continue;
+			}
 
 			// Culling: skip if the point is out of screen
 			const isOutside = 
@@ -43,17 +53,39 @@ export class TrailLineRenderer {
 				(p1.relY < minY && p2.relY < minY) ||
 				(p1.relY > maxY && p2.relY > maxY);
 
-			if (isOutside) { continue; }
+			if (isOutside) {
+				if (isDrawing) { ctx.stroke(); isDrawing = false; }
+				continue;
+			}
 
 			const t = (pointsToDraw.length - i) / pointsToDraw.length;
-			const alpha = t * RENDER.TRAJECTORY.ALPHA_RATE + RENDER.TRAJECTORY.ALPHA_BASE;
-			const width = baseSize * (RENDER.TRAJECTORY.TAPER_BASE + RENDER.TRAJECTORY.TAPER_RATE * t);
 
-			ctx.strokeStyle = ColorUtils.hexToRgba(color, alpha);
-			ctx.lineWidth = width;
-			ctx.beginPath();
-			ctx.moveTo(p1.relX, p1.relY);
+			// Batching: Quantize steps into 20 levels to drastically reduce ctx.stroke() calls
+			const step = Math.floor(t * 20) / 20;
+
+			const alpha = step * RENDER.TRAJECTORY.ALPHA_RATE + RENDER.TRAJECTORY.ALPHA_BASE;
+			const width = baseSize * (RENDER.TRAJECTORY.TAPER_BASE + RENDER.TRAJECTORY.TAPER_RATE * step);
+
+			// Only begin a new path when color or width actually changes or disconnected
+			if (currentAlpha !== alpha || currentWidth !== width) {
+				if (isDrawing) { ctx.stroke(); }
+				ctx.strokeStyle = ColorUtils.hexToRgba(color, alpha);
+				ctx.lineWidth = width;
+				ctx.beginPath();
+				ctx.moveTo(p1.relX, p1.relY);
+				isDrawing = true;
+				currentAlpha = alpha;
+				currentWidth = width;
+			} else if (!isDrawing) {
+				ctx.beginPath();
+				ctx.moveTo(p1.relX, p1.relY);
+				isDrawing = true;
+			}
+
 			ctx.lineTo(p2.relX, p2.relY);
+		}
+
+		if (isDrawing) {
 			ctx.stroke();
 		}
 
@@ -72,6 +104,7 @@ export class TrailLineRenderer {
 		
 		let prevPt = null;
 		let lastAddedPt = null;
+		let lastVector = null;
 		const pointsToDraw = [];
 
 		for (let i = count - 1; i >= 0; i--) {
@@ -97,20 +130,44 @@ export class TrailLineRenderer {
 			}
 			prevPt = { relX, relY };
 
-			// Thinning
+			// Adaptive Thinning
 			let shouldAdd = false;
 			if (!lastAddedPt || i === 0) {
 				shouldAdd = true;
 			} else {
 				const dxAdd = relX - lastAddedPt.relX;
 				const dyAdd = relY - lastAddedPt.relY;
-				if ((dxAdd * dxAdd + dyAdd * dyAdd) > 4) {
-					shouldAdd = true;
+				const distSq = dxAdd * dxAdd + dyAdd * dyAdd;
+
+				// Skip if distance is extremely short (< 2px)
+				if (distSq > 4) {
+					// Always add if distance is long enough (> 12px)
+					if (distSq > 144) {
+						shouldAdd = true;
+					} else {
+						// For mid-range distances, check if the angle has changed significantly
+						if (!lastVector) {
+							shouldAdd = true;
+						} else {
+							const dot = dxAdd * lastVector.x + dyAdd * lastVector.y;
+							// cos(15 deg) ≈ 0.965. 0.965^2 ≈ 0.93. Add if turn > 15 deg
+							if (dot < 0 || (dot * dot) < 0.93 * distSq * lastVector.lenSq) {
+								shouldAdd = true;
+							}
+						}
+					}
 				}
 			}
 
 			if (shouldAdd) {
 				pointsToDraw.push({ relX, relY, logicalIdx: i, mode: pt.mode });
+				if (lastAddedPt) {
+					lastVector = {
+						x: relX - lastAddedPt.relX,
+						y: relY - lastAddedPt.relY,
+						lenSq: Math.pow(relX - lastAddedPt.relX, 2) + Math.pow(relY - lastAddedPt.relY, 2)
+					};
+				}
 				lastAddedPt = { relX, relY, logicalIdx: i };
 			}
 
