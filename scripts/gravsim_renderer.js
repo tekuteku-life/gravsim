@@ -36,6 +36,8 @@ export class Renderer {
 	}
 
 	draw(objects, renderState, trailLengthAU = 3.0) {
+		EventBus.emit('profile:start', 'Renderer.setup');
+
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 		this.ctx.save();
 		this.ctx.translate(this.canvas.width / 2, this.canvas.height / 2);
@@ -64,18 +66,28 @@ export class Renderer {
 		this.renderContext.rotation = renderState.rotation;
 		this.renderContext.objectsMap = objectsMap;
 
+		EventBus.emit('profile:end', 'Renderer.setup');
+
 		// 1. Before objects
+		EventBus.emit('profile:start', 'Renderer.drawBefore');
 		EventBus.emitDrawBefore(this.ctx, this.renderContext);
+		EventBus.emit('profile:end', 'Renderer.drawBefore');
 
 		// 2. Draw main objects
+		EventBus.emit('profile:start', 'Renderer.drawObjects');
 		objects.forEach(obj => obj.draw(this.renderContext));
+		EventBus.emit('profile:end', 'Renderer.drawObjects');
 
 		// 3. After objects (effects, labels, etc. before restoring transform)
+		EventBus.emit('profile:start', 'Renderer.drawAfter');
 		EventBus.emitDrawAfter(this.ctx, this.renderContext);
 
 		this.ctx.restore();
+		EventBus.emit('profile:end', 'Renderer.drawAfter');
 
 		// 4. Screen-space overlays (UI, Scalebar)
+		EventBus.emit('profile:start', 'Renderer.drawOverlay');
 		EventBus.emitDrawOverlay(this.ctx, this.renderContext);
+		EventBus.emit('profile:end', 'Renderer.drawOverlay');
 	}
 }

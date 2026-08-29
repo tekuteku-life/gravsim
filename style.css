@@ -693,6 +693,27 @@ button:hover { background: #444; }
 	100% { transform: rotate(360deg); }
 }
 
+/* Debug Section */
+.debug-section {
+	display: none;
+	border-top: 1px dashed #555;
+	margin-top: 15px;
+	padding-top: 15px;
+}
+.debug-section.active {
+	display: block;
+}
+.debug-header {
+	color: #ff5555 !important;
+}
+.debug-label {
+	display: flex !important;
+	align-items: center;
+	gap: 5px;
+	margin-top: 10px;
+	color: #ffaa00 !important;
+}
+
 .stress-test-btn {
 	margin-top: 15px;
 	background-color: rgba(255, 100, 0, 0.2);

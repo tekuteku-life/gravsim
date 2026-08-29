@@ -30,6 +30,11 @@ export class DeployTab {
 			stressTestBtn: document.getElementById('stress-test-btn'),
 		};
 		DOMUtils.verifyElements(this.ui, 'DeployTab');
+
+		// Hide stress test button initially
+		if (this.ui.stressTestBtn) {
+			this.ui.stressTestBtn.style.display = 'none';
+		}
 	}
 
 	_bindEvents() {
@@ -46,6 +51,12 @@ export class DeployTab {
 		this.ui.stressTestBtn.addEventListener('click', () => {
 			// Trigger the profile deployer with the debug stress test profile
 			EventBus.emit('object:deploy-profile', 'DEBUG_STRESS_TEST');
+		});
+
+		EventBus.on('debug:mode-on', () => {
+			if (this.ui.stressTestBtn) {
+				this.ui.stressTestBtn.style.display = 'block';
+			}
 		});
 	}
 

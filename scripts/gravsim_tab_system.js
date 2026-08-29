@@ -8,6 +8,7 @@ import { EventBus } from './gravsim_event_bus.js';
 export class SystemTab {
 	constructor(universe) {
 		this.universe = universe;
+		this.isDebugModeEnabled = false;
 		this._initElements();
 		this._bindEvents();
 
@@ -51,7 +52,11 @@ export class SystemTab {
 			clearDebrisChk: document.getElementById('clear-debris-chk'),
 			clearRocketChk: document.getElementById('clear-rocket-chk'),
 			clearCelestialChk: document.getElementById('clear-celestial-chk'),
-			clearSelectedBtn: document.getElementById('clear-selected-btn')
+			clearSelectedBtn: document.getElementById('clear-selected-btn'),
+
+			debugSection: document.getElementById('debug-section'),
+			enableMainProfilerChk: document.getElementById('enable-main-profiler-chk'),
+			enableWorkerProfilerChk: document.getElementById('enable-worker-profiler-chk'),
 		};
 		DOMUtils.verifyElements(this.ui, 'SystemTab');
 	}
@@ -169,6 +174,55 @@ export class SystemTab {
 				this.ui.zoomScale.value = exp.toFixed(2);
 				this.updateZoomScaleIndicator(Math.pow(10, exp));
 			}
+		});
+
+		// Secret Developer Mode (7 clicks on System tab)
+		const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
+		if (sysTabBtn) {
+			let clickCount = 0; // count
+			let lastClickTime = 0; // ms
+			sysTabBtn.addEventListener('click', () => {
+				const now = Date.now(); // ms
+				if (now - lastClickTime > 500) {
+					clickCount = 0;
+				}
+				clickCount++;
+				lastClickTime = now;
+				
+				if (clickCount === 7) {
+					this._enableDebugMode();
+				}
+			});
+		}
+	}
+
+	_enableDebugMode() {
+		if (this.isDebugModeEnabled) { return; }
+		this.isDebugModeEnabled = true;
+
+		EventBus.emit('debug:mode-on');
+		console.info("Developer Debug Mode Enabled.");
+
+		this.ui.debugSection.classList.add('active');
+
+		let profilerInstance = null;
+
+		this.ui.enableMainProfilerChk.addEventListener('change', async (e) => {
+			const isEnabled = e.target.checked;
+			if (isEnabled) {
+				// Lazy load the profiler script only when enabled
+				const module = await import('./gravsim_profiler.js');
+				profilerInstance = new module.MainProfiler();
+			} else {
+				if (profilerInstance) {
+					profilerInstance.destroy();
+					profilerInstance = null;
+				}
+			}
+		});
+		this.ui.enableWorkerProfilerChk.addEventListener('change', async (e) => {
+			const isEnabled = e.target.checked;
+			EventBus.emit('debug:toggle-profiler', isEnabled);
 		});
 	}
 

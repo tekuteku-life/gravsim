@@ -56,7 +56,6 @@ class CalcWorkerManager {
 		this.worker.postMessage({ cmd: 'setTimeScale', timeScale: timeScale });
 	}
 
-	// New interface for sending commands to a specific rocket in the worker
 	sendRocketCommand(rocketId, command) {
 		this.worker.postMessage({ cmd: 'rocketCommand', id: rocketId, command: command });
 	}
@@ -73,7 +72,7 @@ export class Universe {
 	constructor(_canvas) {
 		this.canvas = _canvas;
 		this.isPaused = false;
-		this.trailLengthAU = 3.0;
+		this.trailLengthAU = 3.0; // AU
 
 		// Initialize Modules
 		this.camera = new Camera();
@@ -108,10 +107,14 @@ export class Universe {
 			this.CalcWorkerManager.sendRocketCommand(id, cmd);
 		});
 
+		EventBus.on('debug:toggle-profiler', (isEnabled) => {
+			this.CalcWorkerManager.postMessage({ cmd: 'toggleProfiler', value: isEnabled });
+		});
+
 		// Hook for Camera interpolation
 		EventBus.onUpdate((dt, scaledDt) => {
 			this.camera.update(dt / 1000); // dt is in ms
-			
+
 			// Fallback ensureCenterObject logic (if target dies)
 			const currentTarget = this.camera.trackingTarget;
 			if (currentTarget && currentTarget.state !== OBJECT_STATE.ACTIVE) {
@@ -151,8 +154,8 @@ export class Universe {
 				if (obj.type === OBJECT_TYPES.CELESTIAL && obj.state === OBJECT_STATE.ACTIVE) {
 					const param = DEFAULT_OBJECT_PARAMS[obj.name];
 					if (param && param.ROTATION_PERIOD) {
-						const omega = (2 * Math.PI) / param.ROTATION_PERIOD;
-						obj.rotationAngle = (obj.rotationAngle || 0) + omega * scaledDt;
+						const omega = (2 * Math.PI) / param.ROTATION_PERIOD; // rad/s
+						obj.rotationAngle = (obj.rotationAngle || 0) + omega * scaledDt; // rad
 					}
 				}
 			});
@@ -175,11 +178,11 @@ export class Universe {
 	// Getters/Setters
 	// ------------------------------------------
 	get objects() { return this.ObjectManager.objects; }
-	
+
 	// Proxy for backward compatibility
 	get centerObject() { return this.camera.trackingTarget; }
 	get zoomScale() { return Math.pow(10, this.camera.currentZoomExp); }
-	
+
 	// ------------------------------------------
 	// Delegates
 	// ------------------------------------------
@@ -199,8 +202,8 @@ export class Universe {
 			this.VisualEffectManager.destroy();
 		}
 
-		const centerX = this.canvas.width / 2;
-		const centerY = this.canvas.height / 2;
+		const centerX = this.canvas.width / 2; // px
+		const centerY = this.canvas.height / 2; // px
 
 		this.ObjectPlacer.placeObject('Sun', centerX, centerY, 0, 0);
 
@@ -258,9 +261,11 @@ export class Universe {
 	}
 
 	update(dt) {
+		EventBus.emit('profile:start', 'Universe.update');
+
 		// Time Management
 		this.CalcWorkerManager.setTimeScale(this.timeScale);
-		let scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale;
+		let scaledDt = dt * (PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE) * this.timeScale; // s
 
 		// If paused, halt simulation time (stops rotation, sequences, animations)
 		if (this.isPaused) {
@@ -269,11 +274,17 @@ export class Universe {
 
 		// Process decoupled update hooks (Camera, Modules, Flight time, UI, Cleanup)
 		EventBus.emitUpdate(dt, scaledDt);
+
+		EventBus.emit('profile:end', 'Universe.update');
 	}
 
 	draw() {
+		EventBus.emit('profile:start', 'Universe.draw');
+
 		const renderState = this.camera.getRenderState();
 		this.Renderer.draw(this.objects, renderState, this.trailLengthAU);
+
+		EventBus.emit('profile:end', 'Universe.draw');
 	}
 
 	getState() {

@@ -5,6 +5,55 @@ import { PHYSICS, SIMULATION, ROCHE_LIMIT, DEBRIS, OBJECT_TYPES, DEFAULT_OBJECT_
 import { CalcCelestialBody, CalcRocket, CalcDebris } from './gravsim_calc_object.js'
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 
+// ===================================================================
+// Worker Profiler for Performance Tuning
+// ===================================================================
+class WorkerProfiler {
+	constructor() {
+		this.enabled = false;
+		this.metrics = {
+			QuadTreeAndCollisions: 0,
+			Integration: 0,
+			BufferFormat: 0,
+			PostMessage: 0,
+			TotalUpdate: 0
+		};
+		this.frames = 0;
+	}
+
+	start() {
+		if (!this.enabled) { return 0; }
+		return performance.now();
+	}
+
+	end(key, startMs) {
+		if (!this.enabled) { return; }
+		this.metrics[key] += (performance.now() - startMs);
+	}
+
+	report() {
+		if (!this.enabled) { return; }
+
+		this.frames++;
+		if (this.frames >= 60) {
+			console.log("=== Worker Physics Profile (ms/frame) ===");
+			for (const key in this.metrics) {
+				if (key !== 'TotalUpdate') {
+					const avgMs = this.metrics[key] / 60;
+					console.log(` - ${key.padEnd(25)}: ${avgMs.toFixed(2)} ms`);
+				}
+			}
+			console.log(` - ${"TOTAL UPDATE".padEnd(25)}: ${(this.metrics.TotalUpdate / 60).toFixed(2)} ms`);
+			console.log("=========================================");
+
+			for (const key in this.metrics) {
+				this.metrics[key] = 0;
+			}
+			this.frames = 0;
+		}
+	}
+}
+
 // QuadTree Data Structures for Spatial Partitioning
 class Rectangle {
 	constructor(x, y, w, h) {
@@ -660,6 +709,7 @@ class SimulationController {
 		this.lastTime = Date.now(); // ms
 		this.timeScale = 1;
 		this.isPaused = false;
+		this.profiler = new WorkerProfiler();
 
 		self.onmessage = this.handleMessage.bind(this);
 		setInterval(() => this.update(), 1000 / SIMULATION.CALC_INTERVAL);
@@ -685,6 +735,15 @@ class SimulationController {
 			case 'pause':
 				this.isPaused = data.value;
 				if (!this.isPaused) this.lastTime = Date.now();
+				break;
+			case 'toggleProfiler':
+				this.profiler.enabled = data.value;
+				if (!data.value) {
+					this.profiler.frames = 0;
+					for (const key in this.profiler.metrics) {
+						this.profiler.metrics[key] = 0;
+					}
+				}
 				break;
 			case 'setRocketState':
 				const rObj = this.engine.objects.find(o => o.id === data.id);
@@ -725,33 +784,46 @@ class SimulationController {
 		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, SIMULATION.CALC_SUB_STEPS_MAX));
 		const dt = totalDt / SUB_STEPS; // s
 
+		const tUpdate = this.profiler.start();
+
 		// Refresh body categorizations before running steps
 		this.engine._categorizeBodies();
 
 		// Optimization: Rebuild QuadTree and check collisions only ONCE per frame 
 		// using the total elapsed time, instead of running it every sub-step.
+		const tQC = this.profiler.start();
 		this.engine._buildQuadTree(totalDt);
 		this.engine._checkCollisions(totalDt);
 		this.engine._checkRocheLimit();
+		this.profiler.end('QuadTreeAndCollisions', tQC);
 
 		// Fast Integration Loop
+		const tInt = this.profiler.start();
 		for (let i = 0; i < SUB_STEPS; i++) {
 			this.engine._updateHoldDownPositions(dt);
 			this.engine._moveObjects(dt);
 		}
-
 		this.engine._updateEscapeStatus();
+		this.profiler.end('Integration', tInt);
 
 		// Return result to main thread (Includes newly shattered objects before removal)
+		const tBuf = this.profiler.start();
 		const buffer = WorkerBridge.formatWorkerToMain(this.engine.objects);
+		this.profiler.end('BufferFormat', tBuf);
+
+		const tPost = this.profiler.start();
 		self.postMessage({
 			cmd: 'update',
 			deltaTime: dt,
 			objectsData: buffer.buffer,
 			validLength: buffer.length
 		}, [buffer.buffer]);
+		this.profiler.end('PostMessage', tPost);
 
 		this.engine.removeDeadObjects();
+
+		this.profiler.end('TotalUpdate', tUpdate);
+		this.profiler.report();
 	}
 }
 

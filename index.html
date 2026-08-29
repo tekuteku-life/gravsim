@@ -116,6 +116,17 @@
 					<button type="button" id="pause-resume-btn" style="width: 48%;">Pause</button>
 					<button type="button" id="reset-all-btn">Reset All</button>
 				</div>
+
+				<!-- Debug Section (Hidden by default) -->
+				<div id="debug-section" class="debug-section">
+					<div class="panel-section-header debug-header">[ DEVELOPER TOOLS ]</div>
+					<label class="debug-label">
+						<input type="checkbox" id="enable-main-profiler-chk"> Enable Main Thread Profiler (Console)
+					</label>
+					<label class="debug-label">
+						<input type="checkbox" id="enable-worker-profiler-chk"> Enable Worker Thread Profiler (Console)
+					</label>
+				</div>
 			</div>
 
 			<div class="panel-section">
@@ -190,7 +201,7 @@
 			</div>
 
 			<div class="panel-section">
-				<button type="button" id="stress-test-btn" class="btn block stress-test-btn">** Stress Test **</button>
+				<button type="button" id="stress-test-btn" class="btn block stress-test-btn" style="display: none;">** Stress Test **</button>
 			</div>
 		</div>
 
@@ -317,7 +328,7 @@
 		<div class="info-row"><span class="info-label">ZOOM</span> <span id="info-zoom">---</span></div>
 		<div class="info-row"><span class="info-label">CAMERA</span> <span id="info-camera">---</span></div>
 		<div class="info-row"><span class="info-label">ELAPSED</span> <span id="info-elapsed">0 yr, 000 d</span></div>
-		<div class="info-row"><span class="info-label">FPS(D/P)</span> <span id="info-fps">0</span></div>
+		<div class="info-row"><span class="info-label">FPS(D/P)</span> <span id="info-fps">0 / 0</span></div>
 		<div class="info-row"><span class="info-label">OBJECTS</span> <span id="info-count">0</span></div>
 	</div>
 </body>
