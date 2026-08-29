@@ -186,7 +186,12 @@ export class Universe {
 	addObject(obj) { this.ObjectManager.addObject(obj); }
 	removeObject(obj) { this.ObjectManager.removeObject(obj); }
 	updateObject(obj) { this.ObjectManager.updateObject(obj); }
-	updateObjectParams(data) { this.ObjectManager.updateObjectParams(data); }
+	updateObjectParams(data) {
+		this.ObjectManager.updateObjectParams(data);
+
+		// Measure Physics Worker FPS
+		EventBus.emit('physics-updated');
+	}
 
 	reset() {
 		this.ObjectManager.destroy();

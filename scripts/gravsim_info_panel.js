@@ -19,6 +19,7 @@ export class InfoPanel {
 		this.elapsedTime = 0; // in years
 		this.lastTime = new Date();
 		this.fpsCount = 0;
+		this.physFpsCount = 0;
 
 		this.ui = {
 			elapsed: document.getElementById('info-elapsed'),
@@ -33,6 +34,11 @@ export class InfoPanel {
 		// Subscribe to object list changes
 		EventBus.on('object-list-changed', (count) => {
 			this.updateObjectCount(count);
+		});
+
+		// Subscribe to Physics updates to measure worker FPS
+		EventBus.on('physics-updated', () => {
+			this.physFpsCount++;
 		});
 
 		// Subscribe to camera and system UI updates
@@ -83,9 +89,13 @@ export class InfoPanel {
 		// Keep local interval check because frame counting is required
 		if (elapsed >= UI.UPDATE_INTERVAL.INFO_PANEL) {
 			const fps = (this.fpsCount / (elapsed / 1e3)).toFixed(1);
-			DOMUtils.setText(this.ui.fps, fps);
+			const physFps = (this.physFpsCount / (elapsed / 1e3)).toFixed(1);
+
+			DOMUtils.setText(this.ui.fps, `${fps} / ${physFps}`);
+
 			this.lastTime = now;
 			this.fpsCount = 0;
+			this.physFpsCount = 0;
 		}
 	}
 }
