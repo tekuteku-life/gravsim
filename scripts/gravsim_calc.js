@@ -364,9 +364,20 @@ class PhysicsEngine {
 	}
 
 	_moveObjects(dt) {
-		const len = this.objects.length;
-
 		// Update position and half velocity using previous a(t)
+		this._updatePositionAndHalfVelocity(dt);
+
+		// Flight control for rockets (updates mass, state, etc. at new position)
+		this._updateFlightControl(dt);
+
+		// New forces a(t+dt)
+		this._calculateForces();
+
+		// Integrate Step 2: Final velocity
+		this._updateFinalVelocity(dt);
+	}
+
+	_updatePositionAndHalfVelocity(dt) {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
 
@@ -380,8 +391,9 @@ class PhysicsEngine {
 			obj._half_vx = half_vx;
 			obj._half_vy = half_vy;
 		}
+	}
 
-		// Flight control for rockets (updates mass, state, etc. at new position)
+	_updateFlightControl(dt) {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
 
@@ -389,11 +401,9 @@ class PhysicsEngine {
 				obj.flightControl(dt, obj.dominantBody, obj.distToDominantM);
 			}
 		}
+	}
 
-		// New forces a(t+dt)
-		this._calculateForces();
-
-		// Final velocity
+	_updateFinalVelocity(dt) {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
 
@@ -410,7 +420,15 @@ class PhysicsEngine {
 	}
 
 	_calculateForces() {
-		// Reset accelerations and metrics for all active objects
+		this._resetForces();
+		this._calculateMassiveToMassiveGravity();
+		this._calculateMassiveToTinyGravity();
+		this._applyTinyThrust();
+		this._applyAerodynamics();
+	}
+
+	// Reset accelerations and metrics
+	_resetForces() {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
 			obj.ax = 0;
@@ -422,8 +440,10 @@ class PhysicsEngine {
 			obj._nearestAtmBody = null;
 			obj._minAtmDistSq = Infinity; // m^2
 		}
+	}
 
-		// Massive vs Massive
+	// Massive vs Massive Gravity
+	_calculateMassiveToMassiveGravity() {
 		const massiveLen = this.massiveBodies.length;
 		for (let i = 0; i < massiveLen; i++) {
 			const objA = this.massiveBodies[i];
@@ -440,7 +460,7 @@ class PhysicsEngine {
 				const dist = Math.sqrt(distSq); // m
 
 				// accelPerDist = G / (dist^3)
-				const accelPerDist = PHYSICS.G / (distSq * dist);
+				const accelPerDist = PHYSICS.G / (distSq * dist); // m/s^2 / (t*m)
 
 				// aA = (G * mB) / dist^2 = accelPerDist * objB.mass * dx
 				objA.ax += accelPerDist * objB.mass * dx;
@@ -451,7 +471,7 @@ class PhysicsEngine {
 
 				// Keep the largest gravity object and search atmosphere
 				if (objB.type === OBJECT_TYPES.CELESTIAL) {
-					const gForceA = objB.mass / distSq;
+					const gForceA = objB.mass / distSq; // t/m^2
 					if (gForceA > objA.maxGForce) {
 						objA.maxGForce = gForceA;
 						objA.dominantBody = objB;
@@ -464,7 +484,7 @@ class PhysicsEngine {
 					}
 				}
 				if (objA.type === OBJECT_TYPES.CELESTIAL) {
-					const gForceB = objA.mass / distSq;
+					const gForceB = objA.mass / distSq; // t/m^2
 					if (gForceB > objB.maxGForce) {
 						objB.maxGForce = gForceB;
 						objB.dominantBody = objA;
@@ -480,8 +500,10 @@ class PhysicsEngine {
 			// Apply Thrust
 			objA.applyThrust();
 		}
+	}
 
-		// Massive vs Tiny
+	// Massive vs Tiny Gravity
+	_calculateMassiveToTinyGravity() {
 		for (const objA of this.massiveBodies) {
 			const hasAtmA = DEFAULT_OBJECT_PARAMS[objA.name]?.ATM_LIMIT_ALT;
 
@@ -492,7 +514,7 @@ class PhysicsEngine {
 				const distSq = Math.max(dx * dx + dy * dy, radiusSum * radiusSum); // m^2
 				const dist = Math.sqrt(distSq); // m
 
-				const accelPerDist = PHYSICS.G / (distSq * dist);
+				const accelPerDist = PHYSICS.G / (distSq * dist); // m/s^2 / (t*m)
 
 				objA.ax += accelPerDist * objB.mass * dx;
 				objA.ay += accelPerDist * objB.mass * dy;
@@ -501,7 +523,7 @@ class PhysicsEngine {
 				objB.ay -= accelPerDist * objA.mass * dy;
 
 				if (objA.type === OBJECT_TYPES.CELESTIAL) {
-					const gForceB = objA.mass / distSq;
+					const gForceB = objA.mass / distSq; // t/m^2
 					if (gForceB > objB.maxGForce) {
 						objB.maxGForce = gForceB;
 						objB.dominantBody = objA;
@@ -514,13 +536,17 @@ class PhysicsEngine {
 				}
 			}
 		}
+	}
 
-		// Apply Thrust for Tiny
+	// Apply Thrust for Tiny
+	_applyTinyThrust() {
 		for (const obj of this.tinyBodies) {
 			obj.applyThrust();
 		}
+	}
 
-		// Apply aerodynamics after all distances are checked
+	// Apply aerodynamics after all distances are checked
+	_applyAerodynamics() {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
 			this._applyAerodynamicsFromCache(obj);
