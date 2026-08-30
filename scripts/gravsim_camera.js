@@ -3,6 +3,7 @@
 
 import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
+import { ROCKET_LAUNCHER_CONFIG } from './gravsim_const.js';
 
 /*******************************************************************
  * Camera Class
@@ -51,7 +52,7 @@ export class Camera {
 			// Calculate current absolute view center to prevent screen jump (warping)
 			const curAbsX = this.trackingTarget.x + this.currentOffset.x;
 			const curAbsY = this.trackingTarget.y + this.currentOffset.y;
-			
+
 			// Set new target and calculate reverse offset from the new target
 			this.trackingTarget = newTarget;
 			this.currentOffset.x = curAbsX - newTarget.x;
@@ -103,10 +104,6 @@ export class Camera {
 
 	stopAutoTracking(fallbackHost = null) {
 		this.autoTrackHost = null;
-
-		if (fallbackHost) {
-			this.fitToTarget(fallbackHost);
-		}
 	}
 
 	fitToTarget(target) {
@@ -118,10 +115,10 @@ export class Camera {
 		const radiusPx = UnitConvertUtils.m2pix(target.radius);
 		const targetSize = Math.min(window.innerWidth, window.innerHeight) / 2.2;
 		let idealExp = Math.log10(targetSize / radiusPx);
-
 		idealExp = Math.max(this.minZoomExp, Math.min(this.maxZoomExp, idealExp));
+
 		this.setTargetZoomExp(idealExp);
-		
+
 		// Sync UI slider
 		EventBus.emit('camera:zoom-changed', idealExp);
 	}
@@ -131,36 +128,76 @@ export class Camera {
 
 		const rocket = this.trackingTarget;
 		const host = this.autoTrackHost;
-		
+
 		const dx = rocket.x - host.x;
 		const dy = rocket.y - host.y;
-		
-		// Apply rotation to keep the earth at the bottom of the screen
-		const angle = Math.atan2(dy, dx);
-		this.setTargetRotation(-angle - Math.PI / 2);
 
-		// Calculate zoom to keep ground around the bottom 10%
-		const altM = UnitConvertUtils.pix2m(Math.sqrt(dx * dx + dy * dy)) - host.radius;
+		const distM = UnitConvertUtils.pix2m(Math.sqrt(dx * dx + dy * dy));
+		const altM = distM - host.radius;
 		const canvasHeight = window.innerHeight;
-		const minAltM = 200; // clamp minimum virtual altitude for zoom
-		const clampedAltM = Math.max(minAltM, altM);
-		const clampedDistPx = UnitConvertUtils.m2pix(clampedAltM);
-		
-		let targetZoom = (canvasHeight * 0.4) / clampedDistPx;
 
-		// Restrict zoom out limit
+		// Tracking phases configurations
+		const ALT_PHASE1 = ROCKET_LAUNCHER_CONFIG.TRACKING.ALT_PHASE1; // m
+		const ALT_PHASE2 = ROCKET_LAUNCHER_CONFIG.TRACKING.ALT_PHASE2; // m
+		const ALT_PHASE3 = ROCKET_LAUNCHER_CONFIG.TRACKING.ALT_PHASE3; // m
+
+		const groundScreenDistY = canvasHeight * ROCKET_LAUNCHER_CONFIG.TRACKING.GROUND_HEIGHT_RATIO;
+		const maxOffsetY_px = canvasHeight * ROCKET_LAUNCHER_CONFIG.TRACKING.MAX_HEIGHT_RATIO;
+
+		let targetZoom = 1;
+		let targetOffsetY_px = 0;
+
+		// Base angle (ground is at the bottom)
+		const groundLockAngle = -Math.atan2(dy, dx) - Math.PI / 2;
+		let targetRotation = groundLockAngle;
+
+		if (altM <= ALT_PHASE1) {
+			// Phase 1: Lift-off
+			// Keep center, keep zoom, keep ground lock
+			targetOffsetY_px = 0;
+			targetZoom = groundScreenDistY / UnitConvertUtils.m2pix(ALT_PHASE1);
+		} else if (altM <= ALT_PHASE2) {
+			// Phase 2: Ascending
+			// Shift offset upwards, zoom out slightly to keep ground
+			const progress = (altM - ALT_PHASE1) / (ALT_PHASE2 - ALT_PHASE1);
+			targetOffsetY_px = maxOffsetY_px * progress;
+			targetZoom = (targetOffsetY_px + groundScreenDistY) / UnitConvertUtils.m2pix(altM);
+		} else if (altM <= ALT_PHASE3) {
+			// Phase 3: Transition to Orbit
+			// Shift offset back to center, blend rotation to 0
+			const progress = (altM - ALT_PHASE2) / (ALT_PHASE3 - ALT_PHASE2);
+			targetOffsetY_px = maxOffsetY_px * (1.0 - progress);
+
+			const normGroundAngle = MathUtils.normalizeAngle(groundLockAngle);
+			targetRotation = normGroundAngle * (1.0 - progress);
+
+			targetZoom = (targetOffsetY_px + groundScreenDistY) / UnitConvertUtils.m2pix(altM);
+		} else {
+			// Phase 4: Deep space
+			// Keep center, keep absolute rotation, lock zoom to Phase 3 boundary
+			targetOffsetY_px = 0;
+			targetRotation = 0;
+			targetZoom = groundScreenDistY / UnitConvertUtils.m2pix(ALT_PHASE3);
+		}
+
+		// Restrict zoom limits
 		const minZoomScale = Math.pow(10, this.minZoomExp);
 		const maxZoomScale = Math.pow(10, this.maxZoomExp);
 		targetZoom = Math.max(minZoomScale, Math.min(maxZoomScale, targetZoom));
-		
+
 		const targetExp = Math.log10(targetZoom);
 		this.setTargetZoomExp(targetExp);
-		
+
+		// Apply offset (Convert screen pixels to world scale relative to zoom)
+		// Positive Y offset means camera focuses below the rocket, so rocket appears higher on screen
+		this.setTargetOffset(0, targetOffsetY_px / targetZoom);
+		this.setTargetRotation(targetRotation);
+
 		// Sync UI slider during tracking
 		EventBus.emit('camera:zoom-changed', targetExp);
 
 		// Reached max altitude limit, stop tracking
-		if (altM > host.radius * 0.2) {
+		if (altM > host.radius * ROCKET_LAUNCHER_CONFIG.TRACKING.TRACKING_ATL_LIMIT_RATIO) {
 			this.stopAutoTracking(host);
 		}
 	}
