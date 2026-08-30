@@ -60,8 +60,8 @@ export class TrailLineRenderer {
 
 			const t = (pointsToDraw.length - i) / pointsToDraw.length;
 
-			// Batching: Quantize steps into 20 levels to drastically reduce ctx.stroke() calls
-			const step = Math.floor(t * 20) / 20;
+			// Batching: Quantize steps into levels to drastically reduce ctx.stroke() calls
+			const step = Math.floor(t * RENDER.TRAJECTORY.QUANTIZE_LEVELS) / RENDER.TRAJECTORY.QUANTIZE_LEVELS;
 
 			const alpha = step * RENDER.TRAJECTORY.ALPHA_RATE + RENDER.TRAJECTORY.ALPHA_BASE;
 			const width = baseSize * (RENDER.TRAJECTORY.TAPER_BASE + RENDER.TRAJECTORY.TAPER_RATE * step);
@@ -139,10 +139,10 @@ export class TrailLineRenderer {
 				const dyAdd = relY - lastAddedPt.relY;
 				const distSq = dxAdd * dxAdd + dyAdd * dyAdd;
 
-				// Skip if distance is extremely short (< 2px)
-				if (distSq > 4) {
-					// Always add if distance is long enough (> 12px)
-					if (distSq > 144) {
+				// Skip if distance is extremely short
+				if (distSq > RENDER.TRAJECTORY.THINNING_MIN_DIST_SQ) {
+					// Always add if distance is long enough
+					if (distSq > RENDER.TRAJECTORY.THINNING_MAX_DIST_SQ) {
 						shouldAdd = true;
 					} else {
 						// For mid-range distances, check if the angle has changed significantly
@@ -150,8 +150,8 @@ export class TrailLineRenderer {
 							shouldAdd = true;
 						} else {
 							const dot = dxAdd * lastVector.x + dyAdd * lastVector.y;
-							// cos(15 deg) ≈ 0.965. 0.965^2 ≈ 0.93. Add if turn > 15 deg
-							if (dot < 0 || (dot * dot) < 0.93 * distSq * lastVector.lenSq) {
+							// Add if turn angle is large enough
+							if (dot < 0 || (dot * dot) < RENDER.TRAJECTORY.THINNING_ANGLE_COS_SQ * distSq * lastVector.lenSq) {
 								shouldAdd = true;
 							}
 						}
@@ -245,7 +245,7 @@ export class EffectRenderer {
 			} else {
 				const dxAdd = relX - lastAddedPt.relX;
 				const dyAdd = relY - lastAddedPt.relY;
-				if ((dxAdd * dxAdd + dyAdd * dyAdd) > 4) {
+				if ((dxAdd * dxAdd + dyAdd * dyAdd) > RENDER.TRAJECTORY.THINNING_MIN_DIST_SQ) {
 					shouldAdd = true;
 				}
 			}
