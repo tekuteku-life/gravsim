@@ -37,8 +37,12 @@ export class InfoPanel {
 		});
 
 		// Subscribe to Physics updates to measure worker FPS
-		EventBus.on('physics-updated', () => {
+		this.lastSubSteps = 0;
+		EventBus.on('physics-updated', (subSteps) => {
 			this.physFpsCount++;
+			if (subSteps !== undefined) {
+				this.lastSubSteps = subSteps;
+			}
 		});
 
 		// Subscribe to camera and system UI updates
@@ -92,6 +96,9 @@ export class InfoPanel {
 			const physFps = (this.physFpsCount / (elapsed / 1e3)).toFixed(1);
 
 			DOMUtils.setText(this.ui.fps, `${fps} / ${physFps}`);
+			if (this.lastSubSteps > 0) {
+				this.ui.fps.title = `Sub-steps: ${this.lastSubSteps}`;
+			}
 
 			this.lastTime = now;
 			this.fpsCount = 0;

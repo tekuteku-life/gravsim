@@ -20,7 +20,19 @@ export const SIMULATION = {
 	CALC_EXPAND_DIV_NUM: 20,
 	CALC_SUB_STEPS_BASE: 600,
 	CALC_SUB_STEPS_MAX: 480,
-	MIN_GRAVITY_CALC_MASS: 1e10 // t
+	MIN_GRAVITY_CALC_MASS: 1e10, // t
+	// Adaptive sub-step configurations
+	SUB_STEPS: {
+		MIN: 20,
+		MAX: 1200,
+		BASE: 40,
+		ETA_GRAV: 0.12,       // Dynamical time factor: dt <= eta * sqrt(r / a)
+		ETA_SURF: 0.08,       // Surface approach factor: dt <= eta * dist_surf / v_rel
+		ETA_VEL: 0.25,        // Movement restriction: dt <= eta * radius / v
+		ETA_ACC: 0.15,        // Acceleration change: dt <= eta * (v + v0) / a
+		ETA_ATM: 0.10,        // Atmosphere scale height: dt <= eta * H / v
+		SMOOTHING_DECAY: 0.90 // Decay factor for smooth step reduction
+	}
 };
 
 // Shattering / Roche limit
@@ -347,12 +359,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 100000,
 		"ATM_DENSITY_0": 1.225,
 		"ATM_SCALE_HEIGHT": 8500,
-		"ATM_FADE_START_ALT": 80000,
+		"ATM_FADE_START_ALT": 60000,
 		"ATM_LAYERS": [
-			{ topAlt: 25000, scaleHeight: 7600 },
-			{ topAlt: 50000, scaleHeight: 6600 },
-			{ topAlt: 80000, scaleHeight: 5400 },
-			{ topAlt: 100000, scaleHeight: 4500 }
+			{ topAlt: 15000, scaleHeight: 7800 },
+			{ topAlt: 35000, scaleHeight: 6500 },
+			{ topAlt: 60000, scaleHeight: 5200 },
+			{ topAlt: 100000, scaleHeight: 3500 }
 		],
 		"ROTATION_PERIOD": 86164
 	},
@@ -368,11 +380,11 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 50000,
 		"ATM_DENSITY_0": 0.02,
 		"ATM_SCALE_HEIGHT": 11100,
-		"ATM_FADE_START_ALT": 40000,
+		"ATM_FADE_START_ALT": 35000,
 		"ATM_LAYERS": [
-			{ topAlt: 20000, scaleHeight: 11100 },
-			{ topAlt: 35000, scaleHeight: 8500 },
-			{ topAlt: 50000, scaleHeight: 5500 }
+			{ topAlt: 15000, scaleHeight: 10000 },
+			{ topAlt: 30000, scaleHeight: 7500 },
+			{ topAlt: 50000, scaleHeight: 4500 }
 		],
 		"ROTATION_PERIOD": 88642
 	},
@@ -663,7 +675,12 @@ export const PAD_EFFECT = {
 		UMBILICAL_W_MULT: 1.5,
 		UMBILICAL_H_MULT: 0.2,
 		CABLE_WIDTH_MULT: 0.2,
-		CABLE_HIGH_WIDTH_MULT: 0.08
+		CABLE_HIGH_WIDTH_MULT: 0.08,
+		CABLE_NODES: 8,
+		CABLE_GRAVITY: 7.0,
+		CABLE_DAMPING: 0.988,
+		CABLE_CONSTRAINT_ITERATIONS: 8,
+		CABLE_SWING_IMPULSE: 0.5
 	},
 	PHYSICS: {
 		FALL_V_MULT: 5,

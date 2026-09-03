@@ -249,6 +249,8 @@ class GravSimCalcObject {
 	clearAerodynamicParameters() {
 		this.inAtmosphere = false;
 		this._currentQ = 0;
+		if (this._qAxialKpa !== undefined) { this._qAxialKpa = 0; }
+		if (this._qLateralKpa !== undefined) { this._qLateralKpa = 0; }
 	}
 }
 

@@ -67,6 +67,8 @@ class PhysicsEngine {
 				data.mass || 1
 			));
 		}
+		this._categorizeBodies();
+		this._calculateForces();
 	}
 
 	removeObject(id) {
@@ -552,6 +554,121 @@ class PhysicsEngine {
 			this._applyAerodynamicsFromCache(obj);
 		}
 	}
+
+	determineOptimalSubSteps(totalDt, timeScale) {
+		const cfg = SIMULATION.SUB_STEPS || {
+			MIN: 20,
+			MAX: 1200,
+			BASE: 40,
+			ETA_GRAV: 0.12,
+			ETA_SURF: 0.08,
+			ETA_VEL: 0.25,
+			ETA_ACC: 0.15,
+			ETA_ATM: 0.10
+		};
+
+		let minAllowedDt = Infinity; // s
+
+		// 1. Check Massive vs Massive
+		const massiveLen = this.massiveBodies.length;
+		for (let i = 0; i < massiveLen; i++) {
+			const objA = this.massiveBodies[i];
+
+			for (let j = i + 1; j < massiveLen; j++) {
+				const objB = this.massiveBodies[j];
+
+				const dx = objB.x - objA.x; // m
+				const dy = objB.y - objA.y; // m
+				const distSq = dx * dx + dy * dy; // m^2
+				const dist = Math.sqrt(distSq); // m
+
+				const dvx = objB.vx - objA.vx; // m/s
+				const dvy = objB.vy - objA.vy; // m/s
+				const vRel = Math.sqrt(dvx * dvx + dvy * dvy); // m/s
+
+				const combinedMass = objA.mass + objB.mass; // t
+				const radiusSum = objA.radius + objB.radius; // m
+				const surfDist = Math.max(dist - radiusSum, 1.0); // m
+
+				// Dynamical time scale from gravity: dt <= eta * sqrt(r^3 / (G * M))
+				const dynScale = Math.sqrt((distSq * dist) / (PHYSICS.G * combinedMass));
+				const dtDyn = cfg.ETA_GRAV * dynScale;
+
+				// Surface approach time: dt <= eta * surfDist / vRel
+				const dtSurf = cfg.ETA_SURF * (surfDist / (vRel + 1e-3));
+
+				if (dtDyn < minAllowedDt) minAllowedDt = dtDyn;
+				if (dtSurf < minAllowedDt) minAllowedDt = dtSurf;
+			}
+
+			// Massive body displacement limit (CFL-like)
+			const vA = objA.getV();
+			if (vA > 1e-3) {
+				const dtVel = cfg.ETA_VEL * (objA.radius / vA);
+				if (dtVel < minAllowedDt) minAllowedDt = dtVel;
+			}
+		}
+
+		// 2. Check Tiny Bodies (Rockets, Debris) & External Forces
+		const tinyLen = this.tinyBodies.length;
+		for (let i = 0; i < tinyLen; i++) {
+			const obj = this.tinyBodies[i];
+			if (obj.collided || obj.shattered) { continue; }
+
+			const v = obj.getV();
+			const a = Math.sqrt(obj.ax * obj.ax + obj.ay * obj.ay);
+
+			// Dominant body proximity and orbital dynamics
+			if (obj.dominantBody && obj.distToDominantM > 0) {
+				const dom = obj.dominantBody;
+				const surfDist = Math.max(obj.distToDominantM - dom.radius - obj.radius, 1.0);
+				const dvx = obj.vx - dom.vx;
+				const dvy = obj.vy - dom.vy;
+				const vRel = Math.sqrt(dvx * dvx + dvy * dvy);
+
+				const dtSurf = cfg.ETA_SURF * (surfDist / (vRel + 1e-3));
+				if (dtSurf < minAllowedDt) minAllowedDt = dtSurf;
+
+				const aGrav = (PHYSICS.G * dom.mass) / Math.max(obj.distToDominantM * obj.distToDominantM, dom.radius * dom.radius);
+				if (aGrav > 1e-6) {
+					const dtDyn = cfg.ETA_GRAV * Math.sqrt(obj.distToDominantM / aGrav);
+					if (dtDyn < minAllowedDt) minAllowedDt = dtDyn;
+				}
+			}
+
+			// Acceleration limit (thrust / atmospheric drag)
+			if (a > 1e-3) {
+				const dtAcc = cfg.ETA_ACC * ((v + 10.0) / a);
+				if (dtAcc < minAllowedDt) minAllowedDt = dtAcc;
+			}
+
+			// Atmosphere entry scale height limit
+			if (obj.inAtmosphere && obj._nearestAtmBody) {
+				const refParam = DEFAULT_OBJECT_PARAMS[obj._nearestAtmBody.name];
+				const H = refParam?.ATM_SCALE_HEIGHT || 8500;
+				const dtAtm = cfg.ETA_ATM * (H / (v + 1.0));
+				if (dtAtm < minAllowedDt) minAllowedDt = dtAtm;
+			}
+
+			// Rocket powered flight safeguard
+			if (obj.type === OBJECT_TYPES.ROCKET && obj.isIgnited && !obj.isHoldDown) {
+				const dtRocket = 0.5; // Ensure sub-second resolution for guidance & mass consumption
+				if (dtRocket < minAllowedDt) minAllowedDt = dtRocket;
+			}
+		}
+
+		// Calculate required steps based on the most restrictive constraint
+		let steps = Math.ceil(totalDt / minAllowedDt);
+
+		// Baseline minimum steps scaled by timeScale
+		const scaledBase = Math.max(cfg.MIN, Math.ceil(cfg.BASE * Math.min(timeScale, 10)));
+		steps = Math.max(steps, scaledBase);
+
+		// Clamp to maximum allowed sub-steps
+		steps = Math.min(steps, cfg.MAX);
+
+		return steps;
+	}
 }
 
 /*******************************************************************
@@ -564,6 +681,7 @@ class SimulationController {
 		this.timeScale = 1;
 		this.isPaused = false;
 		this.profiler = new WorkerProfiler();
+		this.currentSubSteps = SIMULATION.SUB_STEPS?.BASE || 40;
 
 		self.onmessage = this.handleMessage.bind(this);
 		setInterval(() => this.update(), 1000 / SIMULATION.CALC_INTERVAL);
@@ -594,6 +712,7 @@ class SimulationController {
 				this.profiler.enabled = data.value;
 				if (!data.value) {
 					this.profiler.frames = 0;
+					this.profiler.totalSubSteps = 0;
 					for (const key in this.profiler.metrics) {
 						this.profiler.metrics[key] = 0;
 					}
@@ -633,15 +752,23 @@ class SimulationController {
 		const totalDt = elapsed * PHYSICS.YEARS_PER_SECOND / SIMULATION.TIME_SCALE * this.timeScale; // s
 		this.lastTime = now;
 
-		// Calculate sub-step
-		let SUB_STEPS = Math.ceil(SIMULATION.CALC_SUB_STEPS_BASE * this.timeScale);
-		SUB_STEPS = Math.max(1, Math.min(SUB_STEPS, SIMULATION.CALC_SUB_STEPS_MAX));
-		const dt = totalDt / SUB_STEPS; // s
-
 		const tUpdate = this.profiler.start();
 
-		// Refresh body categorizations before running steps
+		// Refresh body categorizations before determining sub-steps & running steps
 		this.engine._categorizeBodies();
+
+		// Calculate adaptive sub-steps based on physical constraints
+		const cfg = SIMULATION.SUB_STEPS;
+		const targetSubSteps = this.engine.determineOptimalSubSteps(totalDt, this.timeScale);
+
+		// Smooth sub-step decrease to prevent frame jitter (Attack-instant, Decay-smoothed)
+		const decay = cfg?.SMOOTHING_DECAY ?? 0.90;
+		let SUB_STEPS = Math.max(targetSubSteps, Math.floor(this.currentSubSteps * decay));
+		SUB_STEPS = Math.max(cfg?.MIN ?? 20, Math.min(SUB_STEPS, cfg?.MAX ?? 1200));
+		this.currentSubSteps = SUB_STEPS;
+
+		const dt = totalDt / SUB_STEPS; // s
+		this.profiler.recordSubSteps(SUB_STEPS);
 
 		// Optimization: Rebuild QuadTree and check collisions only ONCE per frame 
 		// using the total elapsed time, instead of running it every sub-step.
@@ -669,6 +796,7 @@ class SimulationController {
 		self.postMessage({
 			cmd: 'update',
 			deltaTime: dt,
+			subSteps: SUB_STEPS,
 			objectsData: buffer.buffer,
 			validLength: buffer.length
 		}, [buffer.buffer]);
