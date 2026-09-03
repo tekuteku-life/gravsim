@@ -326,6 +326,13 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 250000,
 		"ATM_DENSITY_0": 65,
 		"ATM_SCALE_HEIGHT": 15900,
+		"ATM_FADE_START_ALT": 200000,
+		"ATM_LAYERS": [
+			{ topAlt: 60000, scaleHeight: 15900 },
+			{ topAlt: 120000, scaleHeight: 11000 },
+			{ topAlt: 200000, scaleHeight: 8000 },
+			{ topAlt: 250000, scaleHeight: 5000 }
+		],
 		"ROTATION_PERIOD": 20996800
 	},
 	"Earth": {
@@ -340,6 +347,13 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 100000,
 		"ATM_DENSITY_0": 1.225,
 		"ATM_SCALE_HEIGHT": 8500,
+		"ATM_FADE_START_ALT": 80000,
+		"ATM_LAYERS": [
+			{ topAlt: 25000, scaleHeight: 7600 },
+			{ topAlt: 50000, scaleHeight: 6600 },
+			{ topAlt: 80000, scaleHeight: 5400 },
+			{ topAlt: 100000, scaleHeight: 4500 }
+		],
 		"ROTATION_PERIOD": 86164
 	},
 	"Mars": {
@@ -354,6 +368,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 50000,
 		"ATM_DENSITY_0": 0.02,
 		"ATM_SCALE_HEIGHT": 11100,
+		"ATM_FADE_START_ALT": 40000,
+		"ATM_LAYERS": [
+			{ topAlt: 20000, scaleHeight: 11100 },
+			{ topAlt: 35000, scaleHeight: 8500 },
+			{ topAlt: 50000, scaleHeight: 5500 }
+		],
 		"ROTATION_PERIOD": 88642
 	},
 	"Jupiter": {
@@ -368,6 +388,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 3000000,
 		"ATM_DENSITY_0": 0.16,
 		"ATM_SCALE_HEIGHT": 27000,
+		"ATM_FADE_START_ALT": 2400000,
+		"ATM_LAYERS": [
+			{ topAlt: 500000, scaleHeight: 27000 },
+			{ topAlt: 1500000, scaleHeight: 35000 },
+			{ topAlt: 3000000, scaleHeight: 45000 }
+		],
 		"ROTATION_PERIOD": 35730
 	},
 	"Saturn": {
@@ -382,6 +408,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 4000000,
 		"ATM_DENSITY_0": 0.19,
 		"ATM_SCALE_HEIGHT": 59500,
+		"ATM_FADE_START_ALT": 3200000,
+		"ATM_LAYERS": [
+			{ topAlt: 1000000, scaleHeight: 59500 },
+			{ topAlt: 2500000, scaleHeight: 70000 },
+			{ topAlt: 4000000, scaleHeight: 80000 }
+		],
 		"ROTATION_PERIOD": 38360
 	},
 	"Uranus": {
@@ -396,6 +428,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 2000000,
 		"ATM_DENSITY_0": 0.42,
 		"ATM_SCALE_HEIGHT": 27700,
+		"ATM_FADE_START_ALT": 1600000,
+		"ATM_LAYERS": [
+			{ topAlt: 500000, scaleHeight: 27700 },
+			{ topAlt: 1200000, scaleHeight: 35000 },
+			{ topAlt: 2000000, scaleHeight: 45000 }
+		],
 		"ROTATION_PERIOD": 62064
 	},
 	"Neptune": {
@@ -410,6 +448,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 2000000,
 		"ATM_DENSITY_0": 0.45,
 		"ATM_SCALE_HEIGHT": 19700,
+		"ATM_FADE_START_ALT": 1600000,
+		"ATM_LAYERS": [
+			{ topAlt: 500000, scaleHeight: 19700 },
+			{ topAlt: 1200000, scaleHeight: 28000 },
+			{ topAlt: 2000000, scaleHeight: 38000 }
+		],
 		"ROTATION_PERIOD": 57996
 	},
 	"Moon": {
