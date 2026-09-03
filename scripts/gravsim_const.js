@@ -20,7 +20,19 @@ export const SIMULATION = {
 	CALC_EXPAND_DIV_NUM: 20,
 	CALC_SUB_STEPS_BASE: 600,
 	CALC_SUB_STEPS_MAX: 480,
-	MIN_GRAVITY_CALC_MASS: 1e10 // t
+	MIN_GRAVITY_CALC_MASS: 1e10, // t
+	// Adaptive sub-step configurations
+	SUB_STEPS: {
+		MIN: 20,
+		MAX: 1200,
+		BASE: 40,
+		ETA_GRAV: 0.12,       // Dynamical time factor: dt <= eta * sqrt(r / a)
+		ETA_SURF: 0.08,       // Surface approach factor: dt <= eta * dist_surf / v_rel
+		ETA_VEL: 0.25,        // Movement restriction: dt <= eta * radius / v
+		ETA_ACC: 0.15,        // Acceleration change: dt <= eta * (v + v0) / a
+		ETA_ATM: 0.10,        // Atmosphere scale height: dt <= eta * H / v
+		SMOOTHING_DECAY: 0.90 // Decay factor for smooth step reduction
+	}
 };
 
 // Shattering / Roche limit

@@ -192,8 +192,9 @@ export class Universe {
 	updateObjectParams(data) {
 		this.ObjectManager.updateObjectParams(data);
 
-		// Measure Physics Worker FPS
-		EventBus.emit('physics-updated');
+		// Measure Physics Worker FPS and propagate subSteps
+		this.currentSubSteps = data.subSteps || 0;
+		EventBus.emit('physics-updated', data.subSteps);
 	}
 
 	reset() {

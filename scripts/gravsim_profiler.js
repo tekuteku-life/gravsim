@@ -72,7 +72,13 @@ export class WorkerProfiler {
 			PostMessage: 0,
 			TotalUpdate: 0
 		};
+		this.totalSubSteps = 0;
 		this.frames = 0;
+	}
+
+	recordSubSteps(count) {
+		if (!this.enabled) { return; }
+		this.totalSubSteps += count;
 	}
 
 	start() {
@@ -98,11 +104,13 @@ export class WorkerProfiler {
 				}
 			}
 			console.log(` - ${"TOTAL UPDATE".padEnd(25)}: ${(this.metrics.TotalUpdate / 60).toFixed(2)} ms`);
+			console.log(` - ${"AVG SUB-STEPS".padEnd(25)}: ${(this.totalSubSteps / 60).toFixed(1)} steps/frame`);
 			console.log("=========================================");
 
 			for (const key in this.metrics) {
 				this.metrics[key] = 0;
 			}
+			this.totalSubSteps = 0;
 			this.frames = 0;
 		}
 	}
