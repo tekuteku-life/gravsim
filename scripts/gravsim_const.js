@@ -245,7 +245,11 @@ export const FLIGHT_COMPUTER_CONFIG = {
 	THROTTLE_DOWN_MIN_Vv: 0,
 	ANTI_STALL_Vv_THRESHOLD: 100,
 	ANTI_STALL_MAX_PITCH_UP: 45,
-	LOAD_RELIEF_SAFE_MARGIN: 0.8
+	LOAD_RELIEF_SAFE_MARGIN: 0.8,
+	MAX_Q_MIN_PRESSURE_KPA: 1.0,
+	MAX_Q_PEAK_DROP_RATIO: 0.05,
+	MAX_Q_CONFIRM_DELAY_SEC: 0.5,
+	MAX_Q_KEEP_DURATION_SEC: 3.0,
 };
 
 // Communication buffer structure
@@ -478,7 +482,15 @@ export const LAUNCH_SEQUENCES = {
 				"4": "num_4",
 				"5": "num_5"
 			},
-			conditions: []
+			conditions: [
+				{ id: "tower_clear", type: "altM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
+				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
+				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
+				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
+				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true }, // 3 = TELEMETRY.STATUS.MECO
+				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
+				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }
+			]
 		}
 	},
 	FULL_COUNTDOWN: {
@@ -556,7 +568,7 @@ export const LAUNCH_SEQUENCES = {
 				{ id: "tower_clear", type: "altM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
 				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
 				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
-				{ id: "approach_maxq", type: "structRatio", operator: ">", value: 80, audio: "fl_approach_maxq", once: true },
+				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
 				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true }, // 3 = TELEMETRY.STATUS.MECO
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
 				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }

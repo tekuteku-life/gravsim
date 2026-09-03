@@ -232,7 +232,7 @@ export class TelemetryPanel {
 		
 		DOMUtils.setText(this.ui.missionStatus, mStat);
 		
-		if (mStat === TELEMETRY.STATUS_MAP[3]) { 
+		if (tm.status === TELEMETRY.STATUS.MAX_Q) {
 			DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.MAX_Q_COLOR);
 		} else { 
 			// Will be overridden by CSS in auto-sequence mode

@@ -23,6 +23,11 @@ export class FlightComputer {
 		this.currentThrustAngleRad = this.currentThrustAngle;
 		this._profileState = { throttle: 1.0, relAngleDeg: 0 };
 
+		this.maxRecordedQ = 0; // kPa
+		this.hasPassedMaxQ = false;
+		this.maxQConfirmTimer = 0; // s
+		this.maxQStatusTimer = 0; // s
+
 		this.telemetryCache = {
 			status: TELEMETRY.STATUS.PRE_LAUNCH,
 			qAxialKpa: 0,
@@ -117,16 +122,34 @@ export class FlightComputer {
 		this.currentThrustAngle = thrustAngleRad;
 		const throttle = this._computeThrottle(sensor, this._profileState.throttle);
 
+		// Peak hold and confirmation check for Max-Q pass detection
+		if (!sensor.isHoldDown && !this.hasPassedMaxQ) {
+			const totalQ = sensor.qAxialKpa + sensor.qLateralKpa; // kPa
+			const minQ = FLIGHT_COMPUTER_CONFIG.MAX_Q_MIN_PRESSURE_KPA || 1.0;
+
+			if (totalQ > this.maxRecordedQ) {
+				this.maxRecordedQ = totalQ;
+				this.maxQConfirmTimer = 0;
+			} else if (this.maxRecordedQ >= minQ) {
+				const dropRatio = (this.maxRecordedQ - totalQ) / this.maxRecordedQ;
+				if (dropRatio >= FLIGHT_COMPUTER_CONFIG.MAX_Q_PEAK_DROP_RATIO) {
+					this.maxQConfirmTimer += sensor.dt;
+					if (this.maxQConfirmTimer >= FLIGHT_COMPUTER_CONFIG.MAX_Q_CONFIRM_DELAY_SEC) {
+						this.hasPassedMaxQ = true;
+					}
+				}
+			}
+		}
+
 		// Decide mission status
 		let statusInt = TELEMETRY.STATUS.PRE_LAUNCH;
 		if (sensor.isHoldDown) {
 			statusInt = TELEMETRY.STATUS.PRE_LAUNCH;
+		} else if (this.hasPassedMaxQ && this.maxQStatusTimer < FLIGHT_COMPUTER_CONFIG.MAX_Q_KEEP_DURATION_SEC) {
+			this.maxQStatusTimer += sensor.dt;
+			statusInt = TELEMETRY.STATUS.MAX_Q;
 		} else if (sensor.burnTime > 0 && throttle > 0) {
-			if (this.telemetryCache.structRatio > TELEMETRY.MAX_Q_TH) {
-				statusInt = TELEMETRY.STATUS.MAX_Q;
-			} else {
-				statusInt = TELEMETRY.STATUS.ASCENT;
-			}
+			statusInt = TELEMETRY.STATUS.ASCENT;
 		} else if (this.flightTime > 0) {
 			if (sensor.massLossRate > 0 && sensor.fuelMass <= 0) {
 				statusInt = TELEMETRY.STATUS.MECO;
@@ -134,14 +157,14 @@ export class FlightComputer {
 				statusInt = TELEMETRY.STATUS.COASTING;
 			}
 		}
-		this.telemetryCache.status = statusInt;
 
+		this.telemetryCache.status = statusInt;
 		this.currentThrottle = throttle;
 		this.currentThrustAngleRad = this.currentThrustAngle;
 	}
 
 	_updateTelemetry(sensor) {
-		let altM = 0;
+		let altM = 0; // m
 		let vV = 0, vH = 0, aV = 0, aH = 0;
 		let gravityAngle = 0;
 		let localG_ms2 = 0;
@@ -150,8 +173,8 @@ export class FlightComputer {
 			localG_ms2 = (PHYSICS.G * sensor.refBody.mass) / Math.pow(sensor.distToRefM, 2);
 			altM = sensor.distToRefM - sensor.refBody.radius;
 
-			const dx = sensor.x - sensor.refBody.x;
-			const dy = sensor.y - sensor.refBody.y;
+			const dx = sensor.x - sensor.refBody.x; // m
+			const dy = sensor.y - sensor.refBody.y; // m
 
 			if (sensor.distToRefM > 0) {
 				const uRx = dx / sensor.distToRefM;
@@ -160,9 +183,8 @@ export class FlightComputer {
 				const uHy = uRx;
 
 				// Calculate surface relative velocity
-				let hostVx = sensor.refBody.vx;
-				let hostVy = sensor.refBody.vy;
-
+				let hostVx = sensor.refBody.vx; // m/s
+				let hostVy = sensor.refBody.vy; // m/s
 				const refParam = DEFAULT_OBJECT_PARAMS[sensor.refBody.name];
 				if (refParam && refParam.ROTATION_PERIOD) {
 					const omega = (2 * Math.PI) / refParam.ROTATION_PERIOD;
@@ -170,15 +192,13 @@ export class FlightComputer {
 					hostVy += omega * dx;
 				}
 
-				const dvx = sensor.vx - hostVx;
-				const dvy = sensor.vy - hostVy;
+				const dvx = sensor.vx - hostVx; // m/s
+				const dvy = sensor.vy - hostVy; // m/s
 
 				vV = dvx * uRx + dvy * uRy;
 				vH = dvx * uHx + dvy * uHy;
-
 				aV = sensor.ax * uRx + sensor.ay * uRy;
 				aH = sensor.ax * uHx + sensor.ay * uHy;
-
 				gravityAngle = Math.atan2(-dy, -dx);
 			}
 		}
@@ -186,9 +206,9 @@ export class FlightComputer {
 		const totalAccel = Math.sqrt(sensor.ax * sensor.ax + sensor.ay * sensor.ay);
 		const currentG = totalAccel / PHYSICS.G0;
 
-		let remDv = 0;
+		let remDv = 0; // m/s
 		if (sensor.dryMass > 0) {
-			let ve = 320 * PHYSICS.G0; 
+			let ve = 320 * PHYSICS.G0; // m/s
 			if (sensor.thrustForce > 0 && sensor.massLossRate > 0) {
 				ve = sensor.thrustForce / sensor.massLossRate;
 			}
@@ -203,7 +223,6 @@ export class FlightComputer {
 		if (this.config.maxQAxialLimit !== Infinity && this.config.maxQLateralLimit !== Infinity) {
 			const isTailFirst = Math.cos(UnitConvertUtils.deg2rad(sensor.aoaDeg)) < 0;
 			const effectiveAxialLimit = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
-
 			const axialRatio = UnitConvertUtils.kpa2pa(sensor.qAxialKpa) / effectiveAxialLimit;
 			const lateralRatio = UnitConvertUtils.kpa2pa(sensor.qLateralKpa) / this.config.maxQLateralLimit;
 
@@ -283,7 +302,7 @@ export class FlightComputer {
 			return zenithAngle;
 		}
 
-		const Q = sensor.qAxialKpa + sensor.qLateralKpa;
+		const Q = sensor.qAxialKpa + sensor.qLateralKpa; // kPa
 
 		// Tower Clearance
 		if (this.flightTime < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_TIME
@@ -304,7 +323,6 @@ export class FlightComputer {
 		if (Q > 0.05 && this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD) {
 			const stallFactor = Math.max(0, (FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD - this.telemetryCache.vV) / FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD);
 			const maxPitchUp = UnitConvertUtils.deg2rad(FLIGHT_COMPUTER_CONFIG.ANTI_STALL_MAX_PITCH_UP);
-			
 			const upAngle = this.telemetryCache.gravityAngle + Math.PI;
 			let angleToUp = MathUtils.normalizeAngle(upAngle - targetAngle);
 
