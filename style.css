@@ -338,15 +338,38 @@ button:hover { background: #444; }
 	color: #ffaa00 !important;
 }
 
+/* Minimal HUD Bar */
+#minimal-hud-bar {
+	position: fixed;
+	top: 8px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: rgba(0, 20, 10, 0.75);
+	border: 1px solid rgba(0, 255, 204, 0.4);
+	border-radius: 14px;
+	padding: 3px 12px;
+	color: #00ffcc;
+	font-family: 'Courier New', Courier, monospace;
+	font-size: 11px;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+	pointer-events: none;
+	z-index: 1000;
+	text-shadow: 0 0 4px rgba(0, 255, 204, 0.5);
+	box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+	backdrop-filter: blur(4px);
+	display: none;
+}
+
 #telemetry-panel {
 	position: absolute;
 	top: 35px;
 	right: 2px;
-	width: 270px;
+	width: 290px;
 	max-height: calc(100vh - 60px);
 	overflow-x: hidden;
 	overflow-y: auto;
-	touch-action: pan-y;
+	touch-action: pan-x pan-y;
 	pointer-events: auto;
 	background-color: rgba(0, 20, 0, 0.7);
 	border: 1px solid #00ffcc;
@@ -369,13 +392,114 @@ button:hover { background: #444; }
 	visibility: visible;
 }
 
-/* 2-Column layout structure (Act as 1-column on PC) */
-.tm-2col-container {
+/* Telemetry Cards Carousel */
+.tm-carousel {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
+	gap: 8px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scroll-snap-type: x mandatory;
+	-webkit-overflow-scrolling: touch;
+	touch-action: pan-x pan-y;
+	scroll-behavior: smooth;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	margin-top: 8px;
+	padding: 2px;
 }
-.tm-col {
-	width: 100%;
+.tm-carousel::-webkit-scrollbar {
+	display: none;
+}
+
+.tm-card {
+	flex: 0 0 100%;
+	scroll-snap-align: start;
+	box-sizing: border-box;
+	background: rgba(0, 30, 20, 0.4);
+	border: 1px solid rgba(0, 255, 204, 0.3);
+	border-radius: 4px;
+	padding: 8px;
+}
+
+.tm-dots {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 6px;
+	margin-top: 6px;
+	padding-top: 2px;
+}
+
+/* When vertical space is sufficient on PC, display multiple cards vertically without scrollbar */
+@media (min-width: 769px) and (min-height: 550px) {
+	#telemetry-panel {
+		padding: 8px 8px 6px 8px;
+		font-size: 12px;
+	}
+	.telemetry-header {
+		font-size: 13px;
+		margin-bottom: 4px;
+		padding-bottom: 2px;
+	}
+	.telemetry-line {
+		margin-bottom: 2px;
+		font-size: 12px;
+	}
+	#tm-status-box {
+		padding: 2px;
+		margin-top: 3px;
+		font-size: 12px;
+	}
+	.tm-section-header {
+		font-size: 11px;
+		margin-top: 0;
+		margin-bottom: 2px;
+		padding-bottom: 1px;
+	}
+	.tm-carousel {
+		flex-direction: column;
+		overflow-x: hidden;
+		overflow-y: hidden; /* Scrollbar eliminated */
+		gap: 5px;
+		margin-top: 4px;
+		padding: 0;
+	}
+	.tm-card {
+		flex: 0 0 auto;
+		width: 100%;
+		padding: 4px 6px;
+	}
+	.tm-dots {
+		display: none;
+	}
+	#sub-canvas {
+		width: 100%;
+		height: 95px;
+	}
+	#tm-nav-wrapper {
+		height: 20px;
+	}
+	#tm-fuel-bar-wrapper, #tm-oxid-bar-wrapper {
+		height: 5px;
+		margin-bottom: 1px;
+	}
+}
+
+.tm-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: rgba(0, 255, 204, 0.25);
+	border: 1px solid rgba(0, 255, 204, 0.5);
+	cursor: pointer;
+	transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tm-dot.active {
+	background: #00ffcc;
+	transform: scale(1.3);
+	box-shadow: 0 0 6px #00ffcc;
 }
 
 .telemetry-header {
@@ -605,23 +729,20 @@ button:hover { background: #444; }
 		max-height: calc(45dvh - 65px);
 	}
 
-	/* 2-Column layout for telemetry content on Mobile */
-	.tm-2col-container {
-		flex-direction: row;
-		gap: 10px;
-	}
-	.tm-col {
-		width: 50%;
+	/* Carousel Cards on Mobile: peek next card */
+	.tm-card {
+		flex: 0 0 calc(100% - 28px);
+		scroll-snap-align: center;
 	}
 
 	/* Compact UI for Mobile Telemetry */
-	#telemetry-panel { font-size: 10px; }
+	#telemetry-panel { font-size: 11px; }
 	.telemetry-header { font-size: 12px; }
-	.tm-section-header { font-size: 11px; margin-top: 5px; }
+	.tm-section-header { font-size: 11px; margin-top: 2px; }
 
 	#sub-canvas {
 		width: 100% !important;
-		height: 50vw !important;
+		height: 120px !important;
 	}
 }
 

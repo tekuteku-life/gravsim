@@ -27,6 +27,11 @@
 			<div id="cd-event">STANDING BY</div>
 		</div>
 
+		<!-- Minimal HUD Bar (Shown when telemetry panel is closed and rocket is active) -->
+		<div id="minimal-hud-bar">
+			MET: <span id="m-hud-met">T+ ---y ---d --:--:--</span> | STAT: <span id="m-hud-stat">PRE-LAUNCH</span> | ALT: <span id="m-hud-alt">---</span> km | VEL: <span id="m-hud-vel">---</span> km/s
+		</div>
+
 		<div id="telemetry-panel">
 			<div class="telemetry-header">TELEMETRY HUD</div>
 			<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
@@ -36,24 +41,24 @@
 			</div>
 			<div class="telemetry-line" style="margin-top: 5px;">MET: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
 
-			<div class="tm-2col-container">
-				<div class="tm-col">
-					<div class="tm-section-header">[ VESSEL STATE ]</div>
+			<!-- Telemetry Cards Carousel Container -->
+			<div id="tm-carousel" class="tm-carousel">
+				<!-- Card 1: Flight & Dynamics -->
+				<div class="tm-card" id="tm-card-dynamics" data-index="0">
+					<div class="tm-section-header">[ FLIGHT & DYNAMICS ]</div>
 					<div class="telemetry-line">MASS     : <span id="tm-mass">---</span> t</div>
-					<div class="telemetry-line">REM ΔV   : <span id="tm-rem-dv">---</span> km/s</div>
-					<div class="telemetry-line">CUR TWR  : <span id="tm-twr">---</span></div>
-
-					<div class="tm-section-header">[ AERODYNAMICS ]</div>
-					<div class="telemetry-line">PITCH/AOA: <span id="tm-pitch">---</span> / <span id="tm-aoa">---</span> °</div>
-					<div class="telemetry-line">DYN PRES : <span id="tm-dyn">---</span> % Max-Q</div>
-					<div class="telemetry-line">Q AX/LAT : <span id="tm-dyn-ax">---</span> / <span id="tm-dyn-lat">---</span> kPa</div>
-
-					<div class="tm-section-header">[ FLIGHT DYNAMICS ]</div>
 					<div class="telemetry-line">ALTITUDE : <span id="tm-alt">---</span> km</div>
 					<div class="telemetry-line">VEL (V/H): <span id="tm-vel-v">---</span> / <span id="tm-vel-h">---</span> km/s</div>
 					<div class="telemetry-line">ACC (V/H): <span id="tm-acc-v">---</span> / <span id="tm-acc-h">---</span> G</div>
+				</div>
 
-					<div style="margin-top: 10px;">
+				<!-- Card 2: Aerodynamics & Guidance -->
+				<div class="tm-card" id="tm-card-aero" data-index="1">
+					<div class="tm-section-header">[ AERO & GUIDANCE ]</div>
+					<div class="telemetry-line">PITCH/AOA: <span id="tm-pitch">---</span> / <span id="tm-aoa">---</span> °</div>
+					<div class="telemetry-line">DYN PRES : <span id="tm-dyn">---</span> % Max-Q</div>
+					<div class="telemetry-line">Q AX/LAT : <span id="tm-dyn-ax">---</span> / <span id="tm-dyn-lat">---</span> kPa</div>
+					<div style="margin-top: 8px;">
 						<div class="tm-bar-header">FLIGHT DIRECTOR</div>
 						<div id="tm-nav-wrapper">
 							<div id="tm-nav-direction">＋</div>
@@ -61,16 +66,17 @@
 							<div id="tm-nav-gravity">↓</div>
 						</div>
 					</div>
-
 				</div>
 
-				<div class="tm-col">
-					<div class="tm-section-header">[ PROPULSION ]</div>
+				<!-- Card 3: Propulsion & Consumables -->
+				<div class="tm-card" id="tm-card-propulsion" data-index="2">
+					<div class="tm-section-header">[ PROPULSION & TANKS ]</div>
+					<div class="telemetry-line">REM ΔV   : <span id="tm-rem-dv">---</span> km/s</div>
+					<div class="telemetry-line">CUR TWR  : <span id="tm-twr">---</span></div>
 					<div class="telemetry-line">THROTTLE : <span id="tm-thrtl">---</span> %</div>
 					<div class="telemetry-line">FUEL     : <span id="tm-fuel-mass">---</span> t / <span id="tm-tank-pres-fuel">---</span> kPa</div>
 					<div class="telemetry-line">OXIDIZER : <span id="tm-oxid-mass">---</span> t / <span id="tm-tank-pres-oxid">---</span> kPa</div>
-
-					<div style="margin: 10px 0;">
+					<div style="margin: 6px 0;">
 						<div class="tm-bar-header">PROPELLANT (F/O)</div>
 						<div id="tm-fuel-bar-wrapper">
 							<div id="tm-fuel-bar"></div>
@@ -79,10 +85,26 @@
 							<div id="tm-oxid-bar"></div>
 						</div>
 					</div>
-
-					<div class="telemetry-header">TARGET CAMERA</div>
-					<canvas id="sub-canvas"></canvas>
 				</div>
+
+				<!-- Card 4: Navigation & Camera -->
+				<div class="tm-card" id="tm-card-navigation" data-index="3">
+					<div class="tm-section-header">[ NAVIGATION & CAMERA ]</div>
+					<div class="telemetry-line">REF BODY : <span id="tm-dominant-body">---</span></div>
+					<div class="telemetry-line">DIST REF : <span id="tm-dist-ref">---</span> km</div>
+					<div style="margin-top: 6px;">
+						<div class="tm-bar-header">TARGET CAMERA</div>
+						<canvas id="sub-canvas"></canvas>
+					</div>
+				</div>
+			</div>
+
+			<!-- Carousel Pagination Dots -->
+			<div id="tm-dots" class="tm-dots">
+				<span class="tm-dot active" data-index="0"></span>
+				<span class="tm-dot" data-index="1"></span>
+				<span class="tm-dot" data-index="2"></span>
+				<span class="tm-dot" data-index="3"></span>
 			</div>
 		</div>
 
