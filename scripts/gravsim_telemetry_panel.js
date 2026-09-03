@@ -22,12 +22,28 @@ export class TelemetryPanel {
 		this.targetId = 0;
 		this.activeCardIndex = 0;
 
+		this.lampTestTimer = 0;
+		this.lastUpdateTime = performance.now();
+
 		this.ui = {
 			toggleBtn: document.getElementById('telemetry-toggle-btn'),
 			panel: document.getElementById('telemetry-panel'),
 			targetSelect: document.getElementById('tm-target-select'),
 			missionStatus: document.getElementById('tm-mission-status'),
 			missionTime: document.getElementById('tm-met'),
+			annunciator: document.getElementById('tm-annunciator'),
+			lampQlim: document.getElementById('tm-lamp-qlim'),
+			lampGlim: document.getElementById('tm-lamp-glim'),
+			lampStall: document.getElementById('tm-lamp-stall'),
+			lampWarn: document.getElementById('tm-lamp-warn'),
+			lampAuto: document.getElementById('tm-lamp-auto'),
+			lampTwr: document.getElementById('tm-lamp-twr'),
+			lampPitch: document.getElementById('tm-lamp-pitch'),
+			lampOrbit: document.getElementById('tm-lamp-orbit'),
+			lampPress: document.getElementById('tm-lamp-press'),
+			lampEng: document.getElementById('tm-lamp-eng'),
+			lampMeco: document.getElementById('tm-lamp-meco'),
+			lampSep: document.getElementById('tm-lamp-sep'),
 			carousel: document.getElementById('tm-carousel'),
 			dots: document.getElementById('tm-dots'),
 			minimalHud: document.getElementById('minimal-hud-bar'),
@@ -35,12 +51,28 @@ export class TelemetryPanel {
 			mHudStat: document.getElementById('m-hud-stat'),
 			mHudAlt: document.getElementById('m-hud-alt'),
 			mHudVel: document.getElementById('m-hud-vel'),
+			mHudAlert: document.getElementById('m-hud-alert'),
 			subCanvas: document.getElementById('sub-canvas'),
 			countdownDisplay: document.getElementById('countdown-display'),
 			cdTime: document.getElementById('cd-time'),
 			cdEvent: document.getElementById('cd-event'),
 		};
 		DOMUtils.verifyElements(this.ui, 'TelemetryPanel');
+
+		this.lamps = {
+			qlim: this.ui.lampQlim,
+			glim: this.ui.lampGlim,
+			stall: this.ui.lampStall,
+			warn: this.ui.lampWarn,
+			auto: this.ui.lampAuto,
+			twr: this.ui.lampTwr,
+			pitch: this.ui.lampPitch,
+			orbit: this.ui.lampOrbit,
+			press: this.ui.lampPress,
+			eng: this.ui.lampEng,
+			meco: this.ui.lampMeco,
+			sep: this.ui.lampSep,
+		};
 
 		this.subRenderer = new Renderer(this.ui.subCanvas, 'telemetry');
 
@@ -208,9 +240,17 @@ export class TelemetryPanel {
 			});
 		}
 
+		// Click on annunciator to trigger Lamp Test
+		if (this.ui.annunciator) {
+			this.ui.annunciator.addEventListener('click', () => {
+				this.startLampTest(TELEMETRY.ANNUNCIATOR?.LAMP_TEST_DURATION_SEC || 1.5);
+			});
+		}
+
 		// Event listeners for launch sequence updates and animations
 		EventBus.on('sequencer-start', () => {
 			this.ui.countdownDisplay.style.display = 'block';
+			this.startLampTest(2.0);
 		});
 
 		const resetSequenceUI = () => {
@@ -233,6 +273,7 @@ export class TelemetryPanel {
 
 		EventBus.on('auto-sequence-start', () => {
 			this.ui.panel.classList.add('auto-sequence-mode');
+			this.startLampTest(2.0);
 		});
 
 		EventBus.on('liftoff', () => {
@@ -342,6 +383,14 @@ export class TelemetryPanel {
 	}
 
 	update() {
+		const now = performance.now();
+		const dt = Math.min(0.2, (now - this.lastUpdateTime) / 1000);
+		this.lastUpdateTime = now;
+
+		if (this.lampTestTimer > 0) {
+			this.lampTestTimer -= dt;
+		}
+
 		const target = this._resolveTarget();
 
 		// Minimal HUD Bar when telemetry panel is closed
@@ -350,12 +399,17 @@ export class TelemetryPanel {
 			return;
 		}
 
-		if (!target) { return; }
+		if (!target) {
+			this._resetPinnedHeader(null);
+			this._resetAnnunciator();
+			return;
+		}
 
 		const isRocketWithTelemetry = target.type === OBJECT_TYPES.ROCKET && target.telemetry;
 
 		if (isRocketWithTelemetry) {
 			this._updatePinnedHeader(target);
+			this._updateAnnunciator(target, target.telemetry);
 			for (const card of this.cards) {
 				if (card.isVisible) {
 					card.update(target, target.telemetry);
@@ -363,6 +417,7 @@ export class TelemetryPanel {
 			}
 		} else {
 			this._resetPinnedHeader(target);
+			this._resetAnnunciator();
 			for (const card of this.cards) {
 				if (card.isVisible) {
 					card.resetUI(target);
@@ -404,6 +459,7 @@ export class TelemetryPanel {
 	_updateMinimalHud(target) {
 		if (this.isOpen || !target || target.type !== OBJECT_TYPES.ROCKET || !target.telemetry) {
 			this.ui.minimalHud.style.display = 'none';
+			if (this.ui.mHudAlert) this.ui.mHudAlert.style.display = 'none';
 			return;
 		}
 
@@ -426,6 +482,120 @@ export class TelemetryPanel {
 		DOMUtils.setText(this.ui.mHudStat, mStat);
 		DOMUtils.setText(this.ui.mHudAlt, (UnitConvertUtils.m2km(tm.altM)).toFixed(1));
 		DOMUtils.setText(this.ui.mHudVel, totalVelKmS.toFixed(2));
+
+		// Minimal HUD Alert badge
+		if (this.ui.mHudAlert) {
+			const maxG = target.maxGLimit || 0;
+			const isQLimit = Boolean(tm.isQLimitNear || (tm.structRatio >= (TELEMETRY.ANNUNCIATOR?.Q_LIM_TH || 75)) || (tm.status === TELEMETRY.STATUS.MAX_Q));
+			const isGLimit = Boolean(tm.isGLimitNear || (maxG > 0 && tm.currentG >= maxG * (TELEMETRY.ANNUNCIATOR?.G_LIM_RATIO || 0.85)));
+			const isStall = Boolean(tm.isAntiStallActive);
+
+			if (isQLimit) {
+				DOMUtils.setText(this.ui.mHudAlert, '[Q-LIM]');
+				this.ui.mHudAlert.style.display = 'inline';
+			} else if (isGLimit) {
+				DOMUtils.setText(this.ui.mHudAlert, '[G-LIM]');
+				this.ui.mHudAlert.style.display = 'inline';
+			} else if (isStall) {
+				DOMUtils.setText(this.ui.mHudAlert, '[STALL]');
+				this.ui.mHudAlert.style.display = 'inline';
+			} else {
+				this.ui.mHudAlert.style.display = 'none';
+			}
+		}
+	}
+
+	startLampTest(durationSec = 1.5) {
+		this.lampTestTimer = durationSec;
+	}
+
+	_updateAnnunciator(target, tm) {
+		if (!this.lamps) return;
+
+		// Lamp Test mode: Light all lamps solidly
+		if (this.lampTestTimer > 0) {
+			for (const lamp of Object.values(this.lamps)) {
+				lamp.classList.add('on');
+				lamp.classList.remove('blink');
+			}
+			return;
+		}
+
+		const conf = TELEMETRY.ANNUNCIATOR || {};
+		const qLimitTh = conf.Q_LIM_TH || 75;
+		const gRatioTh = conf.G_LIM_RATIO || 0.85;
+		const twrAltTh = conf.TOWER_CLEARANCE_ALT || 1000;
+		const twrTimeTh = conf.TOWER_CLEARANCE_TIME || 10;
+		const fairingAltTh = conf.FAIRING_SEP_ALT || 100000;
+		const orbitVelKmS = conf.ORBITAL_VELOCITY_KM_S || 7.5;
+
+		const maxG = target.maxGLimit || 0;
+		const totalVelKmS = Math.sqrt(tm.vV * tm.vV + tm.vH * tm.vH) / 1000;
+
+		// 1. Q-LIM (Dynamic Pressure Limit approaching)
+		const isQLimit = Boolean(tm.isQLimitNear || tm.structRatio >= qLimitTh || tm.status === TELEMETRY.STATUS.MAX_Q);
+		this._setLamp('qlim', isQLimit, isQLimit);
+
+		// 2. G-LIM (G-Force Limit approaching)
+		const isGLimit = Boolean(tm.isGLimitNear || (maxG > 0 && tm.currentG >= maxG * gRatioTh));
+		this._setLamp('glim', isGLimit, isGLimit);
+
+		// 3. STALL (Anti-Stall / Load Relief active)
+		const isStall = Boolean(tm.isAntiStallActive);
+		this._setLamp('stall', isStall, false);
+
+		// 4. WARN (Master Caution / Warning)
+		const isLowPropellant = target.isIgnited && target.fuelMass > 0 && target.fuelMass <= 0.05 * (target.maxFuel || target.fuelMass);
+		const isMasterWarn = isQLimit || isGLimit || isStall || isLowPropellant;
+		this._setLamp('warn', isMasterWarn, isMasterWarn);
+
+		// 5. AUTO (Automatic Flight Guidance active)
+		const isAuto = Boolean(target.autoControl || (this.universe.LaunchSequencer.isActive && this.universe.LaunchSequencer.isAutoSequence));
+		this._setLamp('auto', isAuto, false);
+
+		// 6. TWR-C (Tower Cleared)
+		const isLaunched = tm.status !== TELEMETRY.STATUS.PRE_LAUNCH;
+		const isTowerCleared = isLaunched && (tm.altM >= twrAltTh || tm.flightTime >= twrTimeTh);
+		this._setLamp('twr', isTowerCleared, false);
+
+		// 7. PITCH (Pitch / Gravity turn program)
+		const isPitching = isTowerCleared && (tm.status === TELEMETRY.STATUS.ASCENT || tm.status === TELEMETRY.STATUS.MAX_Q);
+		this._setLamp('pitch', isPitching, false);
+
+		// 8. ORBIT (Orbital velocity acquired / Insertion)
+		const isOrbit = isLaunched && (totalVelKmS >= orbitVelKmS && tm.altM >= 80000);
+		this._setLamp('orbit', isOrbit, false);
+
+		// 9. PRESS (Tank pressure nominal)
+		const isPress = target.presState === 'NOMINAL' || (tm.tankPresFuel >= 250 && tm.tankPresOxid >= 250);
+		this._setLamp('press', isPress, false);
+
+		// 10. ENG-ON (Main engine thrusting)
+		const isEngOn = Boolean(target.thrustRatio > 0.01 && target.fuelMass > 0.01 && (target.burnTime > 0 || target.isIgnited));
+		this._setLamp('eng', isEngOn, false);
+
+		// 11. MECO (Main engine cutoff)
+		const isMeco = isLaunched && (tm.status === TELEMETRY.STATUS.MECO || tm.status === TELEMETRY.STATUS.COASTING || tm.status === TELEMETRY.STATUS.TRACKING || (target.fuelMass <= 0.01 && !isEngOn));
+		this._setLamp('meco', isMeco, false);
+
+		// 12. STG-SEP (Fairing / Stage separation)
+		const isStageSep = isLaunched && (tm.altM >= fairingAltTh || (isMeco && tm.flightTime > 15));
+		this._setLamp('sep', isStageSep, false);
+	}
+
+	_setLamp(lampKey, isOn, isBlink = false) {
+		const lamp = this.lamps[lampKey];
+		if (!lamp) return;
+		lamp.classList.toggle('on', isOn);
+		lamp.classList.toggle('blink', isOn && isBlink);
+	}
+
+	_resetAnnunciator() {
+		if (!this.lamps) return;
+		for (const lamp of Object.values(this.lamps)) {
+			lamp.classList.remove('on');
+			lamp.classList.remove('blink');
+		}
 	}
 
 	draw() {

@@ -243,6 +243,15 @@ export const TELEMETRY = {
 		"3": "MECO",
 		"4": "COASTING",
 		"5": "TRACKING"
+	},
+	ANNUNCIATOR: {
+		Q_LIM_TH: 75, // % of structural limit
+		G_LIM_RATIO: 0.85, // 85% of max G limit
+		LAMP_TEST_DURATION_SEC: 1.5,
+		TOWER_CLEARANCE_ALT: 1000, // m
+		TOWER_CLEARANCE_TIME: 10, // s
+		FAIRING_SEP_ALT: 100000, // m (Karman line)
+		ORBITAL_VELOCITY_KM_S: 7.5 // km/s
 	}
 };
 

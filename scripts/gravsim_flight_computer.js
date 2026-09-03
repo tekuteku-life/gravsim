@@ -44,7 +44,11 @@ export class FlightComputer {
 			vH: 0, // m/s
 			aV: 0, // G
 			aH: 0, // G
+			isAntiStallActive: false,
+			isQLimitNear: false,
+			isGLimitNear: false,
 		};
+		this._isAntiStallActive = false;
 	}
 
 	_evaluateProfile(sensor) {
@@ -161,6 +165,19 @@ export class FlightComputer {
 		this.telemetryCache.status = statusInt;
 		this.currentThrottle = throttle;
 		this.currentThrustAngleRad = this.currentThrustAngle;
+
+		// Annunciator indicator flags
+		const gRatioTh = TELEMETRY.ANNUNCIATOR?.G_LIM_RATIO || 0.85;
+		const isGLimitNear = (this.config.maxGLimit > 0 && this.config.maxGLimit !== Infinity)
+			&& (this.telemetryCache.currentG >= this.config.maxGLimit * gRatioTh);
+
+		const qLimitTh = TELEMETRY.ANNUNCIATOR?.Q_LIM_TH || 75;
+		const isQLimitNear = (this.telemetryCache.structRatio >= qLimitTh)
+			|| (statusInt === TELEMETRY.STATUS.MAX_Q);
+
+		this.telemetryCache.isAntiStallActive = this._isAntiStallActive;
+		this.telemetryCache.isQLimitNear = isQLimitNear;
+		this.telemetryCache.isGLimitNear = isGLimitNear;
 	}
 
 	_updateTelemetry(sensor) {
@@ -327,9 +344,14 @@ export class FlightComputer {
 
 		let targetAngle = this.targetLaunchAngle;
 
+		this._isAntiStallActive = false;
+
 		// Load Relief Control
 		if (Q > 0.05 && this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD) {
 			const stallFactor = Math.max(0, (FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD - this.telemetryCache.vV) / FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD);
+			if (stallFactor > 0.05) {
+				this._isAntiStallActive = true;
+			}
 			const maxPitchUp = UnitConvertUtils.deg2rad(FLIGHT_COMPUTER_CONFIG.ANTI_STALL_MAX_PITCH_UP);
 			const upAngle = this.telemetryCache.gravityAngle + Math.PI;
 			let angleToUp = MathUtils.normalizeAngle(upAngle - targetAngle);
@@ -353,10 +375,16 @@ export class FlightComputer {
 
 		if (isRetrogradeIntent) {
 			let retroDiff = angleDiff > 0 ? angleDiff - Math.PI : angleDiff + Math.PI;
+			if (Math.abs(retroDiff) > maxAoA + 0.001) {
+				this._isAntiStallActive = true;
+			}
 			if (retroDiff > maxAoA) retroDiff = maxAoA;
 			if (retroDiff < -maxAoA) retroDiff = -maxAoA;
 			safeTargetAngle = progradeAngle + Math.PI + retroDiff;
 		} else {
+			if (Math.abs(angleDiff) > maxAoA + 0.001) {
+				this._isAntiStallActive = true;
+			}
 			// Clamp angle to max AoA
 			if (angleDiff > maxAoA) { angleDiff = maxAoA; }
 			if (angleDiff < -maxAoA) { angleDiff = -maxAoA; }

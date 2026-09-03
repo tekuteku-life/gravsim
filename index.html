@@ -29,7 +29,7 @@
 
 		<!-- Minimal HUD Bar (Shown when telemetry panel is closed and rocket is active) -->
 		<div id="minimal-hud-bar">
-			MET: <span id="m-hud-met">T+ ---y ---d --:--:--</span> | STAT: <span id="m-hud-stat">PRE-LAUNCH</span> | ALT: <span id="m-hud-alt">---</span> km | VEL: <span id="m-hud-vel">---</span> km/s
+			MET: <span id="m-hud-met">T+ ---y ---d --:--:--</span> | STAT: <span id="m-hud-stat">PRE-LAUNCH</span> | ALT: <span id="m-hud-alt">---</span> km | VEL: <span id="m-hud-vel">---</span> km/s <span id="m-hud-alert" class="m-hud-alert" style="display: none;">[WARN]</span>
 		</div>
 
 		<div id="telemetry-panel">
@@ -40,6 +40,30 @@
 				<span id="tm-mission-status">PRE-LAUNCH</span>
 			</div>
 			<div class="telemetry-line" style="margin-top: 5px;">MET: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
+
+			<!-- Annunciator / Caution & Warning Status Panel -->
+			<div id="tm-annunciator" class="tm-annunciator-panel" title="Click to test lamps">
+				<div class="tm-annunciator-header">ANNUNCIATOR / C&amp;W</div>
+				<div class="tm-annunciator-grid">
+					<!-- Row 1: Caution & Warning -->
+					<div class="tm-lamp lamp-red" id="tm-lamp-qlim" title="Dynamic Pressure Limit Approaching">Q-LIM</div>
+					<div class="tm-lamp lamp-red" id="tm-lamp-glim" title="G-Force Limit Approaching">G-LIM</div>
+					<div class="tm-lamp lamp-amber" id="tm-lamp-stall" title="Anti-Stall / Load Relief Active">STALL</div>
+					<div class="tm-lamp lamp-red" id="tm-lamp-warn" title="Master Warning / Critical Limit">WARN</div>
+
+					<!-- Row 2: Guidance & Avionics -->
+					<div class="tm-lamp lamp-green" id="tm-lamp-auto" title="Automatic Flight Guidance Active">AUTO</div>
+					<div class="tm-lamp lamp-green" id="tm-lamp-twr" title="Launch Tower Cleared">TWR-C</div>
+					<div class="tm-lamp lamp-cyan" id="tm-lamp-pitch" title="Pitch / Gravity Turn Program">PITCH</div>
+					<div class="tm-lamp lamp-green" id="tm-lamp-orbit" title="Orbital Velocity Acquired">ORBIT</div>
+
+					<!-- Row 3: Propulsion & Separation -->
+					<div class="tm-lamp lamp-green" id="tm-lamp-press" title="Tank Pressure Nominal">PRESS</div>
+					<div class="tm-lamp lamp-cyan" id="tm-lamp-eng" title="Main Engine Burning">ENG-ON</div>
+					<div class="tm-lamp lamp-amber" id="tm-lamp-meco" title="Main Engine Cutoff">MECO</div>
+					<div class="tm-lamp lamp-green" id="tm-lamp-sep" title="Fairing / Stage Separation">STG-SEP</div>
+				</div>
+			</div>
 
 			<!-- Telemetry Cards Carousel Container -->
 			<div id="tm-carousel" class="tm-carousel">
