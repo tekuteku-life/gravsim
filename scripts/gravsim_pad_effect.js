@@ -4,6 +4,197 @@
 import { PAD_EFFECT, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 
+class UmbilicalCable {
+	constructor() {
+		this.isDisconnected = false;
+		this.nodes = [];
+		this.restLengths = [];
+		this.isInitialized = false;
+	}
+
+	reset() {
+		this.isDisconnected = false;
+		this.nodes = [];
+		this.restLengths = [];
+		this.isInitialized = false;
+	}
+
+	_initNodes(conf) {
+		const numNodes = conf.CABLE_NODES || 8;
+		this.nodes = [];
+		this.restLengths = [];
+
+		const armAttachLocalX = 2.0;
+		const armAttachLocalY = 0.2;
+
+		const p0 = {
+			x: conf.UMBILICAL_OFFSET_X + armAttachLocalX,
+			y: conf.UMBILICAL_OFFSET_Y + armAttachLocalY
+		};
+
+		const p1 = {
+			x: conf.UMBILICAL_OFFSET_X - 0.4,
+			y: conf.UMBILICAL_OFFSET_Y + 0.4
+		};
+
+		const p2 = {
+			x: conf.UMBILICAL_OFFSET_X + 1.5,
+			y: conf.UMBILICAL_OFFSET_Y + 0.8
+		};
+
+		for (let i = 0; i < numNodes; i++) {
+			const t = i / (numNodes - 1);
+			const it = 1 - t;
+			const bx = it * it * p0.x + 2 * it * t * p1.x + t * t * p2.x;
+			const by = it * it * p0.y + 2 * it * t * p1.y + t * t * p2.y;
+			this.nodes.push({
+				x: bx,
+				y: by,
+				prevX: bx,
+				prevY: by
+			});
+		}
+
+		for (let i = 0; i < numNodes - 1; i++) {
+			const dx = this.nodes[i + 1].x - this.nodes[i].x;
+			const dy = this.nodes[i + 1].y - this.nodes[i].y;
+			this.restLengths.push(Math.hypot(dx, dy));
+		}
+
+		this.isInitialized = true;
+	}
+
+	getAttachPos(conf, armAngleDeg) {
+		const armAngleRad = UnitConvertUtils.deg2rad(-armAngleDeg);
+		const cosA = Math.cos(armAngleRad);
+		const sinA = Math.sin(armAngleRad);
+		const armAttachLocalX = 2.0;
+		const armAttachLocalY = 0.2;
+
+		return {
+			x: conf.UMBILICAL_OFFSET_X + (armAttachLocalX * cosA - armAttachLocalY * sinA),
+			y: conf.UMBILICAL_OFFSET_Y + (armAttachLocalX * sinA + armAttachLocalY * cosA)
+		};
+	}
+
+	update(dt, conf, armAngleDeg, isHoldDown) {
+		if (!this.isInitialized) {
+			this._initNodes(conf);
+		}
+
+		const numNodes = this.nodes.length;
+		const attachPos = this.getAttachPos(conf, armAngleDeg);
+		const subDt = Math.min(dt, 0.05);
+
+		if (isHoldDown) {
+			this.nodes[0].x = attachPos.x;
+			this.nodes[0].y = attachPos.y;
+			this.nodes[0].prevX = attachPos.x;
+			this.nodes[0].prevY = attachPos.y;
+
+			const connX = conf.UMBILICAL_OFFSET_X + 1.5;
+			const connY = conf.UMBILICAL_OFFSET_Y + 0.8;
+			this.nodes[numNodes - 1].x = connX;
+			this.nodes[numNodes - 1].y = connY;
+			this.nodes[numNodes - 1].prevX = connX;
+			this.nodes[numNodes - 1].prevY = connY;
+			return;
+		}
+
+		if (!this.isDisconnected) {
+			this.isDisconnected = true;
+			const impulse = conf.CABLE_SWING_IMPULSE || 0.5;
+			this.nodes[numNodes - 1].prevY = this.nodes[numNodes - 1].y + impulse * 0.15;
+			this.nodes[numNodes - 1].prevX = this.nodes[numNodes - 1].x + impulse * 0.08;
+		}
+
+		const damping = Math.pow(conf.CABLE_DAMPING || 0.988, subDt * 60);
+		const gravity = conf.CABLE_GRAVITY || 7.0;
+
+		this.nodes[0].x = attachPos.x;
+		this.nodes[0].y = attachPos.y;
+		this.nodes[0].prevX = attachPos.x;
+		this.nodes[0].prevY = attachPos.y;
+
+		for (let i = 1; i < numNodes; i++) {
+			const node = this.nodes[i];
+			const vx = (node.x - node.prevX) * damping;
+			const vy = (node.y - node.prevY) * damping;
+
+			node.prevX = node.x;
+			node.prevY = node.y;
+
+			const ax = -gravity;
+			const ay = 0;
+
+			node.x += vx + ax * subDt * subDt;
+			node.y += vy + ay * subDt * subDt;
+		}
+
+		const iterations = conf.CABLE_CONSTRAINT_ITERATIONS || 8;
+		for (let it = 0; it < iterations; it++) {
+			for (let i = 0; i < numNodes - 1; i++) {
+				const n1 = this.nodes[i];
+				const n2 = this.nodes[i + 1];
+				const dx = n2.x - n1.x;
+				const dy = n2.y - n1.y;
+				const dist = Math.hypot(dx, dy);
+				if (dist < 1e-6) continue;
+
+				const targetDist = this.restLengths[i];
+				const diff = (dist - targetDist) / dist;
+
+				if (i === 0) {
+					n2.x -= dx * diff;
+					n2.y -= dy * diff;
+				} else {
+					n1.x += dx * diff * 0.5;
+					n1.y += dy * diff * 0.5;
+					n2.x -= dx * diff * 0.5;
+					n2.y -= dy * diff * 0.5;
+				}
+			}
+		}
+	}
+
+	draw(ctx, rPx, conf) {
+		if (!this.isInitialized || this.nodes.length < 2) return;
+
+		const numNodes = this.nodes.length;
+
+		ctx.save();
+		ctx.beginPath();
+		ctx.moveTo(this.nodes[0].x * rPx, this.nodes[0].y * rPx);
+		for (let i = 1; i < numNodes; i++) {
+			ctx.lineTo(this.nodes[i].x * rPx, this.nodes[i].y * rPx);
+		}
+
+		ctx.strokeStyle = conf.CABLE_BASE_COLOR;
+		ctx.lineWidth = Math.max(2, rPx * conf.CABLE_WIDTH_MULT);
+		ctx.lineCap = 'round';
+		ctx.lineJoin = 'round';
+		ctx.stroke();
+
+		ctx.strokeStyle = conf.CABLE_HIGH_COLOR;
+		ctx.lineWidth = Math.max(1, rPx * conf.CABLE_HIGH_WIDTH_MULT);
+		ctx.stroke();
+
+		const tip = this.nodes[numNodes - 1];
+		const prevTip = this.nodes[numNodes - 2];
+		const jointAngle = Math.atan2(tip.y - prevTip.y, tip.x - prevTip.x);
+
+		ctx.save();
+		ctx.translate(tip.x * rPx, tip.y * rPx);
+		ctx.rotate(jointAngle);
+		ctx.fillStyle = conf.JOINT_COLOR;
+		const jointSize = rPx * 0.4;
+		ctx.fillRect(-jointSize * 0.3, -jointSize * 0.5, jointSize, jointSize);
+		ctx.restore();
+
+		ctx.restore();
+	}
+}
+
 export class PadEffectRenderer {
 	constructor() {
 		this.isActive = false;
@@ -20,6 +211,7 @@ export class PadEffectRenderer {
 		};
 		this.strongbackAngle = 0;
 		this.umbilicalAngle = 0;
+		this.umbilicalCable = new UmbilicalCable();
 		
 		// For storing local relative coordinates to avoid global lag
 		this.startRelPadX = 0;
@@ -44,6 +236,7 @@ export class PadEffectRenderer {
 		};
 		this.strongbackAngle = 0;
 		this.umbilicalAngle = 0;
+		this.umbilicalCable.reset();
 		this.lastContext = null;
 	}
 
@@ -52,6 +245,7 @@ export class PadEffectRenderer {
 		this.targetRocketId = null;
 		this.hostId = null;
 		this.particles = [];
+		this.umbilicalCable.reset();
 	}
 
 	handleEvent(eventName) {
@@ -185,6 +379,9 @@ export class PadEffectRenderer {
 				this.umbilicalAngle = PAD_EFFECT.STRUCTURE.UMBILICAL_MAX_ANGLE;
 			}
 		}
+
+		const isHoldDown = rocket ? rocket.isHoldDown : false;
+		this.umbilicalCable.update(dt, PAD_EFFECT.STRUCTURE, this.umbilicalAngle, isHoldDown);
 
 		const rPx = m2pix(this.rocketRadius);
 		const visualMultiplier = this._getVisualMultiplier(context);
@@ -362,22 +559,10 @@ export class PadEffectRenderer {
 		ctx.fillStyle = conf.TRUSS_COLOR;
 		ctx.fillRect(-b * 0.3, -b * 0.1, b * conf.UMBILICAL_W_MULT, b * conf.UMBILICAL_H_MULT);
 
-		if (context.rocket && context.rocket.isHoldDown) {
-			ctx.strokeStyle = conf.CABLE_BASE_COLOR;
-			ctx.lineWidth = Math.max(2, rPx * conf.CABLE_WIDTH_MULT);
-			ctx.beginPath();
-			ctx.moveTo(b * 1, 0.2);
-			ctx.quadraticCurveTo(-b * 0.2, b * 0.2, rPx * 1.5, rPx * 0.8);
-			ctx.stroke();
-			
-			ctx.strokeStyle = conf.CABLE_HIGH_COLOR;
-			ctx.lineWidth = Math.max(1, rPx * conf.CABLE_HIGH_WIDTH_MULT);
-			ctx.stroke();
-
-			ctx.fillStyle = conf.JOINT_COLOR;
-			ctx.fillRect(rPx * 1.2, rPx * 0.7, rPx * 0.4, rPx * 0.4);
-		}
 		ctx.restore();
+
+		// Umbilical Cable (Physics-based swing and hang)
+		this.umbilicalCable.draw(ctx, rPx, conf);
 
 		ctx.restore();
 
