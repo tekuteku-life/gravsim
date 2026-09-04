@@ -225,7 +225,7 @@ export class FlightComputer {
 
 		let remDv = 0; // m/s
 		if (sensor.dryMass > 0) {
-			let ve = 320 * PHYSICS.G0; // m/s
+			let ve = FLIGHT_COMPUTER_CONFIG.DEFAULT_ISP * PHYSICS.G0; // m/s
 			if (sensor.thrustForce > 0 && sensor.massLossRate > 0) {
 				ve = sensor.thrustForce / sensor.massLossRate;
 			}
@@ -293,10 +293,12 @@ export class FlightComputer {
 			const qRatio = UnitConvertUtils.kpa2pa(sensor.qAxialKpa) / effectiveAxialLimitPa;
 
 			if (!isTailFirst && qRatio > FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) {
-				let qThrottle = 1.0 - (qRatio - FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) * 5.0;
+				let qThrottle = 1.0 - (qRatio - FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_Q_RATIO) * FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_SENSITIVITY;
 
 				// Anti-stall
-				const minThrottle = this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_MIN_Vv ? 0.8 : 0.1;
+				const minThrottle = this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_MIN_Vv
+					? FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_MIN_THROTTLE_LOW_VV
+					: FLIGHT_COMPUTER_CONFIG.THROTTLE_DOWN_MIN_THROTTLE_NORMAL;
 				qThrottle = Math.max(minThrottle, Math.min(1.0, qThrottle));
 				throttle = Math.min(throttle, qThrottle);
 			}
@@ -347,9 +349,9 @@ export class FlightComputer {
 		this._isAntiStallActive = false;
 
 		// Load Relief Control
-		if (Q > 0.05 && this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD) {
+		if (Q > FLIGHT_COMPUTER_CONFIG.ANTI_STALL_MIN_Q_KPA && this.telemetryCache.vV < FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD) {
 			const stallFactor = Math.max(0, (FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD - this.telemetryCache.vV) / FLIGHT_COMPUTER_CONFIG.ANTI_STALL_Vv_THRESHOLD);
-			if (stallFactor > 0.05) {
+			if (stallFactor > FLIGHT_COMPUTER_CONFIG.ANTI_STALL_FACTOR_THRESHOLD) {
 				this._isAntiStallActive = true;
 			}
 			const maxPitchUp = UnitConvertUtils.deg2rad(FLIGHT_COMPUTER_CONFIG.ANTI_STALL_MAX_PITCH_UP);
@@ -361,7 +363,7 @@ export class FlightComputer {
 
 		const Q_Pa = UnitConvertUtils.kpa2pa(Q);
 		let maxAoA = Math.PI;
-		if (Q_Pa > 100 && this.config.maxQLateralLimit !== Infinity) {
+		if (Q_Pa > FLIGHT_COMPUTER_CONFIG.LOAD_RELIEF_MIN_Q_PA && this.config.maxQLateralLimit !== Infinity) {
 			const safeLateralLimit = this.config.maxQLateralLimit * FLIGHT_COMPUTER_CONFIG.LOAD_RELIEF_SAFE_MARGIN;
 			const sinSq = safeLateralLimit / Q_Pa;
 			if (sinSq < 1.0) {
@@ -375,14 +377,14 @@ export class FlightComputer {
 
 		if (isRetrogradeIntent) {
 			let retroDiff = angleDiff > 0 ? angleDiff - Math.PI : angleDiff + Math.PI;
-			if (Math.abs(retroDiff) > maxAoA + 0.001) {
+			if (Math.abs(retroDiff) > maxAoA + FLIGHT_COMPUTER_CONFIG.AOA_TOLERANCE_RAD) {
 				this._isAntiStallActive = true;
 			}
 			if (retroDiff > maxAoA) retroDiff = maxAoA;
 			if (retroDiff < -maxAoA) retroDiff = -maxAoA;
 			safeTargetAngle = progradeAngle + Math.PI + retroDiff;
 		} else {
-			if (Math.abs(angleDiff) > maxAoA + 0.001) {
+			if (Math.abs(angleDiff) > maxAoA + FLIGHT_COMPUTER_CONFIG.AOA_TOLERANCE_RAD) {
 				this._isAntiStallActive = true;
 			}
 			// Clamp angle to max AoA

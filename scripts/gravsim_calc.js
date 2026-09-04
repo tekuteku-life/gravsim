@@ -30,8 +30,8 @@ class PhysicsEngine {
 				data.x, data.y,
 				data.vx || 0, data.vy || 0,
 				data.ax || 0, data.ay || 0,
-				data.radius || 1, data.generation || 0,
-				data.mass || 1, data.fuelMass || 0, data.oxidMass || 0,
+				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
+				data.mass || SIMULATION.DEFAULT_OBJECT_MASS, data.fuelMass || 0, data.oxidMass || 0,
 				{
 					ofRatio: data.ofRatio || 0,
 					thrustForce: data.thrustForce,
@@ -54,8 +54,8 @@ class PhysicsEngine {
 				data.x, data.y,
 				data.vx || 0, data.vy || 0,
 				data.ax || 0, data.ay || 0,
-				data.radius || 1, data.generation || 0,
-				data.mass || 1
+				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
+				data.mass || SIMULATION.DEFAULT_OBJECT_MASS
 			));
 		} else {
 			this.objects.push(new CalcCelestialBody(
@@ -63,8 +63,8 @@ class PhysicsEngine {
 				data.x, data.y,
 				data.vx || 0, data.vy || 0,
 				data.ax || 0, data.ay || 0,
-				data.radius || 1, data.generation || 0,
-				data.mass || 1
+				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
+				data.mass || SIMULATION.DEFAULT_OBJECT_MASS
 			));
 		}
 		this._categorizeBodies();
@@ -179,7 +179,7 @@ class PhysicsEngine {
 
 		this.pool.reset();
 		const boundary = this.pool.getRectangle(cx, cy, hw, hh);
-		this.qtree = this.pool.getTree(boundary, 4);
+		this.qtree = this.pool.getTree(boundary, COLLISION_CONFIG.QUADTREE_MAX_OBJECTS);
 
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
@@ -245,12 +245,12 @@ class PhysicsEngine {
 
 					// Debris isn't disrupted
 					if (winnerDensity <= ROCHE_LIMIT.UNBREAKABLE_DENSITY && !loser.isDebris) {
-						debrisRatio = massRatio * (energyRatio * 0.5);
-						debrisRatio = Math.max(0.0, Math.min(debrisRatio, 0.9));
+						debrisRatio = massRatio * (energyRatio * COLLISION_CONFIG.DEBRIS_ENERGY_FACTOR);
+						debrisRatio = Math.max(0.0, Math.min(debrisRatio, COLLISION_CONFIG.MAX_DEBRIS_RATIO));
 					}
 
 					// Ignore tiny debris
-					if (debrisRatio < 1e-4) { debrisRatio = 0; }
+					if (debrisRatio < COLLISION_CONFIG.MIN_DEBRIS_RATIO) { debrisRatio = 0; }
 
 					const debrisMass = loser.mass * debrisRatio; // t
 					const absorbedMass = loser.mass - debrisMass; // t
@@ -288,9 +288,9 @@ class PhysicsEngine {
 			// Calculate maximum Roche limit radius for spatial query
 			const massiveDensity = massiveObj.mass / Math.pow(massiveObj.radius, 3); // t/m^3
 
-			// Assume worst-case fragile density is 1e3 (approx water/ice) to define the search bounds
-			const minFragileDensity = 1e3; // t/m^3
-			const maxRocheLimitM = 2.44 * massiveObj.radius * Math.cbrt(massiveDensity / minFragileDensity); // m
+			// Assume worst-case fragile density to define the search bounds
+			const minFragileDensity = ROCHE_LIMIT.MIN_FRAGILE_DENSITY; // t/m^3
+			const maxRocheLimitM = ROCHE_LIMIT.COEFFICIENT * massiveObj.radius * Math.cbrt(massiveDensity / minFragileDensity); // m
 
 			// Zero-allocation query preparation
 			this._searchRange.x = massiveObj.x;
@@ -587,14 +587,14 @@ class PhysicsEngine {
 
 				const combinedMass = objA.mass + objB.mass; // t
 				const radiusSum = objA.radius + objB.radius; // m
-				const surfDist = Math.max(dist - radiusSum, 1.0); // m
+				const surfDist = Math.max(dist - radiusSum, cfg.MIN_SURFACE_DIST); // m
 
 				// Dynamical time scale from gravity: dt <= eta * sqrt(r^3 / (G * M))
 				const dynScale = Math.sqrt((distSq * dist) / (PHYSICS.G * combinedMass));
 				const dtDyn = cfg.ETA_GRAV * dynScale;
 
 				// Surface approach time: dt <= eta * surfDist / vRel
-				const dtSurf = cfg.ETA_SURF * (surfDist / (vRel + 1e-3));
+				const dtSurf = cfg.ETA_SURF * (surfDist / (vRel + cfg.VELOCITY_EPSILON));
 
 				if (dtDyn < minAllowedDt) minAllowedDt = dtDyn;
 				if (dtSurf < minAllowedDt) minAllowedDt = dtSurf;
@@ -613,38 +613,37 @@ class PhysicsEngine {
 			// Dominant body proximity and orbital dynamics
 			if (obj.dominantBody && obj.distToDominantM > 0) {
 				const dom = obj.dominantBody;
-				const surfDist = Math.max(obj.distToDominantM - dom.radius - obj.radius, 1.0);
+				const surfDist = Math.max(obj.distToDominantM - dom.radius - obj.radius, cfg.MIN_SURFACE_DIST);
 				const dvx = obj.vx - dom.vx;
 				const dvy = obj.vy - dom.vy;
 				const vRel = Math.sqrt(dvx * dvx + dvy * dvy);
 
-				const dtSurf = cfg.ETA_SURF * (surfDist / (vRel + 1e-3));
+				const dtSurf = cfg.ETA_SURF * (surfDist / (vRel + cfg.VELOCITY_EPSILON));
 				if (dtSurf < minAllowedDt) minAllowedDt = dtSurf;
 
 				const aGrav = (PHYSICS.G * dom.mass) / Math.max(obj.distToDominantM * obj.distToDominantM, dom.radius * dom.radius);
-				if (aGrav > 1e-6) {
+				if (aGrav > cfg.MIN_GRAV_ACCEL) {
 					const dtDyn = cfg.ETA_GRAV * Math.sqrt(obj.distToDominantM / aGrav);
 					if (dtDyn < minAllowedDt) minAllowedDt = dtDyn;
 				}
 			}
 
 			// Acceleration limit (thrust / atmospheric drag)
-			if (a > 1e-3) {
-				const dtAcc = cfg.ETA_ACC * ((v + 10.0) / a);
+			if (a > cfg.MIN_TINY_ACCEL) {
+				const dtAcc = cfg.ETA_ACC * ((v + cfg.ACCEL_VEL_OFFSET) / a);
 				if (dtAcc < minAllowedDt) minAllowedDt = dtAcc;
 			}
 
 			// Atmosphere entry scale height limit
 			if (obj.inAtmosphere && obj._nearestAtmBody) {
 				const refParam = DEFAULT_OBJECT_PARAMS[obj._nearestAtmBody.name];
-				const H = refParam?.ATM_SCALE_HEIGHT || 8500;
-				const dtAtm = cfg.ETA_ATM * (H / (v + 1.0));
-				if (dtAtm < minAllowedDt) minAllowedDt = dtAtm;
+						const H = refParam.ATM_SCALE_HEIGHT || AERO_DYNAMIC.DEFAULT_SCALE_HEIGHT;
+						const dtAtm = cfg.ETA_ATM * (H / (v + cfg.ATM_VEL_OFFSET));
 			}
 
 			// Rocket powered flight safeguard
 			if (obj.type === OBJECT_TYPES.ROCKET && obj.isIgnited && !obj.isHoldDown) {
-				const dtRocket = 0.5; // Ensure sub-second resolution for guidance & mass consumption
+				const dtRocket = cfg.ROCKET_POWERED_MAX_DT; // Ensure sub-second resolution for guidance & mass consumption
 				if (dtRocket < minAllowedDt) minAllowedDt = dtRocket;
 			}
 		}
@@ -653,15 +652,15 @@ class PhysicsEngine {
 		let steps = Math.ceil(totalDt / minAllowedDt);
 
 		// Baseline minimum steps scaled by timeScale
-		const scaledBase = Math.max(cfg.MIN, Math.ceil(cfg.BASE * Math.min(timeScale, 10)));
+		const scaledBase = Math.max(cfg.MIN, Math.ceil(cfg.BASE * Math.min(timeScale, cfg.TIME_SCALE_BASE_CAP)));
 		steps = Math.max(steps, scaledBase);
 
 		// Performance safeguard: dynamically scale maximum steps based on total body count
 		// to maintain high FPS and avoid CPU freezing under massive debris / stress conditions
 		const totalBodies = massiveLen + tinyLen;
 		let effectiveMax = cfg.MAX;
-		if (totalBodies > 50) {
-			effectiveMax = Math.max(cfg.MIN * 2, Math.floor(cfg.MAX * (50 / totalBodies)));
+		if (totalBodies > cfg.BODY_COUNT_THRESHOLD) {
+			effectiveMax = Math.max(cfg.MIN * cfg.BODY_COUNT_MIN_MULT, Math.floor(cfg.MAX * (cfg.BODY_COUNT_THRESHOLD / totalBodies)));
 		}
 
 		// Clamp to maximum allowed sub-steps
@@ -744,7 +743,7 @@ class SimulationController {
 		if (this.isPaused) { return; }
 
 		const now = Date.now();
-		const elapsed = Math.min(now - this.lastTime, 1e3);
+		const elapsed = Math.min(now - this.lastTime, SIMULATION.MAX_FRAME_ELAPSED_MS);
 
 		// Avoidance of div 0
 		if (elapsed <= 0) { return; }

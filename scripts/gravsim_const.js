@@ -21,31 +21,61 @@ export const SIMULATION = {
 	CALC_SUB_STEPS_BASE: 600,
 	CALC_SUB_STEPS_MAX: 480,
 	MIN_GRAVITY_CALC_MASS: 1e10, // t
+	DEFAULT_OBJECT_MASS: 1, // t
+	DEFAULT_OBJECT_RADIUS: 1, // m
+	MAX_FRAME_ELAPSED_MS: 1000, // ms
 	// Adaptive sub-step configurations
 	SUB_STEPS: {
 		MIN: 20,
 		MAX: 1200,
 		BASE: 40,
-		ETA_GRAV: 0.12,       // Dynamical time factor: dt <= eta * sqrt(r / a)
-		ETA_SURF: 0.08,       // Surface approach factor: dt <= eta * dist_surf / v_rel
-		ETA_VEL: 0.25,        // Movement restriction: dt <= eta * radius / v
-		ETA_ACC: 0.15,        // Acceleration change: dt <= eta * (v + v0) / a
-		ETA_ATM: 0.10,        // Atmosphere scale height: dt <= eta * H / v
-		SMOOTHING_DECAY: 0.90 // Decay factor for smooth step reduction
+		ETA_GRAV: 0.12,        // Dynamical time factor: dt <= eta * sqrt(r / a)
+		ETA_SURF: 0.08,        // Surface approach factor: dt <= eta * dist_surf / v_rel
+		ETA_VEL: 0.25,         // Movement restriction: dt <= eta * radius / v
+		ETA_VEL_ORBITAL: 0.04, // Orbital angular step limit factor: dt <= eta * dist / v_rel
+		ETA_ACC: 0.15,         // Acceleration change: dt <= eta * (v + v0) / a
+		ETA_ATM: 0.10,         // Atmosphere scale height: dt <= eta * H / v
+		SMOOTHING_DECAY: 0.90, // Decay factor for smooth step reduction
+		MIN_SURFACE_DIST: 1.0, // m
+		VELOCITY_EPSILON: 1e-3, // m/s
+		MIN_GRAV_ACCEL: 1e-6,  // m/s^2
+		MIN_TINY_ACCEL: 1e-3,  // m/s^2
+		ACCEL_VEL_OFFSET: 10.0, // m/s
+		ATM_VEL_OFFSET: 1.0,   // m/s
+		ATM_BUFFER_ZONE_MIN: 500000, // m (500 km)
+		ATM_BUFFER_ZONE_MULT: 5,
+		ROCKET_POWERED_MAX_DT: 0.5, // s
+		TIME_SCALE_BASE_CAP: 10,
+		BODY_COUNT_THRESHOLD: 50,
+		BODY_COUNT_MIN_MULT: 2
 	}
 };
 
 // Shattering / Roche limit
 export const ROCHE_LIMIT = {
+	COEFFICIENT: 2.44,
 	MIN_MASS_TO_DESTROY: 1e15,
 	UNBREAKABLE_DENSITY: 1e10,
+	MIN_FRAGILE_DENSITY: 1e3,
 	RIGID_BODY_RADIUS: 10000,
 	RIGID_DESTROYER_MASS: 1e25
+};
+
+// Collision & Debris generation configuration
+export const COLLISION_CONFIG = {
+	QUADTREE_MAX_OBJECTS: 4,
+	DEBRIS_ENERGY_FACTOR: 0.5,
+	MAX_DEBRIS_RATIO: 0.9,
+	MIN_DEBRIS_RATIO: 1e-4
 };
 
 // Aero Dynamics
 export const AERO_DYNAMIC = {
 	DEFAULT_CD: 0.47,
+	ROCKET_DEFAULT_CD: 0.2,
+	DEFAULT_SCALE_HEIGHT: 8500, // m
+	FADE_START_RATIO: 0.8,
+	LOW_VELOCITY_SQ: 0.01 // (m/s)^2
 };
 
 // Debris generation
@@ -62,7 +92,10 @@ export const DEBRIS = {
 	SHATTER_SCATTER_BASE: 1000,
 	SHATTER_SCATTER_VAR: 2000,
 	MASS_VAR_BASE: 0.8,
-	MASS_VAR_RANGE: 0.4
+	MASS_VAR_RANGE: 0.4,
+	IMPACT_FRAG_MASS_LOG_MULT: 1.5,
+	SPAWN_MARGIN_MIN_PX: 2,
+	IMPACT_SPAWN_JITTER_PX: 5
 };
 
 // Drawing / Visualization
@@ -266,11 +299,19 @@ export const FLIGHT_COMPUTER_CONFIG = {
 	THROTTLE_DOWN_MIN_Vv: 0,
 	ANTI_STALL_Vv_THRESHOLD: 100,
 	ANTI_STALL_MAX_PITCH_UP: 45,
+	ANTI_STALL_MIN_Q_KPA: 0.05,
+	ANTI_STALL_FACTOR_THRESHOLD: 0.05,
 	LOAD_RELIEF_SAFE_MARGIN: 0.8,
+	LOAD_RELIEF_MIN_Q_PA: 100,
+	AOA_TOLERANCE_RAD: 0.001,
+	THROTTLE_DOWN_SENSITIVITY: 5.0,
+	THROTTLE_DOWN_MIN_THROTTLE_LOW_VV: 0.8,
+	THROTTLE_DOWN_MIN_THROTTLE_NORMAL: 0.1,
 	MAX_Q_MIN_PRESSURE_KPA: 1.0,
 	MAX_Q_PEAK_DROP_RATIO: 0.05,
 	MAX_Q_CONFIRM_DELAY_SEC: 0.5,
 	MAX_Q_KEEP_DURATION_SEC: 3.0,
+	DEFAULT_ISP: 320
 };
 
 // Communication buffer structure

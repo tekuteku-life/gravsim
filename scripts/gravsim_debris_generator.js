@@ -14,7 +14,7 @@ export class DebrisGenerator {
 
 		if (totalDebrisMass <= 0) { return result; }
 
-		const fragmentCount = Math.max(DEBRIS.MIN_FRAG, Math.floor(Math.log10(totalDebrisMass) * 1.5));
+		const fragmentCount = Math.max(DEBRIS.MIN_FRAG, Math.floor(Math.log10(totalDebrisMass) * DEBRIS.IMPACT_FRAG_MASS_LOG_MULT));
 		const baseMass = totalDebrisMass / fragmentCount;
 		const debrisColor = ColorUtils.mixWithGray(loserObj.color, DEBRIS.GRAY_MIX_RATIO);
 
@@ -72,11 +72,11 @@ export class DebrisGenerator {
 			let angle, fragX, fragY;
 			if (impactData) {
 				const marginPx = m2pixFunc(fragRadius * 2);
-				const spawnRadiusPx = impactData.winnerRadiusPx + Math.max(marginPx, 2);
+				const spawnRadiusPx = impactData.winnerRadiusPx + Math.max(marginPx, DEBRIS.SPAWN_MARGIN_MIN_PX);
 				const spreadAngle = (Math.random() - 0.5) * Math.PI;
 				angle = impactData.baseAngle + spreadAngle;
-				fragX = centerX + impactData.nx * spawnRadiusPx + Math.cos(angle) * (Math.random() * 5);
-				fragY = centerY + impactData.ny * spawnRadiusPx + Math.sin(angle) * (Math.random() * 5);
+				fragX = centerX + impactData.nx * spawnRadiusPx + Math.cos(angle) * (Math.random() * DEBRIS.IMPACT_SPAWN_JITTER_PX);
+				fragY = centerY + impactData.ny * spawnRadiusPx + Math.sin(angle) * (Math.random() * DEBRIS.IMPACT_SPAWN_JITTER_PX);
 			} else {
 				const spreadPx = m2pixFunc(sourceObj.radius * 2);
 				angle = (i / fragmentCount) * Math.PI * 2;

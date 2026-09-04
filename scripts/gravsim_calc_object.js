@@ -45,7 +45,7 @@ class GravSimCalcObject {
 		this.distToDominantM = 0; // m
 
 		// Avoid using Getter for mass. Raw property is significantly faster.
-		this.mass = 1; // t
+		this.mass = SIMULATION.DEFAULT_OBJECT_MASS; // t
 		// Cache inverse mass to convert division into multiplication
 		this.invMass = 1.0; // 1/t
 	}
@@ -121,7 +121,7 @@ class GravSimCalcObject {
 		// Decrease calculation cost
 		if (fragileDensity > ROCHE_LIMIT.UNBREAKABLE_DENSITY) { return false; }
 
-		const rocheLimitM = 2.44 * other.radius * Math.cbrt(massiveDensity / fragileDensity); // m
+		const rocheLimitM = ROCHE_LIMIT.COEFFICIENT * other.radius * Math.cbrt(massiveDensity / fragileDensity); // m
 		const dx = this.x - other.x; // m
 		const dy = this.y - other.y; // m
 		const distSq = dx * dx + dy * dy; // m^2
@@ -174,12 +174,12 @@ class GravSimCalcObject {
 				}
 			}
 		} else {
-			const H = refParam.ATM_SCALE_HEIGHT || 8500;
+			const H = refParam.ATM_SCALE_HEIGHT || AERO_DYNAMIC.DEFAULT_SCALE_HEIGHT;
 			rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / H);
 		}
 
 		// Smooth Cosine Fade-out to Karman boundary
-		const fadeStart = refParam.ATM_FADE_START_ALT || (refParam.ATM_LIMIT_ALT * 0.8);
+		const fadeStart = refParam.ATM_FADE_START_ALT || (refParam.ATM_LIMIT_ALT * AERO_DYNAMIC.FADE_START_RATIO);
 		if (altM > fadeStart && refParam.ATM_LIMIT_ALT > fadeStart) {
 			const fade = 0.5 * (1 + Math.cos(Math.PI * (altM - fadeStart) / (refParam.ATM_LIMIT_ALT - fadeStart)));
 			rho *= fade;
@@ -335,7 +335,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 	_determinDynamicParam(vRelY, vRelX, vRelSq, rho) {
 		let area = 0; // m^2
-		let cd = 0.2;
+		let cd = AERO_DYNAMIC.ROCKET_DEFAULT_CD;
 
 		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
 		if (objParam && objParam.DRAG_COEF) {
@@ -345,7 +345,7 @@ export class CalcRocket extends GravSimCalcObject {
 		let velAngle;
 
 		// Handle extremely low relative velocity (e.g. hold down on pad)
-		if (vRelSq < 0.01) {
+		if (vRelSq < AERO_DYNAMIC.LOW_VELOCITY_SQ) {
 			velAngle = this.thrustAngle;
 		} else {
 			velAngle = Math.atan2(vRelY, vRelX);
@@ -554,7 +554,7 @@ export class CalcRocket extends GravSimCalcObject {
 			const dvy = this.vy - this.dominantBody.vy; // m/s
 			const vSq = dvx * dvx + dvy * dvy; // m^2/s^2
 
-			if (vSq < 0.01) {
+			if (vSq < AERO_DYNAMIC.LOW_VELOCITY_SQ) {
 				velAngle = this.thrustAngle;
 			} else {
 				velAngle = Math.atan2(dvy, dvx);
