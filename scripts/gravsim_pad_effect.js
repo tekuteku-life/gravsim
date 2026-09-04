@@ -103,13 +103,13 @@ class UmbilicalCable {
 
 		if (!this.isDisconnected) {
 			this.isDisconnected = true;
-			const impulse = conf.CABLE_SWING_IMPULSE || 0.8;
+			const impulse = conf.CABLE_SWING_IMPULSE || 0.5;
 			this.nodes[numNodes - 1].prevY = this.nodes[numNodes - 1].y + impulse * 0.15;
 			this.nodes[numNodes - 1].prevX = this.nodes[numNodes - 1].x + impulse * 0.08;
 		}
 
-		const damping = Math.pow(conf.CABLE_DAMPING || 0.94, subDt * 60);
-		const gravity = conf.CABLE_GRAVITY || 9.8;
+		const damping = Math.pow(conf.CABLE_DAMPING || 0.988, subDt * 60);
+		const gravity = conf.CABLE_GRAVITY || 7.0;
 
 		this.nodes[0].x = attachPos.x;
 		this.nodes[0].y = attachPos.y;
@@ -558,6 +558,7 @@ export class PadEffectRenderer {
 		ctx.rotate(UnitConvertUtils.deg2rad(-this.umbilicalAngle));
 		ctx.fillStyle = conf.TRUSS_COLOR;
 		ctx.fillRect(-b * 0.3, -b * 0.1, b * conf.UMBILICAL_W_MULT, b * conf.UMBILICAL_H_MULT);
+
 		ctx.restore();
 
 		// Umbilical Cable (Physics-based swing and hang)
