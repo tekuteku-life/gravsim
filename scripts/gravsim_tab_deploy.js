@@ -33,9 +33,7 @@ export class DeployTab {
 		DOMUtils.verifyElements(this.ui, 'DeployTab');
 
 		// Hide stress test button initially
-		if (this.ui.stressTestBtn) {
-			this.ui.stressTestBtn.style.display = 'none';
-		}
+		this.ui.stressTestBtn.style.display = 'none';
 	}
 
 	_bindEvents() {
@@ -48,6 +46,64 @@ export class DeployTab {
 		}
 
 		this.ui.moonBtn.addEventListener('click', () => this._deployMoon());
+
+		// Jupiter moons (orbit around Jupiter)
+		const jupiterMoons = {
+			'put-io-btn': 'Io',
+			'put-europa-btn': 'Europa',
+			'put-ganymede-btn': 'Ganymede',
+			'put-callisto-btn': 'Callisto'
+		};
+		for (const [btnId, moonName] of Object.entries(jupiterMoons)) {
+			const btn = document.getElementById(btnId);
+			if (btn) {
+				btn.addEventListener('click', () => EventBus.emit('object:deploy-orbit-host', "Jupiter", moonName));
+			}
+		}
+
+		// Saturn moons (orbit around Saturn)
+		const saturnMoons = {
+			'put-titan-btn': 'Titan',
+			'put-enceladus-btn': 'Enceladus',
+			'put-mimas-btn': 'Mimas',
+			'put-rhea-btn': 'Rhea'
+		};
+		for (const [btnId, moonName] of Object.entries(saturnMoons)) {
+			const btn = document.getElementById(btnId);
+			if (btn) {
+				btn.addEventListener('click', () => EventBus.emit('object:deploy-orbit-host', "Saturn", moonName));
+			}
+		}
+
+		// Dwarf planets (orbit around Sun)
+		const dwarfPlanets = {
+			'put-pluto-btn': 'Pluto',
+			'put-ceres-btn': 'Ceres',
+			'put-eris-btn': 'Eris'
+		};
+		for (const [btnId, objName] of Object.entries(dwarfPlanets)) {
+			const btn = document.getElementById(btnId);
+			if (btn) {
+				btn.addEventListener('click', () => EventBus.emit('object:deploy-orbit-sun', objName));
+			}
+		}
+
+		// Other stars (place at center / free placement)
+		const otherStars = {
+			'put-betelgeuse-btn': 'Betelgeuse',
+			'put-sirius-btn': 'Sirius',
+			'put-alphacentauri-btn': 'AlphaCentauriA',
+			'put-proxima-btn': 'ProximaCentauri',
+			'put-rigel-btn': 'Rigel',
+			'put-vega-btn': 'Vega',
+			'put-polaris-btn': 'Polaris'
+		};
+		for (const [btnId, objName] of Object.entries(otherStars)) {
+			const btn = document.getElementById(btnId);
+			if (btn) {
+				btn.addEventListener('click', () => EventBus.emit('object:deploy-orbit-sun', objName));
+			}
+		}
 
 		this.ui.solarSystemBtn.addEventListener('click', () => {
 			EventBus.emit('object:deploy-profile', 'SOLAR_SYSTEM');
