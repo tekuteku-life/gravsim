@@ -29,6 +29,9 @@ export class DeployTab {
 			moonBtn: document.getElementById('put-moon-btn'),
 			stressTestBtn: document.getElementById('stress-test-btn'),
 			solarSystemBtn: document.getElementById('put-solar-system-btn'),
+			binaryStarBtn: document.getElementById('put-binary-star-btn'),
+			threeBodyBtn: document.getElementById('put-three-body-btn'),
+			galacticCenterBtn: document.getElementById('put-galactic-center-btn'),
 		};
 		DOMUtils.verifyElements(this.ui, 'DeployTab');
 
@@ -107,6 +110,18 @@ export class DeployTab {
 
 		this.ui.solarSystemBtn.addEventListener('click', () => {
 			EventBus.emit('object:deploy-profile', 'SOLAR_SYSTEM');
+		});
+
+		this.ui.binaryStarBtn.addEventListener('click', () => {
+			EventBus.emit('object:deploy-profile', 'BINARY_SYSTEM');
+		});
+
+		this.ui.threeBodyBtn.addEventListener('click', () => {
+			EventBus.emit('object:deploy-profile', 'THREE_BODY');
+		});
+
+		this.ui.galacticCenterBtn.addEventListener('click', () => {
+			EventBus.emit('object:deploy-profile', 'GALACTIC_CENTER');
 		});
 
 		this.ui.stressTestBtn.addEventListener('click', () => {

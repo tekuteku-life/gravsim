@@ -367,48 +367,72 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"MASS" : 1.9891e30 * 16.5 / 1e3,
 		"COLOR": "#FF4500",
 		"RADIUS": 8.87e11,
+		"A": 3500,
+		"E": 0.15,
+		"PERIHELION_DEG": 30,
 	},
 	"Sirius": {
 		"NAME" : "Sirius",
 		"MASS" : 1.9891e30 * 2.02 / 1e3,
 		"COLOR": "#CAE1FF",
 		"RADIUS": 1.19e9,
+		"A": 1500,
+		"E": 0.05,
+		"PERIHELION_DEG": 200,
 	},
 	"AlphaCentauriA": {
 		"NAME" : "Alpha Centauri A",
 		"MASS" : 1.9891e30 * 1.1 / 1e3,
 		"COLOR": "#FFF8DC",
 		"RADIUS": 8.51e8,
+		"A": 800,
+		"E": 0.08,
+		"PERIHELION_DEG": 320,
 	},
 	"ProximaCentauri": {
 		"NAME" : "Proxima Centauri",
 		"MASS" : 1.9891e30 * 0.122 / 1e3,
 		"COLOR": "#FF6347",
 		"RADIUS": 1.07e8,
+		"A": 500,
+		"E": 0.20,
+		"PERIHELION_DEG": 110,
 	},
 	"Rigel": {
 		"NAME" : "Rigel",
 		"MASS" : 1.9891e30 * 21.0 / 1e3,
 		"COLOR": "#B0C4DE",
 		"RADIUS": 5.44e10,
+		"A": 5000,
+		"E": 0.12,
+		"PERIHELION_DEG": 260,
 	},
 	"Vega": {
 		"NAME" : "Vega",
 		"MASS" : 1.9891e30 * 2.135 / 1e3,
 		"COLOR": "#F0F8FF",
 		"RADIUS": 1.86e9,
+		"A": 2000,
+		"E": 0.03,
+		"PERIHELION_DEG": 75,
 	},
 	"Polaris": {
 		"NAME" : "Polaris",
 		"MASS" : 1.9891e30 * 5.4 / 1e3,
 		"COLOR": "#FFFACD",
 		"RADIUS": 3.27e10,
+		"A": 2500,
+		"E": 0.10,
+		"PERIHELION_DEG": 160,
 	},
 	"Sun": {
 		"NAME" : "Sun",
 		"MASS" : 1.9891e30 / 1e3,
 		"COLOR": "#FF4500",
 		"RADIUS": 6.96340e8,
+		"A": 1000,
+		"E": 0.05,
+		"PERIHELION_DEG": 0,
 	},
 	"Mercury": {
 		"NAME" : "Mercury",
@@ -941,6 +965,55 @@ export const DEPLOY_PROFILES = {
 			{ template: "Neptune", host: "Sun" },
 			{ template: "Pluto", host: "Sun" },
 			{ template: "Eris", host: "Sun" }
+		]
+	},
+	"BINARY_SYSTEM": {
+		name: "Binary Star System",
+		clearPrevious: true,
+		generators: [
+			{
+				type: "binary_system",
+				primary: { template: "Sun", name: "Sun A", color: "#FF8C00" },
+				secondary: { template: "Sun", name: "Sun B", color: "#00BFFF" },
+				separationAu: 3.0,
+				planets: [
+					{ template: "Earth", host: "primary", distanceAu: 0.35, hasMoon: true },
+					{ template: "Jupiter", host: "barycenter", distanceAu: 7.0 }
+				]
+			}
+		]
+	},
+	"THREE_BODY": {
+		name: "Three-Body Problem",
+		clearPrevious: true,
+		generators: [
+			{
+				type: "three_body",
+				stars: [
+					{ template: "Sun", name: "Sun A (Trisolaris 1)", color: "#FF4500" },
+					{ template: "Sun", name: "Sun B (Trisolaris 2)", color: "#00E5FF" },
+					{ template: "Sun", name: "Sun C (Trisolaris 3)", color: "#FFD700" }
+				],
+				radiusAu: 3.0,
+				velocityRatio: 0.75,
+				includePlanet: true,
+				planetDistanceAu: 0.35
+			}
+		]
+	},
+	"GALACTIC_CENTER": {
+		name: "Galactic Center",
+		clearPrevious: true,
+		staticObjects: [
+			{ template: "SgrAStar", x: 0, y: 0 },
+			{ template: "Sun", host: "Sagittarius A*" },
+			{ template: "ProximaCentauri", host: "Sagittarius A*" },
+			{ template: "AlphaCentauriA", host: "Sagittarius A*" },
+			{ template: "Sirius", host: "Sagittarius A*" },
+			{ template: "Vega", host: "Sagittarius A*" },
+			{ template: "Polaris", host: "Sagittarius A*" },
+			{ template: "Betelgeuse", host: "Sagittarius A*" },
+			{ template: "Rigel", host: "Sagittarius A*" }
 		]
 	}
 };

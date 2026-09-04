@@ -126,14 +126,19 @@ export class ObjectPlacer {
 
 			this.universe.TelemetryPanel.targetId = obj.id;
 		} else {
+			const name = options.name || param.NAME;
+			const mass = options.mass !== undefined ? options.mass : param.MASS;
+			const color = options.color || param.COLOR;
+			const radius = options.radius !== undefined ? options.radius : (param.RADIUS || 1);
+			const minDraw = options.minDrawSize !== undefined ? options.minDrawSize : minDrawSize;
 			obj = new CelestialBody(
-				nextId, param.NAME,
+				nextId, name,
 				x, y,
 				vx, vy,
-				param.MASS, 
-				param.COLOR,
-				minDrawSize,
-				param.RADIUS || 1,
+				mass, 
+				color,
+				minDraw,
+				radius,
 				0,
 				param.BORDER_COLOR || null,
 				param.BORDER_WIDTH || 0
@@ -223,9 +228,17 @@ export class ObjectPlacer {
 			});
 		}
 
-		// 2. Process Procedural Generators (Swarms)
+		// 2. Process Procedural Generators (Swarms, Binary, ThreeBody)
 		if (profile.generators) {
 			profile.generators.forEach(gen => {
+				if (gen.type === 'binary_system') {
+					this._deployBinarySystem(gen);
+					return;
+				} else if (gen.type === 'three_body') {
+					this._deployThreeBody(gen);
+					return;
+				}
+
 				const hostObj = this.universe.objects.find(obj => obj.name === gen.host);
 				if (!hostObj) return;
 
@@ -297,6 +310,218 @@ export class ObjectPlacer {
 
 			this.placeObject(template, hostObj.x + relX, hostObj.y + relY, hostObj.vx + relVx, hostObj.vy + relVy, options);
 		}
+	}
+
+	_deployBinarySystem(genConfig) {
+		const canvas = this.universe.canvas;
+		let cx = canvas.width / 2;
+		let cy = canvas.height / 2;
+
+		const existingObj = this.universe.objects[0];
+		if (existingObj) {
+			cx = existingObj.x;
+			cy = existingObj.y;
+		}
+
+		const pConf = genConfig.primary || { template: 'Sun', name: 'Sun A' };
+		const sConf = genConfig.secondary || { template: 'Sun', name: 'Sun B' };
+
+		const pParam = DEFAULT_OBJECT_PARAMS[pConf.template] || DEFAULT_OBJECT_PARAMS['Sun'];
+		const sParam = DEFAULT_OBJECT_PARAMS[sConf.template] || DEFAULT_OBJECT_PARAMS['Sun'];
+
+		const m1 = pConf.mass !== undefined ? pConf.mass : pParam.MASS;
+		const m2 = sConf.mass !== undefined ? sConf.mass : sParam.MASS;
+		const mTotalKg = UnitConvertUtils.ton2kg(m1 + m2);
+
+		const sepAu = genConfig.separationAu || 3.0;
+		const d_m = UnitConvertUtils.au2m(sepAu);
+
+		const r1_m = d_m * (m2 / (m1 + m2));
+		const r2_m = d_m * (m1 / (m1 + m2));
+
+		const vRel_m = Math.sqrt(PHYSICS.G * mTotalKg / d_m);
+		const v1_m = vRel_m * (m2 / (m1 + m2));
+		const v2_m = vRel_m * (m1 / (m1 + m2));
+
+		const r1_px = UnitConvertUtils.m2pix(r1_m);
+		const r2_px = UnitConvertUtils.m2pix(r2_m);
+		const v1_px = UnitConvertUtils.m2pix(v1_m);
+		const v2_px = UnitConvertUtils.m2pix(v2_m);
+
+		let primaryObj = null;
+		if (existingObj) {
+			primaryObj = existingObj;
+			primaryObj.name = pConf.name || "Sun A";
+			primaryObj.color = pConf.color || pParam.COLOR;
+			primaryObj._mass = m1;
+			primaryObj.x = cx - r1_px;
+			primaryObj.y = cy;
+			primaryObj.vx = 0;
+			primaryObj.vy = v1_px;
+			primaryObj.ax = 0;
+			primaryObj.ay = 0;
+			if (primaryObj.trajectory) primaryObj.trajectory.clear();
+			this.universe.ObjectManager.updateObject(primaryObj);
+		} else {
+			primaryObj = this.placeObject(pConf.template, cx - r1_px, cy, 0, v1_px, {
+				name: pConf.name || "Sun A",
+				color: pConf.color,
+				mass: m1
+			});
+		}
+
+		this.placeObject(sConf.template, cx + r2_px, cy, 0, -v2_px, {
+			name: sConf.name || "Sun B",
+			color: sConf.color,
+			mass: m2
+		});
+
+		if (genConfig.planets && Array.isArray(genConfig.planets)) {
+			genConfig.planets.forEach(pDef => {
+				if (pDef.host === 'primary') {
+					const m1Kg = UnitConvertUtils.ton2kg(m1);
+					const dist_m = UnitConvertUtils.au2m(pDef.distanceAu || 0.35);
+					const vOrb_m = Math.sqrt(PHYSICS.G * m1Kg / dist_m);
+					const dist_px = UnitConvertUtils.m2pix(dist_m);
+					const vOrb_px = UnitConvertUtils.m2pix(vOrb_m);
+
+					const px = primaryObj.x;
+					const py = primaryObj.y - dist_px;
+					const pvx = primaryObj.vx - vOrb_px;
+					const pvy = primaryObj.vy;
+
+					const planet = this.placeObject(pDef.template, px, py, pvx, pvy, pDef.options || {});
+
+					if (pDef.hasMoon) {
+						const moonDist_m = UnitConvertUtils.au2m(0.00257);
+						const moonV_m = Math.sqrt(PHYSICS.G * UnitConvertUtils.ton2kg(planet.mass) / moonDist_m);
+						this.placeObject(
+							"Moon",
+							planet.x,
+							planet.y - UnitConvertUtils.m2pix(moonDist_m),
+							planet.vx - UnitConvertUtils.m2pix(moonV_m),
+							planet.vy
+						);
+					}
+				} else if (pDef.host === 'barycenter') {
+					const dist_m = UnitConvertUtils.au2m(pDef.distanceAu || 7.0);
+					const vOrb_m = Math.sqrt(PHYSICS.G * mTotalKg / dist_m);
+					const dist_px = UnitConvertUtils.m2pix(dist_m);
+					const vOrb_px = UnitConvertUtils.m2pix(vOrb_m);
+
+					const px = cx;
+					const py = cy + dist_px;
+					const pvx = vOrb_px;
+					const pvy = 0;
+
+					this.placeObject(pDef.template, px, py, pvx, pvy, pDef.options || {});
+				}
+			});
+		}
+
+		EventBus.emit('camera:set-tracking-target', primaryObj);
+	}
+
+	_deployThreeBody(genConfig) {
+		const canvas = this.universe.canvas;
+		let cx = canvas.width / 2;
+		let cy = canvas.height / 2;
+
+		const existingObj = this.universe.objects[0];
+		if (existingObj) {
+			cx = existingObj.x;
+			cy = existingObj.y;
+		}
+
+		const stars = genConfig.stars || [
+			{ template: "Sun", name: "Sun A (Trisolaris 1)", color: "#FF4500" },
+			{ template: "Sun", name: "Sun B (Trisolaris 2)", color: "#00E5FF" },
+			{ template: "Sun", name: "Sun C (Trisolaris 3)", color: "#FFD700" }
+		];
+
+		const sunParam = DEFAULT_OBJECT_PARAMS['Sun'];
+		const massTon = sunParam.MASS;
+		const massKg = UnitConvertUtils.ton2kg(massTon);
+
+		const radiusAu = genConfig.radiusAu || 3.0;
+		const R_m = UnitConvertUtils.au2m(radiusAu);
+		const R_px = UnitConvertUtils.m2pix(R_m);
+
+		// Lagrange circular speed for equilateral triangle: v0 = sqrt(G * M / (sqrt(3) * R))
+		const vLagrange_m = Math.sqrt(PHYSICS.G * massKg / (Math.sqrt(3) * R_m));
+		const velRatio = genConfig.velocityRatio !== undefined ? genConfig.velocityRatio : 0.75;
+		const vBase_m = vLagrange_m * velRatio;
+
+		// 3 vertices at 90 deg, 210 deg, 330 deg
+		const angles = [
+			Math.PI / 2,
+			Math.PI / 2 + (2 * Math.PI / 3),
+			Math.PI / 2 + (4 * Math.PI / 3)
+		];
+
+		const deployedStars = [];
+
+		for (let i = 0; i < 3; i++) {
+			const theta = angles[i];
+			const sConf = stars[i] || {};
+			const color = sConf.color || sunParam.COLOR;
+			const name = sConf.name || `Sun ${String.fromCharCode(65 + i)}`;
+
+			// Coordinates (canvas y axis is downward)
+			const posX = cx + R_px * Math.cos(theta);
+			const posY = cy - R_px * Math.sin(theta);
+
+			// Add small asymmetry to star B for rich chaotic evolution
+			const speedMult = i === 1 ? 1.005 : 1.0;
+			const v_m = vBase_m * speedMult;
+			const v_px = UnitConvertUtils.m2pix(v_m);
+
+			// Counter-clockwise velocity vector
+			const velX = -v_px * Math.sin(theta);
+			const velY = -v_px * Math.cos(theta);
+
+			if (i === 0 && existingObj) {
+				existingObj.name = name;
+				existingObj.color = color;
+				existingObj._mass = massTon;
+				existingObj.x = posX;
+				existingObj.y = posY;
+				existingObj.vx = velX;
+				existingObj.vy = velY;
+				existingObj.ax = 0;
+				existingObj.ay = 0;
+				if (existingObj.trajectory) existingObj.trajectory.clear();
+				this.universe.ObjectManager.updateObject(existingObj);
+				deployedStars.push(existingObj);
+			} else {
+				const starObj = this.placeObject(sConf.template || "Sun", posX, posY, velX, velY, {
+					name: name,
+					color: color,
+					mass: massTon
+				});
+				deployedStars.push(starObj);
+			}
+		}
+
+		// Optional: Add Trisolaris planet (Earth) orbiting Star A
+		if (genConfig.includePlanet) {
+			const starA = deployedStars[0];
+			const pDist_m = UnitConvertUtils.au2m(genConfig.planetDistanceAu || 0.35);
+			const pDist_px = UnitConvertUtils.m2pix(pDist_m);
+			const vOrb_m = Math.sqrt(PHYSICS.G * massKg / pDist_m);
+			const vOrb_px = UnitConvertUtils.m2pix(vOrb_m);
+
+			this.placeObject(
+				"Earth",
+				starA.x,
+				starA.y - pDist_px,
+				starA.vx - vOrb_px,
+				starA.vy,
+				{ name: "Earth (Trisolaris)" }
+			);
+		}
+
+		EventBus.emit('camera:set-tracking-target', deployedStars[0]);
 	}
 
 	// --- Below are internal calculation/rendering methods ---
