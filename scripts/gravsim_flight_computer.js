@@ -119,8 +119,11 @@ export class FlightComputer {
 		this._updateTelemetry(sensor);
 		this._evaluateProfile(sensor);
 
-		// Apply profile state (Convert from relative to absolute angle for physics target)
-		this.targetLaunchAngle = this.hostAngleRad + UnitConvertUtils.deg2rad(this._profileState.relAngleDeg);
+		// Apply profile state relative to instantaneous local zenith angle (dynamic attitude guidance)
+		const localZenithRad = (sensor.refBody && sensor.distToRefM > 0)
+			? MathUtils.normalizeAngle(this.telemetryCache.gravityAngle + Math.PI)
+			: this.hostAngleRad;
+		this.targetLaunchAngle = localZenithRad + UnitConvertUtils.deg2rad(this._profileState.relAngleDeg);
 
 		const thrustAngleRad = this._computeThrustAngle(sensor);
 		this.currentThrustAngle = thrustAngleRad;
