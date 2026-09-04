@@ -20,7 +20,19 @@ export const SIMULATION = {
 	CALC_EXPAND_DIV_NUM: 20,
 	CALC_SUB_STEPS_BASE: 600,
 	CALC_SUB_STEPS_MAX: 480,
-	MIN_GRAVITY_CALC_MASS: 1e10 // t
+	MIN_GRAVITY_CALC_MASS: 1e10, // t
+	// Adaptive sub-step configurations
+	SUB_STEPS: {
+		MIN: 20,
+		MAX: 1200,
+		BASE: 40,
+		ETA_GRAV: 0.12,       // Dynamical time factor: dt <= eta * sqrt(r / a)
+		ETA_SURF: 0.08,       // Surface approach factor: dt <= eta * dist_surf / v_rel
+		ETA_VEL: 0.25,        // Movement restriction: dt <= eta * radius / v
+		ETA_ACC: 0.15,        // Acceleration change: dt <= eta * (v + v0) / a
+		ETA_ATM: 0.10,        // Atmosphere scale height: dt <= eta * H / v
+		SMOOTHING_DECAY: 0.90 // Decay factor for smooth step reduction
+	}
 };
 
 // Shattering / Roche limit
@@ -231,6 +243,15 @@ export const TELEMETRY = {
 		"3": "MECO",
 		"4": "COASTING",
 		"5": "TRACKING"
+	},
+	ANNUNCIATOR: {
+		Q_LIM_TH: 85, // % of structural limit
+		G_LIM_RATIO: 0.90, // % of max G limit
+		LAMP_TEST_DURATION_SEC: 1.5,
+		TOWER_CLEARANCE_ALT: 1000, // m
+		TOWER_CLEARANCE_TIME: 10, // s
+		FAIRING_SEP_ALT: 100000, // m (Karman line)
+		ORBITAL_VELOCITY_KM_S: 7.5 // km/s
 	}
 };
 
@@ -245,7 +266,11 @@ export const FLIGHT_COMPUTER_CONFIG = {
 	THROTTLE_DOWN_MIN_Vv: 0,
 	ANTI_STALL_Vv_THRESHOLD: 100,
 	ANTI_STALL_MAX_PITCH_UP: 45,
-	LOAD_RELIEF_SAFE_MARGIN: 0.8
+	LOAD_RELIEF_SAFE_MARGIN: 0.8,
+	MAX_Q_MIN_PRESSURE_KPA: 1.0,
+	MAX_Q_PEAK_DROP_RATIO: 0.05,
+	MAX_Q_CONFIRM_DELAY_SEC: 0.5,
+	MAX_Q_KEEP_DURATION_SEC: 3.0,
 };
 
 // Communication buffer structure
@@ -322,6 +347,13 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 250000,
 		"ATM_DENSITY_0": 65,
 		"ATM_SCALE_HEIGHT": 15900,
+		"ATM_FADE_START_ALT": 200000,
+		"ATM_LAYERS": [
+			{ topAlt: 60000, scaleHeight: 15900 },
+			{ topAlt: 120000, scaleHeight: 11000 },
+			{ topAlt: 200000, scaleHeight: 8000 },
+			{ topAlt: 250000, scaleHeight: 5000 }
+		],
 		"ROTATION_PERIOD": 20996800
 	},
 	"Earth": {
@@ -336,6 +368,13 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 100000,
 		"ATM_DENSITY_0": 1.225,
 		"ATM_SCALE_HEIGHT": 8500,
+		"ATM_FADE_START_ALT": 80000,
+		"ATM_LAYERS": [
+			{ topAlt: 25000, scaleHeight: 7600 },
+			{ topAlt: 50000, scaleHeight: 6600 },
+			{ topAlt: 80000, scaleHeight: 5400 },
+			{ topAlt: 100000, scaleHeight: 4500 }
+		],
 		"ROTATION_PERIOD": 86164
 	},
 	"Mars": {
@@ -350,6 +389,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 50000,
 		"ATM_DENSITY_0": 0.02,
 		"ATM_SCALE_HEIGHT": 11100,
+		"ATM_FADE_START_ALT": 40000,
+		"ATM_LAYERS": [
+			{ topAlt: 20000, scaleHeight: 11100 },
+			{ topAlt: 35000, scaleHeight: 8500 },
+			{ topAlt: 50000, scaleHeight: 5500 }
+		],
 		"ROTATION_PERIOD": 88642
 	},
 	"Jupiter": {
@@ -364,6 +409,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 3000000,
 		"ATM_DENSITY_0": 0.16,
 		"ATM_SCALE_HEIGHT": 27000,
+		"ATM_FADE_START_ALT": 2400000,
+		"ATM_LAYERS": [
+			{ topAlt: 500000, scaleHeight: 27000 },
+			{ topAlt: 1500000, scaleHeight: 35000 },
+			{ topAlt: 3000000, scaleHeight: 45000 }
+		],
 		"ROTATION_PERIOD": 35730
 	},
 	"Saturn": {
@@ -378,6 +429,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 4000000,
 		"ATM_DENSITY_0": 0.19,
 		"ATM_SCALE_HEIGHT": 59500,
+		"ATM_FADE_START_ALT": 3200000,
+		"ATM_LAYERS": [
+			{ topAlt: 1000000, scaleHeight: 59500 },
+			{ topAlt: 2500000, scaleHeight: 70000 },
+			{ topAlt: 4000000, scaleHeight: 80000 }
+		],
 		"ROTATION_PERIOD": 38360
 	},
 	"Uranus": {
@@ -392,6 +449,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 2000000,
 		"ATM_DENSITY_0": 0.42,
 		"ATM_SCALE_HEIGHT": 27700,
+		"ATM_FADE_START_ALT": 1600000,
+		"ATM_LAYERS": [
+			{ topAlt: 500000, scaleHeight: 27700 },
+			{ topAlt: 1200000, scaleHeight: 35000 },
+			{ topAlt: 2000000, scaleHeight: 45000 }
+		],
 		"ROTATION_PERIOD": 62064
 	},
 	"Neptune": {
@@ -406,6 +469,12 @@ export const DEFAULT_OBJECT_PARAMS = {
 		"ATM_LIMIT_ALT": 2000000,
 		"ATM_DENSITY_0": 0.45,
 		"ATM_SCALE_HEIGHT": 19700,
+		"ATM_FADE_START_ALT": 1600000,
+		"ATM_LAYERS": [
+			{ topAlt: 500000, scaleHeight: 19700 },
+			{ topAlt: 1200000, scaleHeight: 28000 },
+			{ topAlt: 2000000, scaleHeight: 38000 }
+		],
 		"ROTATION_PERIOD": 57996
 	},
 	"Moon": {
@@ -478,7 +547,15 @@ export const LAUNCH_SEQUENCES = {
 				"4": "num_4",
 				"5": "num_5"
 			},
-			conditions: []
+			conditions: [
+				{ id: "tower_clear", type: "altM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
+				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
+				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
+				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
+				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true }, // 3 = TELEMETRY.STATUS.MECO
+				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
+				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }
+			]
 		}
 	},
 	FULL_COUNTDOWN: {
@@ -556,7 +633,7 @@ export const LAUNCH_SEQUENCES = {
 				{ id: "tower_clear", type: "altM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
 				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
 				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
-				{ id: "approach_maxq", type: "structRatio", operator: ">", value: 80, audio: "fl_approach_maxq", once: true },
+				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
 				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true }, // 3 = TELEMETRY.STATUS.MECO
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
 				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }

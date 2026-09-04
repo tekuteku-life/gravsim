@@ -38,8 +38,8 @@ export class RocketLauncher {
 		// Default Flight Profile
 		this.flightProfile = [
 			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-			{ type: 'alt', value: 10000, thrust: 100, angle: 45 },
-			{ type: 'alt', value: 50000, thrust: 100, angle: 90 }
+			{ type: 'alt', value: 25000, thrust: 100, angle: 45 },
+			{ type: 'alt', value: 70000, thrust: 100, angle: 90 }
 		];
 
 		this.thrustKN = 7600;	// (kN)

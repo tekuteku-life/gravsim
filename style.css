@@ -338,15 +338,46 @@ button:hover { background: #444; }
 	color: #ffaa00 !important;
 }
 
+/* Minimal HUD Bar */
+#minimal-hud-bar {
+	position: fixed;
+	top: 8px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: rgba(0, 20, 10, 0.75);
+	border: 1px solid rgba(0, 255, 204, 0.4);
+	border-radius: 14px;
+	padding: 3px 12px;
+	color: #00ffcc;
+	font-family: 'Courier New', Courier, monospace;
+	font-size: 11px;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+	pointer-events: none;
+	z-index: 1000;
+	text-shadow: 0 0 4px rgba(0, 255, 204, 0.5);
+	box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+	backdrop-filter: blur(4px);
+	display: none;
+}
+
+.m-hud-alert {
+	color: #ff3344;
+	font-weight: bold;
+	margin-left: 6px;
+	text-shadow: 0 0 6px #ff3344;
+	animation: tm-lamp-flash 0.5s infinite ease-in-out;
+}
+
 #telemetry-panel {
 	position: absolute;
 	top: 35px;
 	right: 2px;
-	width: 270px;
+	width: 290px;
 	max-height: calc(100vh - 60px);
 	overflow-x: hidden;
 	overflow-y: auto;
-	touch-action: pan-y;
+	touch-action: pan-x pan-y;
 	pointer-events: auto;
 	background-color: rgba(0, 20, 0, 0.7);
 	border: 1px solid #00ffcc;
@@ -369,13 +400,114 @@ button:hover { background: #444; }
 	visibility: visible;
 }
 
-/* 2-Column layout structure (Act as 1-column on PC) */
-.tm-2col-container {
+/* Telemetry Cards Carousel */
+.tm-carousel {
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
+	gap: 8px;
+	overflow-x: auto;
+	overflow-y: hidden;
+	scroll-snap-type: x mandatory;
+	-webkit-overflow-scrolling: touch;
+	touch-action: pan-x pan-y;
+	scroll-behavior: smooth;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	margin-top: 8px;
+	padding: 2px;
 }
-.tm-col {
-	width: 100%;
+.tm-carousel::-webkit-scrollbar {
+	display: none;
+}
+
+.tm-card {
+	flex: 0 0 100%;
+	scroll-snap-align: start;
+	box-sizing: border-box;
+	background: rgba(0, 30, 20, 0.4);
+	border: 1px solid rgba(0, 255, 204, 0.3);
+	border-radius: 4px;
+	padding: 8px;
+}
+
+.tm-dots {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 6px;
+	margin-top: 6px;
+	padding-top: 2px;
+}
+
+/* When vertical space is sufficient on PC, display multiple cards vertically without scrollbar */
+@media (min-width: 769px) and (min-height: 550px) {
+	#telemetry-panel {
+		padding: 8px 8px 6px 8px;
+		font-size: 12px;
+	}
+	.telemetry-header {
+		font-size: 13px;
+		margin-bottom: 4px;
+		padding-bottom: 2px;
+	}
+	.telemetry-line {
+		margin-bottom: 2px;
+		font-size: 12px;
+	}
+	#tm-status-box {
+		padding: 2px;
+		margin-top: 3px;
+		font-size: 12px;
+	}
+	.tm-section-header {
+		font-size: 11px;
+		margin-top: 0;
+		margin-bottom: 2px;
+		padding-bottom: 1px;
+	}
+	.tm-carousel {
+		flex-direction: column;
+		overflow-x: hidden;
+		overflow-y: hidden; /* Scrollbar eliminated */
+		gap: 5px;
+		margin-top: 4px;
+		padding: 0;
+	}
+	.tm-card {
+		flex: 0 0 auto;
+		width: 100%;
+		padding: 4px 6px;
+	}
+	.tm-dots {
+		display: none;
+	}
+	#sub-canvas {
+		width: 100%;
+		height: 95px;
+	}
+	#tm-nav-wrapper {
+		height: 20px;
+	}
+	#tm-fuel-bar-wrapper, #tm-oxid-bar-wrapper {
+		height: 5px;
+		margin-bottom: 1px;
+	}
+}
+
+.tm-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: rgba(0, 255, 204, 0.25);
+	border: 1px solid rgba(0, 255, 204, 0.5);
+	cursor: pointer;
+	transition: background 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tm-dot.active {
+	background: #00ffcc;
+	transform: scale(1.3);
+	box-shadow: 0 0 6px #00ffcc;
 }
 
 .telemetry-header {
@@ -399,6 +531,112 @@ button:hover { background: #444; }
 	background: #003322;
 	border: 1px solid #00ffcc;
 	padding: 4px; margin-top: 5px;
+}
+
+/* Annunciator Panel (C&W / Status Indicators) */
+.tm-annunciator-panel {
+	margin: 6px 0;
+	padding: 4px 5px;
+	background: rgba(0, 15, 10, 0.65);
+	border: 1px solid rgba(0, 255, 204, 0.35);
+	border-radius: 4px;
+	box-sizing: border-box;
+	cursor: pointer;
+	user-select: none;
+	transition: border-color 0.2s ease;
+}
+.tm-annunciator-panel:hover {
+	border-color: rgba(0, 255, 204, 0.6);
+}
+
+.tm-annunciator-header {
+	font-size: 8px;
+	letter-spacing: 1.5px;
+	color: #008866;
+	text-align: center;
+	margin-bottom: 3px;
+	font-weight: bold;
+	pointer-events: none;
+}
+
+.tm-annunciator-grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 3px;
+}
+
+/* Base Lamp Cell */
+.tm-lamp {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 18px;
+	font-size: 9px;
+	font-weight: bold;
+	font-family: 'Courier New', Courier, monospace;
+	border-radius: 2px;
+	text-transform: uppercase;
+	cursor: pointer;
+	user-select: none;
+	box-sizing: border-box;
+	letter-spacing: 0.5px;
+	
+	/* Off state (Default: unlit cockpit faceplate texture) */
+	background: rgba(5, 15, 10, 0.7);
+	border: 1px solid rgba(0, 80, 55, 0.4);
+	color: rgba(0, 160, 110, 0.22);
+	text-shadow: none;
+	box-shadow: none;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Lamp On States */
+.tm-lamp.lamp-red.on {
+	background: rgba(255, 30, 50, 0.28);
+	border: 1px solid #ff3344;
+	color: #ff4455;
+	text-shadow: 0 0 6px #ff3344;
+	box-shadow: inset 0 0 6px rgba(255, 30, 50, 0.5), 0 0 5px rgba(255, 30, 50, 0.35);
+}
+
+.tm-lamp.lamp-amber.on {
+	background: rgba(255, 170, 0, 0.25);
+	border: 1px solid #ffaa00;
+	color: #ffaa00;
+	text-shadow: 0 0 6px #ffaa00;
+	box-shadow: inset 0 0 6px rgba(255, 170, 0, 0.4), 0 0 5px rgba(255, 170, 0, 0.3);
+}
+
+.tm-lamp.lamp-green.on {
+	background: rgba(0, 255, 136, 0.25);
+	border: 1px solid #00ff88;
+	color: #00ff88;
+	text-shadow: 0 0 6px #00ff88;
+	box-shadow: inset 0 0 6px rgba(0, 255, 136, 0.4), 0 0 5px rgba(0, 255, 136, 0.3);
+}
+
+.tm-lamp.lamp-cyan.on {
+	background: rgba(0, 229, 255, 0.25);
+	border: 1px solid #00e5ff;
+	color: #00e5ff;
+	text-shadow: 0 0 6px #00e5ff;
+	box-shadow: inset 0 0 6px rgba(0, 229, 255, 0.4), 0 0 5px rgba(0, 229, 255, 0.3);
+}
+
+/* Flashing Alert Animation */
+.tm-lamp.blink {
+	animation: tm-lamp-flash 0.5s infinite ease-in-out;
+}
+
+@keyframes tm-lamp-flash {
+	0%, 100% {
+		opacity: 1;
+		filter: brightness(1.2);
+	}
+	50% {
+		opacity: 0.25;
+		filter: brightness(0.6);
+	}
 }
 
 #tm-target-select {
@@ -605,23 +843,34 @@ button:hover { background: #444; }
 		max-height: calc(45dvh - 65px);
 	}
 
-	/* 2-Column layout for telemetry content on Mobile */
-	.tm-2col-container {
-		flex-direction: row;
-		gap: 10px;
-	}
-	.tm-col {
-		width: 50%;
+	/* Carousel Cards on Mobile: peek next card */
+	.tm-card {
+		flex: 0 0 calc(100% - 28px);
+		scroll-snap-align: center;
 	}
 
 	/* Compact UI for Mobile Telemetry */
-	#telemetry-panel { font-size: 10px; }
+	#telemetry-panel { font-size: 11px; }
 	.telemetry-header { font-size: 12px; }
-	.tm-section-header { font-size: 11px; margin-top: 5px; }
+	.tm-section-header { font-size: 11px; margin-top: 2px; }
+
+	.tm-annunciator-panel {
+		margin: 4px 0;
+		padding: 3px 4px;
+	}
+	.tm-annunciator-header {
+		font-size: 7px;
+		margin-bottom: 2px;
+	}
+	.tm-lamp {
+		height: 16px;
+		font-size: 8px;
+		letter-spacing: 0;
+	}
 
 	#sub-canvas {
 		width: 100% !important;
-		height: 50vw !important;
+		height: 120px !important;
 	}
 }
 
