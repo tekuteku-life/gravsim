@@ -232,22 +232,16 @@ export class FlightComputer {
 			remDv = (ve * Math.log(sensor.mass / sensor.dryMass));
 		}
 
-		const refParam = sensor.refBody ? DEFAULT_OBJECT_PARAMS[sensor.refBody.name] : null;
-		const isOutsideAtm = refParam && refParam.ATM_LIMIT_ALT ? altM >= refParam.ATM_LIMIT_ALT : false;
-
-		const qAxialKpa = isOutsideAtm ? 0 : sensor.qAxialKpa;
-		const qLateralKpa = isOutsideAtm ? 0 : sensor.qLateralKpa;
-
-		this.telemetryCache.qAxialKpa = qAxialKpa;
-		this.telemetryCache.qLateralKpa = qLateralKpa;
+		this.telemetryCache.qAxialKpa = sensor.qAxialKpa;
+		this.telemetryCache.qLateralKpa = sensor.qLateralKpa;
 		this.telemetryCache.aoaDeg = sensor.aoaDeg;
 
 		let structRatio = 0;
-		if (!isOutsideAtm && this.config.maxQAxialLimit !== Infinity && this.config.maxQLateralLimit !== Infinity) {
+		if (this.config.maxQAxialLimit !== Infinity && this.config.maxQLateralLimit !== Infinity) {
 			const isTailFirst = Math.cos(UnitConvertUtils.deg2rad(sensor.aoaDeg)) < 0;
 			const effectiveAxialLimit = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
-			const axialRatio = UnitConvertUtils.kpa2pa(qAxialKpa) / effectiveAxialLimit;
-			const lateralRatio = UnitConvertUtils.kpa2pa(qLateralKpa) / this.config.maxQLateralLimit;
+			const axialRatio = UnitConvertUtils.kpa2pa(sensor.qAxialKpa) / effectiveAxialLimit;
+			const lateralRatio = UnitConvertUtils.kpa2pa(sensor.qLateralKpa) / this.config.maxQLateralLimit;
 
 			structRatio = Math.max(axialRatio, lateralRatio) * 100;
 		}
@@ -285,9 +279,7 @@ export class FlightComputer {
 		}
 
 		// Max-Q Auto-Throttle (Flight Computer Feedback)
-		const refParam = sensor.refBody ? DEFAULT_OBJECT_PARAMS[sensor.refBody.name] : null;
-		const isOutsideAtm = refParam && refParam.ATM_LIMIT_ALT ? this.telemetryCache.altM >= refParam.ATM_LIMIT_ALT : false;
-		if (!isOutsideAtm && this.config.maxQAxialLimit !== Infinity) {
+		if (this.config.maxQAxialLimit !== Infinity) {
 			const isTailFirst = Math.cos(UnitConvertUtils.deg2rad(this.telemetryCache.aoaDeg)) < 0;
 			const effectiveAxialLimitPa = isTailFirst ? this.config.maxQLateralLimit : this.config.maxQAxialLimit;
 			const qRatio = UnitConvertUtils.kpa2pa(sensor.qAxialKpa) / effectiveAxialLimitPa;

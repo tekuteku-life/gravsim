@@ -361,7 +361,7 @@ class PhysicsEngine {
 		const refParam = DEFAULT_OBJECT_PARAMS[refBody.name];
 		const altM = distM - refBody.radius; // m
 
-		if (altM >= refParam.ATM_LIMIT_ALT || altM < 0) {
+		if (altM > refParam.ATM_LIMIT_ALT) {
 			obj.clearAerodynamicParameters();
 			return;
 		}

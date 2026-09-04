@@ -144,64 +144,11 @@ class GravSimCalcObject {
 		}
 	}
 
-	_calculateAtmosphericDensity(refBody, refParam, altM) {
-		if (!refParam || altM >= refParam.ATM_LIMIT_ALT) {
-			return 0;
-		}
-		if (altM <= 0) {
-			return refParam.ATM_DENSITY_0 || 0;
-		}
-
-		let rho = refParam.ATM_DENSITY_0;
-		const layers = refParam.ATM_LAYERS;
-
-		if (layers && layers.length > 0) {
-			let prevAlt = 0;
-			let currentRho = refParam.ATM_DENSITY_0;
-
-			for (let i = 0; i < layers.length; i++) {
-				const layer = layers[i];
-				const hTop = layer.topAlt;
-				const H = layer.scaleHeight;
-
-				if (altM < hTop || i === layers.length - 1) {
-					currentRho *= Math.exp(-(altM - prevAlt) / H);
-					rho = currentRho;
-					break;
-				} else {
-					currentRho *= Math.exp(-(hTop - prevAlt) / H);
-					prevAlt = hTop;
-				}
-			}
-		} else {
-			const H = refParam.ATM_SCALE_HEIGHT || AERO_DYNAMIC.DEFAULT_SCALE_HEIGHT;
-			rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / H);
-		}
-
-		// Smooth Cosine Fade-out to Karman boundary
-		const fadeStart = refParam.ATM_FADE_START_ALT || (refParam.ATM_LIMIT_ALT * AERO_DYNAMIC.FADE_START_RATIO);
-		if (altM > fadeStart && refParam.ATM_LIMIT_ALT > fadeStart) {
-			const fade = 0.5 * (1 + Math.cos(Math.PI * (altM - fadeStart) / (refParam.ATM_LIMIT_ALT - fadeStart)));
-			rho *= fade;
-		}
-
-		return rho;
-	}
-
 	applyAerodynamics(refBody, refParam, altM) {
-		if (altM >= refParam.ATM_LIMIT_ALT || altM < 0) {
-			this.clearAerodynamicParameters();
-			return;
-		}
+		this.inAtmosphere = true;
 
 		// Calculate Atmospheric Density
-		const rho = this._calculateAtmosphericDensity(refBody, refParam, altM);
-		if (rho <= 0) {
-			this.clearAerodynamicParameters();
-			return;
-		}
-
-		this.inAtmosphere = true;
+		const rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / refParam.ATM_SCALE_HEIGHT); // kg/m^3
 
 		// Calculate local atmosphere velocity
 		let vAtmM_x = refBody.vx; // m/s
@@ -457,8 +404,8 @@ export class CalcRocket extends GravSimCalcObject {
 		this._sensorData.vy = this.vy;
 		this._sensorData.ax = this.ax;
 		this._sensorData.ay = this.ay;
-		this._sensorData.qAxialKpa = this.inAtmosphere ? (this._qAxialKpa || 0) : 0;
-		this._sensorData.qLateralKpa = this.inAtmosphere ? (this._qLateralKpa || 0) : 0;
+		this._sensorData.qAxialKpa = this._qAxialKpa || 0;
+		this._sensorData.qLateralKpa = this._qLateralKpa || 0;
 		this._sensorData.aoaDeg = this._aoaDeg || 0;
 		this._sensorData.progradeAngle = this._progradeAngle || 0;
 		this._sensorData.refBody = refBody;
