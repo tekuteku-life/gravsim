@@ -1,8 +1,12 @@
 
 // gravsim_calc.js
 
-import { PHYSICS, SIMULATION, ROCHE_LIMIT, DEBRIS, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js'
-import { CalcCelestialBody, CalcRocket, CalcDebris } from './gravsim_calc_object.js'
+import {
+	PHYSICS, SIMULATION, ROCHE_LIMIT,
+	COLLISION_CONFIG, DEBRIS, OBJECT_TYPES,
+	DEFAULT_OBJECT_PARAMS
+} from './gravsim_const.js';
+import { CalcCelestialBody, CalcRocket, CalcDebris } from './gravsim_calc_object.js';
 import { QuadTreePool, Rectangle } from './gravsim_calc_quadtree.js';
 import { WorkerProfiler } from './gravsim_profiler.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
