@@ -194,6 +194,9 @@ export class ObjectManager {
 			aH: objData.tmAh,
 			currentG: objData.tmCurrentG,
 			flightTime: objData.tmFlightTime,
+			isAntiStallActive: objData.isAntiStall,
+			isQLimitNear: objData.isQLimitNear,
+			isGLimitNear: objData.isGLimitNear,
 		};
 		target.thrustAngle = objData.thrustAngle;
 	}

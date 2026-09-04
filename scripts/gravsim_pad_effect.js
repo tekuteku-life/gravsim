@@ -552,7 +552,7 @@ export class PadEffectRenderer {
 		ctx.stroke();
 		ctx.restore();
 
-		// Umbilical Tower & Cables (Placed on the right side)
+		// Umbilical Tower (Truss, placed on the right side)
 		ctx.save();
 		ctx.translate(rPx * conf.UMBILICAL_OFFSET_X, rPx * conf.UMBILICAL_OFFSET_Y);
 		ctx.rotate(UnitConvertUtils.deg2rad(-this.umbilicalAngle));

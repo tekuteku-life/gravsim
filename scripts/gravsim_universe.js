@@ -23,7 +23,7 @@ import { DestructionManager } from './gravsim_destruction_manager.js';
 import { VisualEffectManager } from './gravsim_visual_effect_manager.js';
 import { EventBus } from './gravsim_event_bus.js';
 
-const GRAVSIM_CALC_JS_FILE = './scripts/gravsim_calc.js';
+const GRAVSIM_CALC_JS_FILE = `./scripts/gravsim_calc.js?v=${Date.now()}`;
 
 /*******************************************************************
  * CalcWorkerManager class that manages the calculation worker for physics simulation.
@@ -192,8 +192,9 @@ export class Universe {
 	updateObjectParams(data) {
 		this.ObjectManager.updateObjectParams(data);
 
-		// Measure Physics Worker FPS
-		EventBus.emit('physics-updated');
+		// Measure Physics Worker FPS and propagate subSteps
+		this.currentSubSteps = data.subSteps || 0;
+		EventBus.emit('physics-updated', data.subSteps);
 	}
 
 	reset() {
