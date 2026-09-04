@@ -245,8 +245,8 @@ export const TELEMETRY = {
 		"5": "TRACKING"
 	},
 	ANNUNCIATOR: {
-		Q_LIM_TH: 75, // % of structural limit
-		G_LIM_RATIO: 0.85, // 85% of max G limit
+		Q_LIM_TH: 85, // % of structural limit
+		G_LIM_RATIO: 0.90, // % of max G limit
 		LAMP_TEST_DURATION_SEC: 1.5,
 		TOWER_CLEARANCE_ALT: 1000, // m
 		TOWER_CLEARANCE_TIME: 10, // s
