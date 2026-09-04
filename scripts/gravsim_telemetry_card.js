@@ -54,7 +54,7 @@ export class FlightDynamicsCard extends TelemetryCard {
 	}
 
 	resetUI(target) {
-		DOMUtils.setText(this.ui.mass, target.mass.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}).padStart(9, ' '));
+		DOMUtils.setText(this.ui.mass, "---".padStart(9, ' '));
 		DOMUtils.setText(this.ui.alt, "---".padStart(10, ' '));
 		DOMUtils.setText(this.ui.velV, "---".padStart(7, ' '));
 		DOMUtils.setText(this.ui.velH, "---".padStart(7, ' '));
