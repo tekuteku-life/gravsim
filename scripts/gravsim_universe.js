@@ -23,7 +23,7 @@ import { DestructionManager } from './gravsim_destruction_manager.js';
 import { VisualEffectManager } from './gravsim_visual_effect_manager.js';
 import { EventBus } from './gravsim_event_bus.js';
 
-const GRAVSIM_CALC_JS_FILE = './scripts/gravsim_calc.js';
+const GRAVSIM_CALC_JS_FILE = `./scripts/gravsim_calc.js?v=${Date.now()}`;
 
 /*******************************************************************
  * CalcWorkerManager class that manages the calculation worker for physics simulation.
