@@ -562,7 +562,6 @@ class PhysicsEngine {
 			BASE: 40,
 			ETA_GRAV: 0.12,
 			ETA_SURF: 0.08,
-			ETA_VEL: 0.25,
 			ETA_ACC: 0.15,
 			ETA_ATM: 0.10
 		};
@@ -599,13 +598,6 @@ class PhysicsEngine {
 
 				if (dtDyn < minAllowedDt) minAllowedDt = dtDyn;
 				if (dtSurf < minAllowedDt) minAllowedDt = dtSurf;
-			}
-
-			// Massive body displacement limit (CFL-like)
-			const vA = objA.getV();
-			if (vA > 1e-3) {
-				const dtVel = cfg.ETA_VEL * (objA.radius / vA);
-				if (dtVel < minAllowedDt) minAllowedDt = dtVel;
 			}
 		}
 
@@ -664,8 +656,16 @@ class PhysicsEngine {
 		const scaledBase = Math.max(cfg.MIN, Math.ceil(cfg.BASE * Math.min(timeScale, 10)));
 		steps = Math.max(steps, scaledBase);
 
+		// Performance safeguard: dynamically scale maximum steps based on total body count
+		// to maintain high FPS and avoid CPU freezing under massive debris / stress conditions
+		const totalBodies = massiveLen + tinyLen;
+		let effectiveMax = cfg.MAX;
+		if (totalBodies > 50) {
+			effectiveMax = Math.max(cfg.MIN * 2, Math.floor(cfg.MAX * (50 / totalBodies)));
+		}
+
 		// Clamp to maximum allowed sub-steps
-		steps = Math.min(steps, cfg.MAX);
+		steps = Math.min(steps, effectiveMax);
 
 		return steps;
 	}
