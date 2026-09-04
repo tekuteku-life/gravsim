@@ -241,11 +241,9 @@ export class TelemetryPanel {
 		}
 
 		// Click on annunciator to trigger Lamp Test
-		if (this.ui.annunciator) {
-			this.ui.annunciator.addEventListener('click', () => {
-				this.startLampTest(TELEMETRY.ANNUNCIATOR?.LAMP_TEST_DURATION_SEC || 1.5);
-			});
-		}
+		this.ui.annunciator.addEventListener('click', () => {
+			this.startLampTest(TELEMETRY.ANNUNCIATOR?.LAMP_TEST_DURATION_SEC || 1.5);
+		});
 
 		// Event listeners for launch sequence updates and animations
 		EventBus.on('sequencer-start', () => {
