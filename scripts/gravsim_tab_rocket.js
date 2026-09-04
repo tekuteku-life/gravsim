@@ -382,6 +382,7 @@ export class RocketTab {
 			this.universe.RocketLauncher.hostId = targetHostId;
 		}
 		this._setupLaunchEnvironment(targetHostId);
+		this._updateRocketHostOptions(); 
 		this._updateRocketStats();
 	}
 
