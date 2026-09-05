@@ -183,6 +183,9 @@ export class ObjectManager {
 		target.isHoldDown = objData.isHoldDown;
 		target.isIgnited = objData.isIgnited;
 
+		target.tankPresFuel = objData.tmTankPresFuel;
+		target.tankPresOxid = objData.tmTankPresOxid;
+
 		target.telemetry = {
 			status: objData.tmStatus,
 			qAxialKpa: objData.tmQAxial,
@@ -203,6 +206,8 @@ export class ObjectManager {
 			isAntiStallActive: objData.isAntiStall,
 			isQLimitNear: objData.isQLimitNear,
 			isGLimitNear: objData.isGLimitNear,
+			tankPresFuel: objData.tmTankPresFuel,
+			tankPresOxid: objData.tmTankPresOxid,
 		};
 		target.thrustAngle = objData.thrustAngle;
 	}

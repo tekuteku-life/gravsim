@@ -1,6 +1,6 @@
 // gravsim_telemetry_panel.js
 
-import { UI, OBJECT_TYPES, TELEMETRY, EVENT_PRIORITY } from './gravsim_const.js';
+import { UI, OBJECT_TYPES, TELEMETRY, EVENT_PRIORITY, TANK_PRESSURE_SIM } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
 import { DOMUtils, UnitConvertUtils, FormatUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
@@ -602,7 +602,8 @@ export class TelemetryPanel {
 		this._setLamp('orbit', isOrbit, false);
 
 		// 9. PRESS (Tank pressure nominal)
-		const isPress = target.presState === 'NOMINAL' || (tm.tankPresFuel >= 250 && tm.tankPresOxid >= 250);
+		const threshold = TANK_PRESSURE_SIM.PRESS_LAMP_THRESHOLD_KPA;
+		const isPress = target.presState === 'NOMINAL' || (tm.tankPresFuel >= threshold && tm.tankPresOxid >= threshold);
 		this._setLamp('press', isPress, false);
 
 		// 10. ENG-ON (Main engine thrusting)

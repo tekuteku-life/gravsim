@@ -1,6 +1,6 @@
 // gravsim_telemetry_card.js
 
-import { OBJECT_TYPES, TELEMETRY } from './gravsim_const.js';
+import { OBJECT_TYPES, TELEMETRY, TANK_PRESSURE_SIM } from './gravsim_const.js';
 import { MathUtils, DOMUtils, UnitConvertUtils, FormatUtils } from './gravsim_utils.js';
 
 /*******************************************************************
@@ -140,6 +140,8 @@ export class PropulsionCard extends TelemetryCard {
 			tankPresOxid: document.getElementById('tm-tank-pres-oxid'),
 			fuelBar: document.getElementById('tm-fuel-bar'),
 			oxidBar: document.getElementById('tm-oxid-bar'),
+			presFuelBar: document.getElementById('tm-pres-fuel-bar'),
+			presOxidBar: document.getElementById('tm-pres-oxid-bar'),
 		};
 		DOMUtils.verifyElements(this.ui, 'PropulsionCard');
 	}
@@ -164,8 +166,10 @@ export class PropulsionCard extends TelemetryCard {
 		const displayOxid = oxidRem < 0.01 ? 0 : oxidRem;
 		DOMUtils.setText(this.ui.oxidMass, FormatUtils.numFixPad(displayOxid, 2, 6));
 
-		DOMUtils.setText(this.ui.tankPresFuel, (tm.tankPresFuel || 0).toFixed(0));
-		DOMUtils.setText(this.ui.tankPresOxid, (tm.tankPresOxid || 0).toFixed(0));
+		const presFuel = tm.tankPresFuel || 0;
+		const presOxid = tm.tankPresOxid || 0;
+		DOMUtils.setText(this.ui.tankPresFuel, presFuel > 0 ? presFuel.toFixed(0) : "0");
+		DOMUtils.setText(this.ui.tankPresOxid, presOxid > 0 ? presOxid.toFixed(0) : "0");
 
 		if (!this.maxFuel[target.id] || fuelRem > this.maxFuel[target.id]) this.maxFuel[target.id] = fuelRem;
 		let pctF = this.maxFuel[target.id] > 0 ? (fuelRem / this.maxFuel[target.id]) * 100 : 0;
@@ -175,20 +179,32 @@ export class PropulsionCard extends TelemetryCard {
 		let pctO = this.maxOxid[target.id] > 0 ? (oxidRem / this.maxOxid[target.id]) * 100 : 0;
 		if (pctO < 0.5) { pctO = 0; }
 
+		const maxPresScale = TANK_PRESSURE_SIM.MAX_SCALE_KPA;
+		const pctPresF = Math.min(Math.max((presFuel / maxPresScale) * 100, 0), 100);
+		const pctPresO = Math.min(Math.max((presOxid / maxPresScale) * 100, 0), 100);
+
 		// Suppress visual transition jump when restored from hidden state
 		if (this._skipBarTransitionOnce) {
 			this._skipBarTransitionOnce = false;
 			this.ui.fuelBar.style.transition = 'none';
 			this.ui.oxidBar.style.transition = 'none';
+			this.ui.presFuelBar.style.transition = 'none';
+			this.ui.presOxidBar.style.transition = 'none';
 			DOMUtils.setStyle(this.ui.fuelBar, 'width', `${pctF}%`);
 			DOMUtils.setStyle(this.ui.oxidBar, 'width', `${pctO}%`);
+			DOMUtils.setStyle(this.ui.presFuelBar, 'width', `${pctPresF}%`);
+			DOMUtils.setStyle(this.ui.presOxidBar, 'width', `${pctPresO}%`);
 			requestAnimationFrame(() => {
 				this.ui.fuelBar.style.transition = '';
 				this.ui.oxidBar.style.transition = '';
+				this.ui.presFuelBar.style.transition = '';
+				this.ui.presOxidBar.style.transition = '';
 			});
 		} else {
 			DOMUtils.setStyle(this.ui.fuelBar, 'width', `${pctF}%`);
 			DOMUtils.setStyle(this.ui.oxidBar, 'width', `${pctO}%`);
+			DOMUtils.setStyle(this.ui.presFuelBar, 'width', `${pctPresF}%`);
+			DOMUtils.setStyle(this.ui.presOxidBar, 'width', `${pctPresO}%`);
 		}
 	}
 
@@ -202,6 +218,8 @@ export class PropulsionCard extends TelemetryCard {
 		DOMUtils.setText(this.ui.tankPresOxid, "---");
 		DOMUtils.setStyle(this.ui.fuelBar, 'width', `0%`);
 		DOMUtils.setStyle(this.ui.oxidBar, 'width', `0%`);
+		DOMUtils.setStyle(this.ui.presFuelBar, 'width', `0%`);
+		DOMUtils.setStyle(this.ui.presOxidBar, 'width', `0%`);
 	}
 }
 

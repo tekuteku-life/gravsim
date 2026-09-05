@@ -327,7 +327,8 @@ button:hover { background: #444; }
 .auto-sequence-mode .tm-bar-header {
 	color: #cc8800 !important;
 }
-.auto-sequence-mode #tm-fuel-bar, .auto-sequence-mode #tm-oxid-bar {
+.auto-sequence-mode #tm-fuel-bar, .auto-sequence-mode #tm-oxid-bar,
+.auto-sequence-mode #tm-pres-fuel-bar, .auto-sequence-mode #tm-pres-oxid-bar {
 	background: #ffaa00 !important;
 }
 .auto-sequence-mode #tm-nav-wrapper {
@@ -505,8 +506,9 @@ button:hover { background: #444; }
 	#tm-nav-wrapper {
 		height: 20px;
 	}
-	#tm-fuel-bar-wrapper, #tm-oxid-bar-wrapper {
-		height: 5px;
+	#tm-fuel-bar-wrapper, #tm-oxid-bar-wrapper,
+	#tm-pres-fuel-bar-wrapper, #tm-pres-oxid-bar-wrapper {
+		height: 4px;
 		margin-bottom: 1px;
 	}
 }
@@ -685,7 +687,8 @@ button:hover { background: #444; }
 	color: #00aa88;
 }
 
-#tm-fuel-bar-wrapper, #tm-oxid-bar-wrapper {
+#tm-fuel-bar-wrapper, #tm-oxid-bar-wrapper,
+#tm-pres-fuel-bar-wrapper, #tm-pres-oxid-bar-wrapper {
 	width: 100%;
 	height: 6px;
 	background: #222;
@@ -705,6 +708,20 @@ button:hover { background: #444; }
 	height: 100%;
 	background: #00aaff;
 	transition: width 0.1s;
+}
+
+#tm-pres-fuel-bar {
+	width: 0%;
+	height: 100%;
+	background: #00ddb0;
+	transition: width 0.08s linear;
+}
+
+#tm-pres-oxid-bar {
+	width: 0%;
+	height: 100%;
+	background: #0099ff;
+	transition: width 0.08s linear;
 }
 
 #tm-nav-wrapper {

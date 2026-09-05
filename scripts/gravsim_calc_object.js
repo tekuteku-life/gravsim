@@ -255,27 +255,40 @@ export class CalcRocket extends GravSimCalcObject {
 		});
 
 		// Pressure simulation parameters
-		this.tankPresFuel = TANK_PRESSURE_SIM.UNPRESSURIZED_KPA; // kPa
-		this.tankPresOxid = TANK_PRESSURE_SIM.UNPRESSURIZED_KPA; // kPa
-		this.presState = 'UNPRESSURIZED';
+		this.tankPresFuel = 0; // kPa (Starts at 0 on rollout, then smoothly fills)
+		this.tankPresOxid = 0; // kPa
+		this.presState = 'ROLLOUT_FILL';
 		this.presTimer = 0; // s
+		this._wasFiring = false;
+		this._noiseFiltF = 0;
+		this._noiseFiltO = 0;
 
 		// Zero-allocation: Cache sensor data object for FlightComputer updates
 		this._sensorData = {
 			dt: 0, mass: 0, dryMass: 0, fuelMass: 0, thrustForce: 0, thrustRatio: 0,
 			burnTime: 0, massLossRate: 0, x: 0, y: 0, vx: 0, vy: 0, ax: 0, ay: 0,
 			qAxialKpa: 0, qLateralKpa: 0, aoaDeg: 0, progradeAngle: 0, refBody: null,
-			distToRefM: 0, isHoldDown: false, isIgnited: false
+		distToRefM: 0, isHoldDown: false, isIgnited: false
 		};
 	}
 
 	handleCommand(cmd) {
 		if (cmd === 'PRESSURIZE_TANK') {
-			this.presState = 'PRESSURIZING';
-			this.presTimer = 0;
+			if (this.presState === 'ROLLOUT_FILL' || this.presState === 'UNPRESSURIZED') {
+				this._presStartF = this.tankPresFuel;
+				this._presStartO = this.tankPresOxid;
+				this.presState = 'PRESSURIZING';
+				this.presTimer = 0;
+			}
 		} else if (cmd === 'IGNITE_ENGINE') {
 			if (this.presState === 'NOMINAL' || this.presState === 'PRESSURIZING') {
-				this.presState = 'IGNITION_DROP';
+				this.presState = 'IGNITION_TRANSIENT';
+				this.presTimer = 0;
+			} else if (this.presState === 'ROLLOUT_FILL' || this.presState === 'UNPRESSURIZED') {
+				// Rapid pressurization failsafe if engine ignited directly without pressurization
+				this.tankPresFuel = TANK_PRESSURE_SIM.TARGET_KPA * TANK_PRESSURE_SIM.IGNITION_DROP_RATIO;
+				this.tankPresOxid = TANK_PRESSURE_SIM.TARGET_KPA * TANK_PRESSURE_SIM.IGNITION_DROP_RATIO;
+				this.presState = 'IGNITION_TRANSIENT';
 				this.presTimer = 0;
 			}
 		}
@@ -336,54 +349,173 @@ export class CalcRocket extends GravSimCalcObject {
 	}
 
 	updatePressure(dt, structRatio) {
-		if (this.fuelMass <= 0 && this.oxidMass <= 0 && this.presState !== 'UNPRESSURIZED') {
+		// Detect engine firing state transition automatically
+		const currentlyFiring = this.isIgnited && (this._thrustRatio > TANK_PRESSURE_SIM.FIRING_DETECT_THROTTLE) && (this.fuelMass > 0 || this.oxidMass > 0);
+		if (currentlyFiring && !this._wasFiring) {
+			// Engine start detected
+			if (this.presState === 'NOMINAL' || this.presState === 'PRESSURIZING' || this.presState === 'UNPRESSURIZED') {
+				this.presState = 'IGNITION_TRANSIENT';
+				this.presTimer = 0;
+			}
+		} else if (!currentlyFiring && this._wasFiring) {
+			// MECO / engine cutoff detected
+			if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {
+				this.presState = 'MECO_TRANSIENT';
+				this.presTimer = 0;
+			}
+		}
+		this._wasFiring = currentlyFiring;
+
+		// Depletion check
+		if (this.fuelMass <= 0 && this.oxidMass <= 0 && this.presState !== 'UNPRESSURIZED' && this.presState !== 'ROLLOUT_FILL') {
 			this.presState = 'DEPLETED';
 		}
 
-		const targetPres = TANK_PRESSURE_SIM.TARGET_KPA; // kPa
-		const unpres = TANK_PRESSURE_SIM.UNPRESSURIZED_KPA; // kPa
+		// Calculate sensor noise and dynamic pressure vibration
+		const rawNoiseF = (Math.random() - 0.5) * 2;
+		const rawNoiseO = (Math.random() - 0.5) * 2;
+		const lpf = TANK_PRESSURE_SIM.NOISE_LPF_ALPHA;
+		this._noiseFiltF = this._noiseFiltF * lpf + rawNoiseF * (1 - lpf);
+		this._noiseFiltO = this._noiseFiltO * lpf + rawNoiseO * (1 - lpf);
 
-		const noiseF = (Math.random() - 0.5) * 2;
-		const noiseO = (Math.random() - 0.5) * 2;
-		const baseNoiseAmp = targetPres * TANK_PRESSURE_SIM.BASE_NOISE_RATIO;
-		const qNoiseAmp = targetPres * TANK_PRESSURE_SIM.Q_NOISE_RATIO * (structRatio / 100);
-		const totalNoiseAmp = baseNoiseAmp + qNoiseAmp; // kPa
+		const qFactor = Math.min((this._qAxialKpa || 0) / TANK_PRESSURE_SIM.Q_NORMALIZATION_KPA, TANK_PRESSURE_SIM.Q_FACTOR_MAX) + (structRatio / 100);
+		const dynJitterAmp = TANK_PRESSURE_SIM.TARGET_KPA * TANK_PRESSURE_SIM.Q_NOISE_RATIO * qFactor;
+		const baseNoiseAmp = TANK_PRESSURE_SIM.BASE_NOISE_KPA;
+
+		const timeSec = this.flightComputer ? this.flightComputer.flightTime : this.presTimer;
+		const resonanceF = Math.sin(timeSec * TANK_PRESSURE_SIM.RESONANCE_FREQ_F) * (dynJitterAmp * TANK_PRESSURE_SIM.RESONANCE_AMP_RATIO);
+		const resonanceO = Math.sin(timeSec * TANK_PRESSURE_SIM.RESONANCE_FREQ_O + TANK_PRESSURE_SIM.RESONANCE_PHASE_O) * (dynJitterAmp * TANK_PRESSURE_SIM.RESONANCE_AMP_RATIO);
+
+		const totalNoiseF = (this._noiseFiltF * baseNoiseAmp) + (rawNoiseF * dynJitterAmp * TANK_PRESSURE_SIM.RAW_NOISE_AMP_RATIO) + resonanceF;
+		const totalNoiseO = (this._noiseFiltO * baseNoiseAmp) + (rawNoiseO * dynJitterAmp * TANK_PRESSURE_SIM.RAW_NOISE_AMP_RATIO) + resonanceO;
+
+		let basePresF = (this.presState === 'UNPRESSURIZED' || this.presState === 'ROLLOUT_FILL') ? TANK_PRESSURE_SIM.GROUND_KPA : TANK_PRESSURE_SIM.TARGET_KPA;
+		let basePresO = (this.presState === 'UNPRESSURIZED' || this.presState === 'ROLLOUT_FILL') ? TANK_PRESSURE_SIM.GROUND_KPA : TANK_PRESSURE_SIM.TARGET_KPA;
 
 		switch (this.presState) {
-			case 'UNPRESSURIZED':
-				this.tankPresFuel = unpres;
-				this.tankPresOxid = unpres;
-				break;
-			case 'PRESSURIZING':
+			case 'ROLLOUT_FILL': {
 				this.presTimer += dt;
-				let pRatio = Math.min(this.presTimer / TANK_PRESSURE_SIM.PRESSURIZE_TIME_SEC, 1.0);
-				this.tankPresFuel = unpres + (targetPres - unpres) * pRatio;
-				this.tankPresOxid = unpres + (targetPres - unpres) * pRatio;
-				if (pRatio >= 1.0) this.presState = 'NOMINAL';
+				const tRatio = Math.min(this.presTimer / TANK_PRESSURE_SIM.ROLLOUT_FILL_TIME_SEC, 1.0);
+				// Smoothstep easing: 3t^2 - 2t^3
+				const smoothP = tRatio * tRatio * (3 - 2 * tRatio);
+				basePresF = smoothP * TANK_PRESSURE_SIM.GROUND_KPA;
+				basePresO = smoothP * TANK_PRESSURE_SIM.GROUND_KPA;
+				if (tRatio >= 1.0) {
+					this.presState = 'UNPRESSURIZED';
+				}
 				break;
-			case 'NOMINAL':
-				this.tankPresFuel = targetPres + noiseF * totalNoiseAmp;
-				this.tankPresOxid = targetPres + noiseO * totalNoiseAmp;
+			}
+			case 'UNPRESSURIZED': {
+				basePresF = TANK_PRESSURE_SIM.GROUND_KPA;
+				basePresO = TANK_PRESSURE_SIM.GROUND_KPA;
 				break;
-			case 'IGNITION_DROP':
+			}
+			case 'PRESSURIZING': {
 				this.presTimer += dt;
-				let dropF = targetPres * TANK_PRESSURE_SIM.IGNITION_DROP_RATIO;
-				this.tankPresFuel = dropF + noiseF * totalNoiseAmp;
-				this.tankPresOxid = dropF + noiseO * totalNoiseAmp;
-				if (this.presTimer > TANK_PRESSURE_SIM.IGNITION_DROP_TIME_SEC) this.presState = 'NOMINAL';
+				const pRatio = Math.min(this.presTimer / TANK_PRESSURE_SIM.PRESSURIZE_TIME_SEC, 1.0);
+				const smoothP = pRatio * pRatio * (3 - 2 * pRatio);
+				const startF = this._presStartF !== undefined ? this._presStartF : TANK_PRESSURE_SIM.GROUND_KPA;
+				const startO = this._presStartO !== undefined ? this._presStartO : TANK_PRESSURE_SIM.GROUND_KPA;
+				basePresF = startF + (TANK_PRESSURE_SIM.TARGET_KPA - startF) * smoothP;
+				basePresO = startO + (TANK_PRESSURE_SIM.TARGET_KPA - startO) * smoothP;
+				if (pRatio >= 1.0) {
+					this.presState = 'NOMINAL';
+				}
 				break;
+			}
+			case 'NOMINAL': {
+				basePresF = TANK_PRESSURE_SIM.TARGET_KPA;
+				basePresO = TANK_PRESSURE_SIM.TARGET_KPA;
+				break;
+			}
+			case 'IGNITION_TRANSIENT': {
+				this.presTimer += dt;
+				const dur = TANK_PRESSURE_SIM.IGNITION_TRANSIENT_TIME_SEC;
+				const tau = this.presTimer / dur;
+				let transientMod = 0;
+				const p1 = TANK_PRESSURE_SIM.IGNITION_DROP_PHASE;
+				const p2 = TANK_PRESSURE_SIM.IGNITION_OVERSHOOT_PHASE;
+				const dropRatio = TANK_PRESSURE_SIM.IGNITION_DROP_RATIO;
+				const ovRatio = TANK_PRESSURE_SIM.IGNITION_OVERSHOOT_RATIO;
+
+				if (tau < p1) {
+					transientMod = -(1.0 - dropRatio) * (tau / p1);
+				} else if (tau < p2) {
+					const tSub = (tau - p1) / (p2 - p1);
+					transientMod = -(1.0 - dropRatio) * (1 - tSub) + ovRatio * tSub;
+				} else if (tau < 1.0) {
+					const tSub = (tau - p2) / (1.0 - p2);
+					transientMod = ovRatio * (1 - tSub);
+				} else {
+					this.presState = 'NOMINAL';
+				}
+				basePresF = TANK_PRESSURE_SIM.TARGET_KPA * (1.0 + transientMod);
+				basePresO = TANK_PRESSURE_SIM.TARGET_KPA * (1.0 + transientMod * TANK_PRESSURE_SIM.OXIDIZER_OVERSHOOT_FACTOR);
+				break;
+			}
 			case 'MECO_SPIKE':
+			case 'MECO_TRANSIENT': {
 				this.presTimer += dt;
-				let spikeF = targetPres * TANK_PRESSURE_SIM.MECO_SPIKE_RATIO;
-				this.tankPresFuel = spikeF + noiseF * totalNoiseAmp;
-				this.tankPresOxid = spikeF + noiseO * totalNoiseAmp;
-				if (this.presTimer > TANK_PRESSURE_SIM.MECO_SPIKE_TIME_SEC) this.presState = 'NOMINAL';
+				const dur = TANK_PRESSURE_SIM.MECO_TRANSIENT_TIME_SEC;
+				const tau = this.presTimer / dur;
+				let transientMod = 0;
+				const p1 = TANK_PRESSURE_SIM.MECO_SPIKE_PHASE;
+				const spikeRatio = TANK_PRESSURE_SIM.MECO_SPIKE_RATIO;
+
+				if (tau < p1) {
+					transientMod = (spikeRatio - 1.0) * (tau / p1);
+					basePresF = TANK_PRESSURE_SIM.TARGET_KPA * (1.0 + transientMod);
+					basePresO = TANK_PRESSURE_SIM.TARGET_KPA * (1.0 + transientMod * TANK_PRESSURE_SIM.OXIDIZER_MECO_FACTOR);
+				} else if (tau < 1.0) {
+					const tSub = (tau - p1) / (1.0 - p1);
+					transientMod = (spikeRatio - 1.0) * Math.exp(-TANK_PRESSURE_SIM.MECO_DECAY_RATE * tSub);
+					basePresF = TANK_PRESSURE_SIM.TARGET_KPA * (1.0 + transientMod);
+					basePresO = TANK_PRESSURE_SIM.TARGET_KPA * (1.0 + transientMod * TANK_PRESSURE_SIM.OXIDIZER_MECO_FACTOR);
+				} else {
+					// Spike finished -> Safeing Venting starts (smoothly venting down to 100~120 kPa)
+					this.presState = 'POST_MECO_VENT';
+					this.presTimer = 0;
+					this._ventStartF = this.tankPresFuel;
+					this._ventStartO = this.tankPresOxid;
+					basePresF = this._ventStartF;
+					basePresO = this._ventStartO;
+				}
 				break;
-			case 'DEPLETED':
-				this.tankPresFuel = Math.max(unpres, this.tankPresFuel - TANK_PRESSURE_SIM.DEPLETION_DROP_RATE * dt);
-				this.tankPresOxid = Math.max(unpres, this.tankPresOxid - TANK_PRESSURE_SIM.DEPLETION_DROP_RATE * dt);
+			}
+			case 'POST_MECO_VENT': {
+				this.presTimer += dt;
+				const vRatio = Math.min(this.presTimer / TANK_PRESSURE_SIM.POST_MECO_VENT_TIME_SEC, 1.0);
+				// Smoothstep easing from target flight pressure down to safe hold pressure (110 kPa)
+				const smoothV = vRatio * vRatio * (3 - 2 * vRatio);
+				const startF = this._ventStartF !== undefined ? this._ventStartF : TANK_PRESSURE_SIM.TARGET_KPA;
+				const startO = this._ventStartO !== undefined ? this._ventStartO : TANK_PRESSURE_SIM.TARGET_KPA;
+				basePresF = startF + (TANK_PRESSURE_SIM.POST_MECO_SAFE_KPA - startF) * smoothV;
+				basePresO = startO + (TANK_PRESSURE_SIM.POST_MECO_SAFE_KPA - startO) * smoothV;
+				if (vRatio >= 1.0) {
+					this.presState = 'POST_MECO_HOLD';
+				}
 				break;
+			}
+			case 'POST_MECO_HOLD': {
+				basePresF = TANK_PRESSURE_SIM.POST_MECO_SAFE_KPA;
+				basePresO = TANK_PRESSURE_SIM.POST_MECO_SAFE_KPA;
+				break;
+			}
+			case 'DEPLETED': {
+				basePresF = Math.max(0, this.tankPresFuel - TANK_PRESSURE_SIM.DEPLETION_DROP_RATE * dt);
+				basePresO = Math.max(0, this.tankPresOxid - TANK_PRESSURE_SIM.DEPLETION_DROP_RATE * dt);
+				break;
+			}
 		}
+
+		let noiseScale = 1.0;
+		if (this.presState === 'ROLLOUT_FILL') {
+			noiseScale = Math.min(this.presTimer / TANK_PRESSURE_SIM.ROLLOUT_FILL_TIME_SEC, 1.0);
+		} else if (this.presState === 'DEPLETED') {
+			noiseScale = Math.min(basePresF / TANK_PRESSURE_SIM.TARGET_KPA, 1.0);
+		}
+		this.tankPresFuel = Math.max(0, basePresF + totalNoiseF * noiseScale);
+		this.tankPresOxid = Math.max(0, basePresO + totalNoiseO * noiseScale);
 	}
 
 	flightControl(dt, refBody, distToRefM) {
@@ -462,8 +594,8 @@ export class CalcRocket extends GravSimCalcObject {
 			this.invMass = this.mass > 0 ? 1.0 / this.mass : 0;
 
 			if (this.burnTime <= 0 || this.fuelMass <= 0 || (this.ofRatio > 0 && this.oxidMass <= 0)) {
-				if (this.presState === 'NOMINAL') {
-					this.presState = 'MECO_SPIKE';
+				if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {
+					this.presState = 'MECO_TRANSIENT';
 					this.presTimer = 0;
 				}
 				if (this.fuelMass < 0) { this.fuelMass = 0; }
