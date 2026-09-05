@@ -972,3 +972,56 @@ button:hover { background: #444; }
 .stress-test-btn:hover {
 	background-color: rgba(255, 100, 0, 0.4);
 }
+
+/* Trajectory Prediction Processing Overlay */
+#prediction-processing-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100vw;
+	height: 100vh;
+	background: rgba(0, 15, 20, 0.65);
+	backdrop-filter: blur(2px);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	z-index: 9998;
+	color: #00ffcc;
+	font-family: 'Courier New', Courier, monospace;
+	font-size: 14px;
+	font-weight: bold;
+	letter-spacing: 2px;
+	pointer-events: none;
+	transition: opacity 0.2s ease;
+}
+
+#prediction-processing-text {
+	text-shadow: 0 0 8px rgba(0, 255, 204, 0.6);
+}
+
+/* Telemetry HUD Trajectory Toggles */
+.tm-trajectory-toggles {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: #00ffcc;
+}
+.tm-toggle-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	cursor: pointer;
+	font-size: 11px;
+	color: #aaa;
+	user-select: none;
+}
+.tm-toggle-label:hover {
+	color: #00ffcc;
+}
+.tm-toggle-label input[type="checkbox"] {
+	cursor: pointer;
+	accent-color: #00ffcc;
+	margin: 0;
+}
+

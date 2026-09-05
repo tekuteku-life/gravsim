@@ -103,6 +103,12 @@ export class ObjectManager {
 	}
 
 	updateRocketState(id, isIgnited, isHoldDown) {
+		const target = this.objects.find(t => t.id === id);
+		if (target && target.type === OBJECT_TYPES.ROCKET) {
+			if (isIgnited !== undefined) { target.isIgnited = isIgnited; }
+			if (isHoldDown !== undefined) { target.isHoldDown = isHoldDown; }
+		}
+
 		const payload = { cmd: 'setRocketState', id: id };
 		if (isIgnited !== undefined) { payload.isIgnited = isIgnited; }
 		if (isHoldDown !== undefined) { payload.isHoldDown = isHoldDown; }

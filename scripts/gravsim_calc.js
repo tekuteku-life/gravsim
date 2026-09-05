@@ -14,7 +14,7 @@ import { WorkerBridge } from './gravsim_worker_bridge.js';
 /*******************************************************************
  * Physics Engine Class
  *******************************************************************/
-class PhysicsEngine {
+export class PhysicsEngine {
 	constructor() {
 		this.objects = [];
 		this.massiveBodies = []; // Cache for objects with significant mass
@@ -145,6 +145,7 @@ class PhysicsEngine {
 					obj.vy = host.vy + omega * dx;
 					obj.ax = host.ax;
 					obj.ay = host.ay;
+					obj.thrustAngle = obj.hostAngleRad;
 					obj.dominantBody = host;
 					obj.distToDominantM = r;
 				}

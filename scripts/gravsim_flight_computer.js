@@ -307,13 +307,14 @@ export class FlightComputer {
 		const progradeAngle = this.telemetryCache.progradeAngle;
 		const zenithAngle = MathUtils.normalizeAngle(this.telemetryCache.gravityAngle + Math.PI);
 
-		// Track prograde direction after thrust stops
+		// Track prograde direction smoothly after thrust stops (coasting/orbital phase)
 		if (sensor.burnTime <= 0) {
 			const turnDiff = MathUtils.normalizeAngle(progradeAngle - this.currentThrustAngle);
-			const maxTurn = FLIGHT_COMPUTER_CONFIG.MAX_TURN_RATE_PER_SEC * sensor.dt;
+			const coastTurnRate = FLIGHT_COMPUTER_CONFIG.COAST_TURN_RATE_PER_SEC || 1.5;
+			const maxTurn = coastTurnRate * sensor.dt;
 
 			if (Math.abs(turnDiff) > maxTurn) {
-				return this.currentThrustAngle + Math.sign(turnDiff) * maxTurn;
+				return MathUtils.normalizeAngle(this.currentThrustAngle + Math.sign(turnDiff) * maxTurn);
 			} else {
 				return progradeAngle;
 			}
@@ -326,15 +327,14 @@ export class FlightComputer {
 
 		const Q = sensor.qAxialKpa + sensor.qLateralKpa; // kPa
 
-		// Tower Clearance
+		// Tower Clearance: vertical ascent only within first 10s AND under 1000m
 		if (this.flightTime < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_TIME
-			|| (Q < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MIN_Q
-				&& this.telemetryCache.altM < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MAX_ALT)) {
+			&& this.telemetryCache.altM < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MAX_ALT) {
 			let diff = MathUtils.normalizeAngle(zenithAngle - this.currentThrustAngle);
 			const maxTurn = FLIGHT_COMPUTER_CONFIG.PITCH_KICK_TURN_RATE * sensor.dt;
 
 			if (Math.abs(diff) > maxTurn) {
-				return this.currentThrustAngle + Math.sign(diff) * maxTurn;
+				return MathUtils.normalizeAngle(this.currentThrustAngle + Math.sign(diff) * maxTurn);
 			}
 			return zenithAngle;
 		}
@@ -367,27 +367,15 @@ export class FlightComputer {
 		}
 
 		let angleDiff = MathUtils.normalizeAngle(targetAngle - progradeAngle);
-		const isRetrogradeIntent = Math.abs(angleDiff) > Math.PI / 2;
-		let safeTargetAngle;
 
-		if (isRetrogradeIntent) {
-			let retroDiff = angleDiff > 0 ? angleDiff - Math.PI : angleDiff + Math.PI;
-			if (Math.abs(retroDiff) > maxAoA + FLIGHT_COMPUTER_CONFIG.AOA_TOLERANCE_RAD) {
-				this._isAntiStallActive = true;
-			}
-			if (retroDiff > maxAoA) retroDiff = maxAoA;
-			if (retroDiff < -maxAoA) retroDiff = -maxAoA;
-			safeTargetAngle = progradeAngle + Math.PI + retroDiff;
-		} else {
-			if (Math.abs(angleDiff) > maxAoA + FLIGHT_COMPUTER_CONFIG.AOA_TOLERANCE_RAD) {
-				this._isAntiStallActive = true;
-			}
-			// Clamp angle to max AoA
-			if (angleDiff > maxAoA) { angleDiff = maxAoA; }
-			if (angleDiff < -maxAoA) { angleDiff = -maxAoA; }
-
-			safeTargetAngle = progradeAngle + angleDiff;
+		// Clamp angle within safe AoA limit relative to prograde without 180-deg flip
+		if (Math.abs(angleDiff) > maxAoA + FLIGHT_COMPUTER_CONFIG.AOA_TOLERANCE_RAD) {
+			this._isAntiStallActive = true;
 		}
+		if (angleDiff > maxAoA) { angleDiff = maxAoA; }
+		if (angleDiff < -maxAoA) { angleDiff = -maxAoA; }
+
+		const safeTargetAngle = MathUtils.normalizeAngle(progradeAngle + angleDiff);
 
 		let turnDiff = MathUtils.normalizeAngle(safeTargetAngle - this.currentThrustAngle);
 
@@ -396,7 +384,7 @@ export class FlightComputer {
 		const maxTurn = maxTurnRatePerSec * sensor.dt;
 
 		if (Math.abs(turnDiff) > maxTurn) {
-			return this.currentThrustAngle + Math.sign(turnDiff) * maxTurn;
+			return MathUtils.normalizeAngle(this.currentThrustAngle + Math.sign(turnDiff) * maxTurn);
 		} else {
 			return safeTargetAngle;
 		}

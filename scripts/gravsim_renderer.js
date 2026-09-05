@@ -65,6 +65,8 @@ export class Renderer {
 		this.renderContext.centerObjectId = renderState.basis ? renderState.basis.id : null;
 		this.renderContext.rotation = renderState.rotation;
 		this.renderContext.objectsMap = objectsMap;
+		this.renderContext.showPredictedTrajectory = renderState.showPredictedTrajectory !== false;
+		this.renderContext.showActualFlightPath = renderState.showActualFlightPath !== false;
 
 		EventBus.emit('profile:end', 'Renderer.setup');
 

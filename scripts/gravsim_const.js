@@ -231,6 +231,109 @@ export const RENDER = {
 		HUD_PAD_Y_MASS: 26,
 		HUD_PAD_Y_VEL: 42,
 		HUD_PAD_Y_ANG: 56
+	},
+	PREDICTED_TRAJECTORY: {
+		LINE_WIDTH_PRE: 2.0,
+		LINE_WIDTH_FLIGHT: 2.2,
+		LINE_DASH_PRE: [14, 10],
+		LINE_DASH_FLIGHT: [14, 10],
+		COLOR_PRE: "rgba(0, 200, 160, 0.65)",
+		COLOR_SOLID: "rgba(0, 255, 204, 0.95)",
+		COLOR_FLIGHT: "rgba(0, 200, 160, 0.65)",
+		COLOR_ORBIT: "rgba(100, 200, 255, 0.6)",
+		COLOR_FALL: "rgba(255, 100, 100, 0.6)",
+		MIN_SCREEN_DIST_SQ: 4.0,
+		EVENT_RADIUS: 4.5,
+		EVENT_RING_WIDTH: 1.5,
+		EVENT_COLOR_UNPASSED: "#00ffff",
+		EVENT_FILL_UNPASSED: "rgba(0, 20, 30, 0.85)",
+		EVENT_COLOR_PASSED: "#00ff66",
+		EVENT_FILL_PASSED: "#00ff66",
+		EVENT_TEXT_COLOR: "#ffffff",
+		EVENT_FONT: "bold 10px 'Courier New', monospace",
+		EVENT_LABEL_OFFSET_X: 8,
+		EVENT_LABEL_OFFSET_Y: -6,
+		LABEL_PAD_X: 3,
+		LABEL_PAD_Y: 2,
+		LABEL_BOX_OFFSET_Y: -6,
+		LABEL_BOX_HEIGHT: 12,
+		LABEL_BG_COLOR: "rgba(0, 15, 20, 0.75)",
+		EVENT_IMPACT_COLOR: "#ff3333",
+		EVENT_IMPACT_FILL: "rgba(255, 30, 30, 0.25)",
+		EVENT_IMPACT_SIZE: 6.0,
+		EVENT_IMPACT_LINE_WIDTH: 2.2,
+		EVENT_IMPACT_TEXT_COLOR: "#ff5555",
+		EVENT_IMPACT_BOX_BG: "rgba(40, 10, 10, 0.85)"
+	}
+};
+
+// Trajectory Prediction & Simulation Constants
+export const TRAJECTORY_PREDICTION = {
+	MAX_SIM_TIME_SEC: 365.25 * 24 * 60 * 60, // 1 year (365.25 days)
+	MAX_POINTS: 3000,
+	MAX_STEPS: 100000,
+	DUMMY_ROCKET_ID: 999999,
+	DEFAULT_MAX_G: 4.0,
+	UPDATE_THROTTLE_MS: 150,
+	// Adaptive dt criteria (seconds) - Optimized for extreme accuracy in orbital and escape trajectories
+	DT: {
+		POWERED_OR_ATM: 0.05,
+		POST_BURNOUT_COOL: 0.1,
+		SURFACE_CLOSE: 0.1,
+		SURFACE_MEDIUM: 0.25,
+		SURFACE_FAR: 0.5,
+		INSIDE_MOON: 1.0,
+		DEEP_SPACE: 5.0,
+		DEEP_SPACE_MAX_CAP: 1800.0,
+		DYN_SCALE_ETA: 0.04
+	},
+	DIST_THRESHOLDS_M: {
+		CLOSE: 1000000,       // 1,000 km
+		MEDIUM: 10000000,     // 10,000 km
+		FAR: 50000000,        // 50,000 km
+		MOON_ORBIT: 500000000 // 500,000 km
+	},
+	// Sampling intervals and delta thresholds
+	SAMPLING: {
+		TIME_LIFTOFF_S: 0.1,
+		LIFTOFF_PHASE_TIME_S: 15.0,
+		LIFTOFF_PHASE_ALT_M: 10000,
+		TIME_POWERED_S: 1.0,
+		POST_BURNOUT_DURATION_S: 120.0,
+		TIME_POST_BURNOUT_S: 1.0,
+		TIME_COAST_S: 1800.0,
+		ANGLE_DELTA_RAD: 0.02,
+		TIME_ANGLE_S: 5.0,
+		NEAR_BODY_DIST_M: 10000000,
+		TIME_NEAR_BODY_S: 15.0
+	},
+	// Event detection thresholds
+	EVENTS: {
+		IMPACT_MIN_TIME_S: 5.0,
+		PITCH_MIN_TIME_S: 1.0,
+		PITCH_ANGLE_RAD: 0.03,
+		PITCH_MIN_ALT_M: 1000,
+		PITCH_DEFAULT_ALT_M: 500,
+		MAX_Q_DEFAULT_ALT_M: 15000,
+		APOAPSIS_MIN_TIME_S: 30.0,
+		APOAPSIS_MIN_ALT_M: 20000,
+		APOAPSIS_DESCENDING_VV_M_S: -1.0,
+		APOAPSIS_MIN_STEP: 20,
+		ORBIT_MIN_ALT_M: 100000,
+		ORBIT_CIRC_RATIO: 0.95,
+		ORBIT_RADIAL_VEL_MIN: -50.0,
+		ORBIT_HORIZONTAL_VEL_MIN_M_S: 7500.0
+	},
+	// Fallback synchronous simulation limits
+	SYNC: {
+		MAX_STEPS: 400,
+		MAX_FLIGHT_TIME_S: 3600,
+		DT_LOW_ALT: 0.5,
+		DT_MID_ALT: 2.0,
+		DT_HIGH_ALT: 6.0,
+		ALT_BOUNDARY_LOW_M: 80000,
+		ALT_BOUNDARY_MID_M: 500000,
+		POWERED_CUTOFF_S: 200
 	}
 };
 
@@ -294,6 +397,7 @@ export const FLIGHT_COMPUTER_CONFIG = {
 	TOWER_CLEARANCE_MIN_Q: 0.1,
 	TOWER_CLEARANCE_MAX_ALT: 1000,
 	MAX_TURN_RATE_PER_SEC: 0.1,
+	COAST_TURN_RATE_PER_SEC: 1.5,
 	PITCH_KICK_TURN_RATE: 0.5,
 	THROTTLE_DOWN_Q_RATIO: 0.8,
 	THROTTLE_DOWN_MIN_Vv: 0,
@@ -811,6 +915,76 @@ export const LAUNCH_SEQUENCES = {
 		}
 	}
 };
+
+// Flight Event Definitions (Table-driven markers for trajectory prediction & telemetry)
+export const DEFAULT_FLIGHT_EVENTS = [
+	{
+		id: 'liftoff',
+		name: 'LIFTOFF',
+		type: 'liftoff',
+		enabled: false,
+		description: 'Liftoff and release of hold-down'
+	},
+	{
+		id: 'pitch',
+		name: 'PITCH',
+		type: 'pitch',
+		minAngleDeg: 0.5,
+		enabled: true,
+		description: 'Pitch maneuver start (Gravity turn program)'
+	},
+	{
+		id: 'maxq',
+		name: 'MAX-Q',
+		type: 'maxq',
+		enabled: true,
+		description: 'Maximum dynamic pressure'
+	},
+	{
+		id: 'staging',
+		name: 'STG-SEP',
+		type: 'alt',
+		value: 65000,
+		enabled: false,
+		description: 'First stage separation'
+	},
+	{
+		id: 'fairing',
+		name: 'FAIRING',
+		type: 'alt',
+		value: 100000,
+		enabled: false,
+		description: 'Payload fairing separation (Karman line)'
+	},
+	{
+		id: 'meco',
+		name: 'MECO',
+		type: 'meco',
+		enabled: true,
+		description: 'Main engine cutoff'
+	},
+	{
+		id: 'ap',
+		name: 'AP',
+		type: 'apoapsis',
+		enabled: true,
+		description: 'Apoapsis (highest orbital point)'
+	},
+	{
+		id: 'orbit',
+		name: 'ORBIT',
+		type: 'orbit',
+		enabled: true,
+		description: 'Orbital velocity reached'
+	},
+	{
+		id: 'impact',
+		name: 'IMPACT',
+		type: 'impact',
+		enabled: true,
+		description: 'Surface impact point'
+	}
+];
 
 export const ROCKET_LAUNCHER_CONFIG = {
 	EFFECT_STOP_ALT_M: 3000,

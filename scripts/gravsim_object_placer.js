@@ -557,7 +557,7 @@ export class ObjectPlacer {
 		if (massSelect && DEFAULT_OBJECT_PARAMS[massSelect.value]) {
 			return massSelect.value;
 		}
-		return 'Earth'; // Default object name
+		return 'Rocket'; // Default rocket object name
 	}
 
 	_calculateSlingshotVelocity(startScreenX, startScreenY, currentScreenX, currentScreenY) {

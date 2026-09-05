@@ -276,7 +276,9 @@ export class NavigationCameraCard extends TelemetryCard {
 				cameraOffset: { x: 0, y: 0 },
 				zoomScale: subZoom,
 				zoomExp: Math.log10(subZoom),
-				rotation: this.subRenderer.rotation || 0
+				rotation: this.subRenderer.rotation || 0,
+				showPredictedTrajectory: universe.showPredictedTrajectory !== false,
+				showActualFlightPath: universe.showActualFlightPath !== false
 			};
 
 			this.subRenderer.draw(universe.objects, subRenderState);
@@ -288,7 +290,7 @@ export class NavigationCameraCard extends TelemetryCard {
 				if (this.subRenderer.rotation !== undefined) {
 					subCtx.rotate(this.subRenderer.rotation);
 				}
-				universe.RocketLauncher.drawPreview(subCtx, targetObj, subZoom);
+				universe.RocketLauncher.drawPreview(subCtx, targetObj, subZoom, this.subRenderer.renderContext);
 				subCtx.restore();
 			}
 		}

@@ -94,6 +94,8 @@ export class Universe {
 		this.SoundSequencer = new SoundSequencer(this);
 
 		this.timeScale = this.ControlPanel.getTimeScale();
+		this.showPredictedTrajectory = true;
+		this.showActualFlightPath = true;
 
 		// Handle Simulation global commands
 		EventBus.on('simulation:pause', () => this.pauseSimulation());
@@ -101,6 +103,14 @@ export class Universe {
 		EventBus.on('simulation:reset', () => this.reset());
 		EventBus.on('simulation:clear-objects', (clearD, clearR, clearC) => this.clearObjects(clearD, clearR, clearC));
 		EventBus.on('simulation:set-time-scale', (val) => { this.timeScale = val; });
+
+		// Handle Trajectory Visibility toggles
+		EventBus.on('render:set-show-predicted-path', (visible) => {
+			this.showPredictedTrajectory = visible;
+		});
+		EventBus.on('render:set-show-actual-path', (visible) => {
+			this.showActualFlightPath = visible;
+		});
 
 		// Hook for worker command
 		EventBus.on('worker:send-rocket-command', (id, cmd) => {
@@ -283,6 +293,8 @@ export class Universe {
 		EventBus.emit('profile:start', 'Universe.draw');
 
 		const renderState = this.camera.getRenderState();
+		renderState.showPredictedTrajectory = this.showPredictedTrajectory;
+		renderState.showActualFlightPath = this.showActualFlightPath;
 		this.Renderer.draw(this.objects, renderState, this.trailLengthAU);
 
 		EventBus.emit('profile:end', 'Universe.draw');

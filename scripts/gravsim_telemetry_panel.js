@@ -52,6 +52,8 @@ export class TelemetryPanel {
 			mHudAlt: document.getElementById('m-hud-alt'),
 			mHudVel: document.getElementById('m-hud-vel'),
 			mHudAlert: document.getElementById('m-hud-alert'),
+			tmShowPredChk: document.getElementById('tm-show-pred-chk'),
+			tmShowActualChk: document.getElementById('tm-show-actual-chk'),
 			subCanvas: document.getElementById('sub-canvas'),
 			countdownDisplay: document.getElementById('countdown-display'),
 			cdTime: document.getElementById('cd-time'),
@@ -158,6 +160,26 @@ export class TelemetryPanel {
 
 		this.ui.targetSelect.addEventListener('change', (e) => {
 			this.targetId = parseInt(e.target.value, 10);
+		});
+
+		// Quick toggles for predicted trajectory and actual flight path
+		this.ui.tmShowPredChk.addEventListener('change', (e) => {
+			EventBus.emit('render:set-show-predicted-path', e.target.checked);
+		});
+		this.ui.tmShowActualChk.addEventListener('change', (e) => {
+			EventBus.emit('render:set-show-actual-path', e.target.checked);
+		});
+
+		EventBus.on('render:set-show-predicted-path', (visible) => {
+			if (this.ui.tmShowPredChk.checked !== visible) {
+				this.ui.tmShowPredChk.checked = visible;
+			}
+		});
+
+		EventBus.on('render:set-show-actual-path', (visible) => {
+			if (this.ui.tmShowActualChk.checked !== visible) {
+				this.ui.tmShowActualChk.checked = visible;
+			}
 		});
 
 		// Scroll listener on carousel to sync active pagination dot

@@ -273,7 +273,7 @@ export class RocketTab {
 
 	_updateRocketStats() {
 		const rl = this.universe.RocketLauncher;
-		const objName = this.universe.ObjectPlacer.getLaunchObjectName();
+		const objName = 'Rocket';
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		
 		const fuel = ROCKET_FUELS[rl.fuelType] || ROCKET_FUELS['liquid'];
@@ -345,6 +345,11 @@ export class RocketTab {
 			this.ui.rlStatFuelAmount.textContent = totalPropellantT.toLocaleString();
 			this.ui.rlStatFuelIsp.textContent = fuel.isp;
 			this.ui.rlStatFuelMaxBurn.textContent = maxBurnTime.toFixed(1);
+		}
+
+		// Trigger debounced trajectory prediction update on configuration change
+		if (this.universe?.RocketLauncher?.requestPreviewUpdate) {
+			this.universe.RocketLauncher.requestPreviewUpdate();
 		}
 	}
 

@@ -3,11 +3,12 @@
 
 import {
 	PHYSICS, RENDER, OBJECT_STATE,
-	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE, PAD_EFFECT
+	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE, PAD_EFFECT,
 } from './gravsim_const.js';
 import { Trajectory } from './gravsim_trajectory.js';
 import { EffectTrail } from './gravsim_effect_trail.js';
-import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { UnitConvertUtils } from './gravsim_utils.js';
+import { TrajectoryPredictor } from './gravsim_trajectory_predictor.js';
 
 /*******************************************************************
  * GravSimObject class which is base class
@@ -268,9 +269,28 @@ export class Rocket extends GravSimObject {
 			currentG: 0,
 			flightTime: 0, // s
 		};
+
+		this.predictedTrajectory = null;
+		this.passedEventIds = new Set();
+		this.isDestroyed = false;
+		this.destroyedFlightTime = null;
+		this.actualFlightPath = [];
 	}
 	get mass() { return this.dryMass + this.fuelMass + this.oxidMass; }
 	set mass(val) {}
+
+	setCollided() {
+		super.setCollided();
+		if (!this.isDestroyed) {
+			this.isDestroyed = true;
+			this.destroyedFlightTime = this.telemetry?.flightTime || this.flightTime || 0;
+			this.predictedTrajectory = null;
+			this.actualFlightPath = null;
+			if (this.trajectory) {
+				this.trajectory.clear();
+			}
+		}
+	}
 
 	// Override updateHistory exclusively for Rocket logic
 	updateHistory(currentFrame, objects) {
@@ -286,6 +306,7 @@ export class Rocket extends GravSimObject {
 		}
 
 		this.trajectory.addPoint(this.x, this.y, currentFrame, mode);
+		this._recordActualFlightPath(objects);
 
 		const isBurning = this.isIgnited && this.burnTime > 0;
 
@@ -385,6 +406,100 @@ export class Rocket extends GravSimObject {
 		ctx.ellipse(0, 0, screenRadius * conf.BODY_LENGTH_MULT, screenRadius * conf.BODY_WIDTH_MULT, 0, 0, Math.PI * 2);
 		ctx.fill();
 		ctx.restore();
+	}
+
+	_recordActualFlightPath(objects) {
+		const hostId = (this.hostId !== null && this.hostId !== undefined)
+			? this.hostId
+			: (this.predictedTrajectory?.hostId ?? this.dominantBodyId);
+
+		if (this.isHoldDown || hostId === null || hostId === undefined || !objects || this.state !== OBJECT_STATE.ACTIVE) {
+			return;
+		}
+
+		const host = objects.find(o => o.id === hostId);
+		if (!host) { return; }
+
+		const relX_px = this.x - host.x;
+		const relY_px = this.y - host.y;
+		if (!this.actualFlightPath) {
+			this.actualFlightPath = [];
+		}
+		const len = this.actualFlightPath.length;
+		if (len === 0) {
+			this.actualFlightPath.push({
+				worldX: this.x,
+				worldY: this.y,
+				relX: relX_px,
+				relY: relY_px
+			});
+		} else {
+			const last = this.actualFlightPath[len - 1];
+			const dx_m = UnitConvertUtils.pix2m(relX_px - last.relX);
+			const dy_m = UnitConvertUtils.pix2m(relY_px - last.relY);
+
+			// Sample points when moved at least 10m relative to host
+			if ((dx_m * dx_m + dy_m * dy_m) >= 100) {
+				this.actualFlightPath.push({
+					worldX: this.x,
+					worldY: this.y,
+					relX: relX_px,
+					relY: relY_px
+				});
+				if (this.actualFlightPath.length > 6000) {
+					this.actualFlightPath = this.actualFlightPath.filter((_, idx) => idx % 2 === 0 || idx === len - 1);
+				}
+			}
+		}
+	}
+
+	draw(renderContext) {
+		if (!renderContext || !renderContext.basis) { return; }
+
+		// 1. Draw predicted trajectory path & H3-style event markers in flight mode
+		// Only render when rocket is actively flying and NOT destroyed/removed
+		if (!this.isHoldDown && this.predictedTrajectory && !this.isDestroyed && this.state === OBJECT_STATE.ACTIVE) {
+			if (!this.predictedTrajectory.hostId && this.hostId !== null) {
+				this.predictedTrajectory.hostId = this.hostId;
+			}
+			TrajectoryPredictor.updateRocketFlightEvents(this, renderContext);
+
+			const flightTime = this.telemetry?.flightTime || this.flightTime || 0;
+
+			TrajectoryPredictor.renderTrajectory(renderContext.ctx, renderContext, this.predictedTrajectory, {
+				mode: 'flight',
+				passedEventIds: this.passedEventIds,
+				currentFlightTime: flightTime,
+				actualFlightPath: this.actualFlightPath,
+				rocketX: this.x,
+				rocketY: this.y,
+				isDestroyed: false,
+				showPredictedTrajectory: renderContext.showPredictedTrajectory !== false,
+				showActualPath: renderContext.showActualFlightPath !== false
+			});
+		}
+
+		// 2. Draw rocket body and flame effects
+		if (this.state === OBJECT_STATE.ACTIVE) {
+			const basis = renderContext.basis;
+			const ctx = renderContext.ctx;
+			const zoomScale = renderContext.zoomScale;
+
+			const relX = this.getRelativeX(basis) * zoomScale;
+			const relY = this.getRelativeY(basis) * zoomScale;
+
+			const screenRadius = this._getDrawRadius(zoomScale);
+			renderContext.bodyScreenRadius = screenRadius;
+
+			this._drawBody(ctx, relX, relY, screenRadius);
+			this._drawEffects(ctx, relX, relY, screenRadius, zoomScale);
+		}
+
+		// 3. Draw default celestial trajectory
+		if (this.state === OBJECT_STATE.ACTIVE) {
+			this.trajectory.draw(renderContext);
+		}
+		this.effectTrail.draw(renderContext);
 	}
 }
 

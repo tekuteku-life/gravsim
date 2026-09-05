@@ -43,6 +43,10 @@ export class SystemTab {
 			
 			trailLength: document.getElementById('trail-length'),
 			trailLengthVal: document.getElementById('trail-length-val'),
+			predDuration: document.getElementById('pred-duration'),
+			predDurationVal: document.getElementById('pred-duration-val'),
+			showPredictedPathChk: document.getElementById('show-predicted-path-chk'),
+			showActualPathChk: document.getElementById('show-actual-path-chk'),
 			showLabelsChk: document.getElementById('show-labels-chk'),
 			showDebugChk: document.getElementById('show-debug-chk'),
 			
@@ -102,8 +106,52 @@ export class SystemTab {
 			this.universe.trailLengthAU = val;
 		});
 
+		// Format sim duration helper
+		const formatSimDuration = (months) => {
+			if (months < 12) {
+				const days = Math.round(months * 30.4375);
+				return `${months} mo (${days} d)`;
+			} else {
+				const yrs = (months / 12).toFixed(1);
+				return `${yrs} yr (${months} mo)`;
+			}
+		};
+
+		this.ui.predDuration.addEventListener('input', (e) => {
+			const months = parseInt(e.target.value, 10);
+			const sec = months * (365.25 / 12) * 86400;
+			this.universe.RocketLauncher.predictionDurationMonths = months;
+			this.universe.RocketLauncher.maxSimTimeSec = sec;
+			if (this.universe.RocketLauncher.requestPreviewUpdate) {
+				this.universe.RocketLauncher.requestPreviewUpdate();
+			}
+
+			this.ui.predDurationVal.textContent = formatSimDuration(months);
+		});
+
 		this.ui.showLabelsChk.addEventListener('change', (e) => {
 			EventBus.emit('render:set-labels-visible', e.target.checked);
+		});
+
+		this.ui.showPredictedPathChk.addEventListener('change', (e) => {
+			EventBus.emit('render:set-show-predicted-path', e.target.checked);
+		});
+
+		this.ui.showActualPathChk.addEventListener('change', (e) => {
+			EventBus.emit('render:set-show-actual-path', e.target.checked);
+		});
+
+		// Synchronize checkboxes if toggled externally (e.g. from Telemetry HUD)
+		EventBus.on('render:set-show-predicted-path', (visible) => {
+			if (this.ui.showPredictedPathChk.checked !== visible) {
+				this.ui.showPredictedPathChk.checked = visible;
+			}
+		});
+
+		EventBus.on('render:set-show-actual-path', (visible) => {
+			if (this.ui.showActualPathChk.checked !== visible) {
+				this.ui.showActualPathChk.checked = visible;
+			}
 		});
 
 		this.ui.showDebugChk.addEventListener('change', (e) => {

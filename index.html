@@ -17,6 +17,12 @@
 		<div id="loading-text">Loading Audio...</div>
 	</div>
 
+	<!-- Trajectory Prediction Processing Overlay -->
+	<div id="prediction-processing-overlay" style="display: none;">
+		<div class="spinner"></div>
+		<div id="prediction-processing-text">CALCULATING TRAJECTORY...</div>
+	</div>
+
 	<canvas id="gravsim-canvas"></canvas>
 
 	<!-- Mobile Top UI Container (Panel + Buttons) -->
@@ -40,6 +46,11 @@
 				<span id="tm-mission-status">PRE-LAUNCH</span>
 			</div>
 			<div class="telemetry-line" style="margin-top: 5px;">MET: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
+			<div class="telemetry-line tm-trajectory-toggles" style="margin-top: 3px; font-size: 11px;">
+				TRAJ:
+				<label class="tm-toggle-label"><input type="checkbox" id="tm-show-pred-chk" checked> PRED</label>
+				<label class="tm-toggle-label"><input type="checkbox" id="tm-show-actual-chk" checked> ACTUAL</label>
+			</div>
 
 			<!-- Annunciator / Caution & Warning Status Panel -->
 			<div id="tm-annunciator" class="tm-annunciator-panel" title="Click to test lamps">
@@ -85,9 +96,9 @@
 					<div style="margin-top: 8px;">
 						<div class="tm-bar-header">FLIGHT DIRECTOR</div>
 						<div id="tm-nav-wrapper">
-							<div id="tm-nav-direction">＋</div>
-							<div id="tm-nav-prograde">◯</div>
-							<div id="tm-nav-gravity">↓</div>
+							<div id="tm-nav-direction">&#43;</div>
+							<div id="tm-nav-prograde">&#9675;</div>
+							<div id="tm-nav-gravity">&#8595;</div>
 						</div>
 					</div>
 				</div>
@@ -194,6 +205,15 @@
 				<label for="trail-length">Trail Length (AU): <span id="trail-length-val">3.0</span></label>
 				<input type="range" id="trail-length" min="0" max="10" step="0.1" value="3" class="slider-full">
 
+				<label for="pred-duration">Prediction Duration: <span id="pred-duration-val">0.5 yr (6 mo)</span></label>
+				<input type="range" id="pred-duration" min="1" max="36" step="1" value="6" class="slider-full">
+
+				<label>
+					<input type="checkbox" id="show-predicted-path-chk" checked> Show Predicted Trajectory
+				</label>
+				<label>
+					<input type="checkbox" id="show-actual-path-chk" checked> Show Actual Flight Path
+				</label>
 				<label>
 					<input type="checkbox" id="show-labels-chk"> Show Object Labels
 				</label>

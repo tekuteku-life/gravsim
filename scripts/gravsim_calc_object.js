@@ -242,7 +242,8 @@ export class CalcRocket extends GravSimCalcObject {
 		this._qAxialKpa = 0; // kPa
 		this._qLateralKpa = 0; // kPa
 		this._aoaDeg = 0; // deg
-		this._progradeAngle = 0; // rad
+		this._progradeAngle = this.thrustAngle; // rad (aligned with initial thrust angle)
+		this._lastDominantBody = null;
 
 		this.flightComputer = new FlightComputer({
 			maxGLimit: this.maxGLimit,
@@ -497,8 +498,13 @@ export class CalcRocket extends GravSimCalcObject {
 
 		let velAngle;
 		if (this.dominantBody) {
-			const dvx = this.vx - this.dominantBody.vx; // m/s
-			const dvy = this.vy - this.dominantBody.vy; // m/s
+			this._lastDominantBody = this.dominantBody;
+		}
+		const refBody = this.dominantBody || this._lastDominantBody;
+
+		if (refBody) {
+			const dvx = this.vx - refBody.vx; // m/s
+			const dvy = this.vy - refBody.vy; // m/s
 			const vSq = dvx * dvx + dvy * dvy; // m^2/s^2
 
 			if (vSq < AERO_DYNAMIC.LOW_VELOCITY_SQ) {
