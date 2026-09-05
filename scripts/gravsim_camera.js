@@ -66,11 +66,18 @@ export class Camera {
 	}
 
 	addPan(dxPx, dyPx) {
+		// Stop auto tracking when user manually pans the camera
+		if (this.autoTrackHost) {
+			this.stopAutoTracking();
+		}
+
 		const currentZoom = Math.pow(10, this.currentZoomExp);
 
-		// Rotate the pan vector back to world space to align with mouse movement
-		const cosA = Math.cos(this.currentRotation);
-		const sinA = Math.sin(this.currentRotation);
+		// Renderer applies ctx.rotate(currentRotation) before translating,
+		// so use -currentRotation to map screen-space pan vector back to camera local space
+		const angle = -this.currentRotation;
+		const cosA = Math.cos(angle);
+		const sinA = Math.sin(angle);
 
 		const wDx = (dxPx * cosA - dyPx * sinA) / currentZoom;
 		const wDy = (dxPx * sinA + dyPx * cosA) / currentZoom;
