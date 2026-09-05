@@ -71,11 +71,12 @@ export class InputManager {
 				this.isPanning = false;
 				if (e.button === 2) {
 					const now = Date.now();
-					if (now - this.lastRightClickTime < UI.DOUBLE_TAP_DURATION) {
+					// Only treat as double-tap reset if the user did not drag/pan
+					if (!this.hasPanned && (now - this.lastRightClickTime < UI.DOUBLE_TAP_DURATION)) {
 						EventBus.emit('input:reset-offset');
 						this.lastRightClickTime = 0;
 					} else {
-						this.lastRightClickTime = now;
+						this.lastRightClickTime = this.hasPanned ? 0 : now;
 					}
 				}
 			} else if (e.button === 0) {
