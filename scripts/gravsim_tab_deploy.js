@@ -27,6 +27,7 @@ export class DeployTab {
 		this.ui = {
 			massSelect: document.getElementById('mass-select'),
 			moonBtn: document.getElementById('put-moon-btn'),
+			debugSection: document.getElementById('debug-section-deploy'),
 			stressTestBtn: document.getElementById('stress-test-btn'),
 			solarSystemBtn: document.getElementById('put-solar-system-btn'),
 			binaryStarBtn: document.getElementById('put-binary-star-btn'),
@@ -34,9 +35,6 @@ export class DeployTab {
 			galacticCenterBtn: document.getElementById('put-galactic-center-btn'),
 		};
 		DOMUtils.verifyElements(this.ui, 'DeployTab');
-
-		// Hide stress test button initially
-		this.ui.stressTestBtn.style.display = 'none';
 	}
 
 	_bindEvents() {
@@ -130,9 +128,7 @@ export class DeployTab {
 		});
 
 		EventBus.on('debug:mode-on', () => {
-			if (this.ui.stressTestBtn) {
-				this.ui.stressTestBtn.style.display = 'block';
-			}
+			this.ui.debugSection.classList.add('active');
 		});
 	}
 
