@@ -35,7 +35,9 @@
 
 		<!-- Minimal HUD Bar (Shown when telemetry panel is closed and rocket is active) -->
 		<div id="minimal-hud-bar">
-			MET: <span id="m-hud-met">T+ ---y ---d --:--:--</span> | STAT: <span id="m-hud-stat">PRE-LAUNCH</span> | ALT: <span id="m-hud-alt">---</span> km | VEL: <span id="m-hud-vel">---</span> km/s <span id="m-hud-alert" class="m-hud-alert" style="display: none;">[WARN]</span>
+			<span class="m-hud-row">MET: <span id="m-hud-met">T+ ---y ---d --:--:--</span> | STAT: <span id="m-hud-stat">PRE-LAUNCH</span></span>
+			<span class="m-hud-divider">|</span>
+			<span class="m-hud-row">ALT: <span id="m-hud-alt">---</span> km | VEL: <span id="m-hud-vel">---</span> km/s <span id="m-hud-alert" class="m-hud-alert" style="display: none;">[WARN]</span></span>
 		</div>
 
 		<div id="telemetry-panel">
@@ -46,11 +48,7 @@
 				<span id="tm-mission-status">PRE-LAUNCH</span>
 			</div>
 			<div class="telemetry-line" style="margin-top: 5px;">MET: <span id="tm-met">T+ ---y ---d --:--:--</span></div>
-			<div class="telemetry-line tm-trajectory-toggles" style="margin-top: 3px; font-size: 11px;">
-				TRAJ:
-				<label class="tm-toggle-label"><input type="checkbox" id="tm-show-pred-chk" checked> PRED</label>
-				<label class="tm-toggle-label"><input type="checkbox" id="tm-show-actual-chk" checked> ACTUAL</label>
-			</div>
+			<div class="telemetry-line tm-trajectory-toggles">TRAJ: <label class="tm-toggle-label"><input type="checkbox" id="tm-show-pred-chk" checked> PRED</label><label class="tm-toggle-label"><input type="checkbox" id="tm-show-actual-chk" checked> ACTUAL</label></div>
 
 			<!-- Annunciator / Caution & Warning Status Panel -->
 			<div id="tm-annunciator" class="tm-annunciator-panel" title="Click to test lamps">

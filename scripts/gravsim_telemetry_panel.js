@@ -190,6 +190,14 @@ export class TelemetryPanel {
 		// Mouse wheel / trackpad scroll listener to switch cards seamlessly
 		let isWheelThrottled = false;
 		this.ui.panel.addEventListener('wheel', (e) => {
+			// Only switch cards on wheel if carousel is in horizontal row mode (e.g. mobile)
+			const isHorizontal = window.getComputedStyle(this.ui.carousel).flexDirection === 'row';
+			if (!isHorizontal) {
+				// In vertical 4-card column layout, stop canvas zoom propagation but allow natural panel vertical scroll
+				e.stopPropagation();
+				return;
+			}
+
 			// Determine dominant scroll direction
 			const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
 			if (Math.abs(delta) < 12) return;
@@ -426,6 +434,13 @@ export class TelemetryPanel {
 		}
 
 		const isRocketWithTelemetry = target.type === OBJECT_TYPES.ROCKET && target.telemetry;
+		const isColumnLayout = window.getComputedStyle(this.ui.carousel).flexDirection === 'column';
+
+		if (isColumnLayout) {
+			for (const card of this.cards) {
+				card.isVisible = true;
+			}
+		}
 
 		if (isRocketWithTelemetry) {
 			this._updatePinnedHeader(target);
@@ -484,7 +499,7 @@ export class TelemetryPanel {
 		}
 
 		const tm = target.telemetry;
-		this.ui.minimalHud.style.display = 'block';
+		this.ui.minimalHud.style.display = 'flex';
 
 		let mStat = TELEMETRY.STATUS_MAP[tm.status] || TELEMETRY.STATUS_MAP[0];
 		if (tm.status === TELEMETRY.STATUS.PRE_LAUNCH && this.universe.LaunchSequencer.isAutoSequence) {

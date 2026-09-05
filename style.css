@@ -359,6 +359,12 @@ button:hover { background: #444; }
 	box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
 	backdrop-filter: blur(4px);
 	display: none;
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+}
+.m-hud-divider {
+	color: rgba(0, 255, 204, 0.5);
 }
 
 .m-hud-alert {
@@ -422,6 +428,7 @@ button:hover { background: #444; }
 
 .tm-card {
 	flex: 0 0 100%;
+	min-height: 180px;
 	scroll-snap-align: start;
 	box-sizing: border-box;
 	background: rgba(0, 30, 20, 0.4);
@@ -439,11 +446,15 @@ button:hover { background: #444; }
 	padding-top: 2px;
 }
 
-/* When vertical space is sufficient on PC, display multiple cards vertically without scrollbar */
-@media (min-width: 769px) and (min-height: 550px) {
+/* Optimized PC Telemetry Layout: Vertical 4-card display without horizontal clipping */
+@media (min-width: 769px) {
 	#telemetry-panel {
-		padding: 8px 8px 6px 8px;
+		width: 300px;
+		padding: 8px 10px;
 		font-size: 12px;
+		max-height: calc(100vh - 40px);
+		overflow-x: hidden;
+		overflow-y: auto;
 	}
 	.telemetry-header {
 		font-size: 13px;
@@ -459,16 +470,20 @@ button:hover { background: #444; }
 		margin-top: 3px;
 		font-size: 12px;
 	}
+	.tm-annunciator-panel {
+		margin: 4px 0;
+		padding: 3px 4px;
+	}
 	.tm-section-header {
 		font-size: 11px;
 		margin-top: 0;
-		margin-bottom: 2px;
+		margin-bottom: 3px;
 		padding-bottom: 1px;
 	}
 	.tm-carousel {
 		flex-direction: column;
 		overflow-x: hidden;
-		overflow-y: hidden; /* Scrollbar eliminated */
+		overflow-y: visible;
 		gap: 5px;
 		margin-top: 4px;
 		padding: 0;
@@ -476,7 +491,9 @@ button:hover { background: #444; }
 	.tm-card {
 		flex: 0 0 auto;
 		width: 100%;
-		padding: 4px 6px;
+		min-height: unset;
+		padding: 4px 8px;
+		box-sizing: border-box;
 	}
 	.tm-dots {
 		display: none;
@@ -735,8 +752,8 @@ button:hover { background: #444; }
 
 /* Sub-canvas */
 #sub-canvas {
-	width: 228px;
-	height: 180px;
+	width: 100%;
+	height: 125px;
 	background: #000;
 	border: 1px solid #005544;
 	border-radius: 3px;
@@ -765,15 +782,34 @@ button:hover { background: #444; }
 		bottom: 30px;
 	}
 
-	/* Adjust Info-panel */
+	/* Compact Info-panel for Mobile: Match Minimal HUD aesthetics and compact sizing */
 	#info-panel {
-		left: 10px;
-		bottom: 30px;
+		left: 8px;
+		bottom: 35px;
+		padding: 4px 8px;
+		font-size: 10px;
+		line-height: 1.25;
+		gap: 2px;
+		border-radius: 6px;
+		border: 1px solid rgba(0, 255, 204, 0.4);
+		background-color: rgba(0, 20, 10, 0.75);
+		backdrop-filter: blur(4px);
+		box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+	}
+
+	#info-panel .info-row {
+		width: 175px;
+		padding-bottom: 1px;
+		border-bottom: 1px dashed rgba(0, 85, 68, 0.5);
+	}
+
+	#info-panel .info-label {
+		font-size: 9.5px;
 	}
 
 	/* Shift Info-panel up when sidebar opens */
 	body:has(.sidebar.open) #info-panel {
-		bottom: calc(40dvh + 30px);
+		bottom: calc(40dvh + 35px);
 	}
 
 	/* Top UI Container behaves as a flex column to push buttons down */
@@ -810,6 +846,22 @@ button:hover { background: #444; }
 		font-size: 14px;
 		width: 100vw;
 		border-radius: 0;
+	}
+
+	/* Minimal HUD Bar for Mobile: Positioned cleanly below top toggle button without overlap */
+	#minimal-hud-bar {
+		top: 36px;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		padding: 3px 10px;
+		font-size: 10px;
+		border-radius: 8px;
+		max-width: calc(100vw - 16px);
+		box-sizing: border-box;
+	}
+	#minimal-hud-bar .m-hud-divider {
+		display: none;
 	}
 
 	/* Telemetry Panel acts as an accordion */
@@ -1006,6 +1058,9 @@ button:hover { background: #444; }
 	align-items: center;
 	gap: 8px;
 	color: #00ffcc;
+	white-space: nowrap;
+	margin-top: 3px;
+	margin-bottom: 3px;
 }
 .tm-toggle-label {
 	display: inline-flex;
