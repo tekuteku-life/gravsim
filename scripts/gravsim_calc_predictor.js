@@ -100,6 +100,15 @@ export class PredictorPhysicsEngine extends PhysicsEngine {
 		return dt;
 	}
 
+	_updateFlightControl(dt) {
+		if (this.rocket && !this.rocket.collided && !this.rocket.shattered) {
+			this.rocket.flightControl(dt, this.rocket.dominantBody, this.rocket.distToDominantM);
+			if (this.rocket._pendingDebris) {
+				this.rocket._pendingDebris.length = 0;
+			}
+		}
+	}
+
 	step(dt) {
 		this._moveObjects(dt);
 	}
@@ -110,40 +119,42 @@ export class PredictorPhysicsEngine extends PhysicsEngine {
  * Runs fast-forward multi-body trajectory simulation in inertial frame
  * and projects trajectory relative to the launch host body.
  *******************************************************************/
-self.onmessage = function (e) {
-	const data = e.data;
-	if (data.cmd !== 'predict') { return; }
+if (typeof self !== 'undefined') {
+	self.onmessage = function (e) {
+		const data = e.data;
+		if (data.cmd !== 'predict') { return; }
 
-	const {
-		requestId,
-		hostId,
-		celestialBodies = [],
-		rocketConfig,
-		eventDefinitions = DEFAULT_FLIGHT_EVENTS,
-		options = {}
-	} = data;
+		const {
+			requestId,
+			hostId,
+			celestialBodies = [],
+			rocketConfig,
+			eventDefinitions = DEFAULT_FLIGHT_EVENTS,
+			options = {}
+		} = data;
 
-	const result = runMultiBodySimulation({
-		hostId,
-		celestialBodies,
-		rocketConfig,
-		eventDefinitions,
-		options
-	});
+		const result = runMultiBodySimulation({
+			hostId,
+			celestialBodies,
+			rocketConfig,
+			eventDefinitions,
+			options
+		});
 
-	self.postMessage({
-		cmd: 'predictionResult',
-		requestId: requestId,
-		...result
-	});
-};
+		self.postMessage({
+			cmd: 'predictionResult',
+			requestId: requestId,
+			...result
+		});
+	};
+}
 
 /**
  * Perform high-precision fast-forward simulation of all bodies in inertial frame.
  * Reuses PhysicsEngine via PredictorPhysicsEngine for unified physical fidelity.
  * @param {Object} param
  */
-export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketConfig, eventDefinitions, options }) {
+export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketConfig, eventDefinitions = DEFAULT_FLIGHT_EVENTS, options = {} }) {
 	const maxSimTime = options.maxSimTime || TRAJECTORY_PREDICTION.MAX_SIM_TIME_SEC;
 	const maxPoints = options.maxPoints || TRAJECTORY_PREDICTION.MAX_POINTS;
 	const defaultMaxSteps = TRAJECTORY_PREDICTION.MAX_STEPS || 100000;
@@ -164,7 +175,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 		b.vx, b.vy,
 		0, 0,
 		b.radius, 0,
-		b.massKg
+		b.massKg !== undefined ? b.massKg : UnitConvertUtils.ton2kg(b.mass || 0)
 	));
 
 	const hostBody = bodies.find(b => b.id === hostId);
@@ -173,13 +184,17 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 	}
 
 	// Instantiate rocket in world coordinates
+	const dryMassT = rocketConfig.dryMassT !== undefined ? rocketConfig.dryMassT : (rocketConfig.dryMassKg ? UnitConvertUtils.kg2ton(rocketConfig.dryMassKg) : 7);
+	const fuelMassT = rocketConfig.fuelMassT !== undefined ? rocketConfig.fuelMassT : (rocketConfig.fuelMassKg ? UnitConvertUtils.kg2ton(rocketConfig.fuelMassKg) : 88);
+	const oxidMassT = rocketConfig.oxidMassT !== undefined ? rocketConfig.oxidMassT : (rocketConfig.oxidMassKg ? UnitConvertUtils.kg2ton(rocketConfig.oxidMassKg) : 220);
+
 	const rocket = new CalcRocket(
 		TRAJECTORY_PREDICTION.DUMMY_ROCKET_ID, rocketConfig.name || 'Rocket',
 		rocketConfig.x, rocketConfig.y,
 		rocketConfig.vx, rocketConfig.vy,
 		0, 0,
 		rocketConfig.radius || 1, 0,
-		rocketConfig.dryMassKg, rocketConfig.fuelMassKg, rocketConfig.oxidMassKg,
+		dryMassT, fuelMassT, oxidMassT,
 		{
 			ofRatio: rocketConfig.ofRatio || 0,
 			thrustForce: rocketConfig.thrustForceN || 0,
@@ -193,7 +208,10 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			hostAngleRad: rocketConfig.hostAngleRad || 0,
 			hostAltM: rocketConfig.hostAltM || 0,
 			isHoldDown: false,
-			isIgnited: true
+			isIgnited: true,
+			stages: rocketConfig.stages,
+			payload: rocketConfig.payload,
+			fairing: rocketConfig.fairing
 		}
 	);
 
@@ -227,6 +245,12 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 	let mecoSimTime = -1;
 	let lastSampleTime = -999;
 	let lastSampleAngle = null;
+
+	let lastStageState = rocket.stageState;
+	let hasSeparatedFairing = false;
+	const recordedStageMeco = new Set();
+	const recordedStageSep = new Set();
+	const recordedStageSes = new Set();
 
 	// Initial Liftoff Event
 	const liftoffRule = eventRules.find(r => r.type === 'liftoff');
@@ -381,16 +405,81 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			}
 		}
 
-		// 4. MECO Event detection
-		if (!hasReachedMeco && (rocket.burnTime <= 0 || (rocket.fuelMass <= 0 && rocket.oxidMass <= 0))) {
-			hasReachedMeco = true;
-			mecoSimTime = simTime;
-			const mecoRule = eventRules.find(r => r.type === 'meco');
-			if (mecoRule && !detectedEventsMap.has(mecoRule.id)) {
-				detectedEventsMap.set(mecoRule.id, {
-					id: mecoRule.id,
-					name: mecoRule.name,
-					type: mecoRule.type,
+		// 4. Multi-Stage Event Detection
+		// (a) MECO detection for each stage
+		if (rocket.stageState === 'STG_MECO' || rocket.stageState === 'ORBITAL_COAST') {
+			const stgIdx = rocket.currentStageIndex;
+			if (!recordedStageMeco.has(stgIdx)) {
+				recordedStageMeco.add(stgIdx);
+				hasReachedMeco = true;
+				mecoSimTime = simTime;
+				const isFinalStage = stgIdx + 1 >= rocket.totalStages;
+				const eventId = isFinalStage ? (rocket.totalStages > 1 ? 'seco_1' : 'meco') : `meco_${stgIdx + 1}`;
+				const eventName = isFinalStage ? (rocket.totalStages > 1 ? 'SECO-1' : 'MECO') : `MECO-${stgIdx + 1}`;
+				
+				if (!detectedEventsMap.has(eventId)) {
+					detectedEventsMap.set(eventId, {
+						id: eventId,
+						name: eventName,
+						type: isFinalStage ? 'meco' : 'stg_meco',
+						worldX: UnitConvertUtils.m2pix(rocket.x),
+						worldY: UnitConvertUtils.m2pix(rocket.y),
+						relX: UnitConvertUtils.m2pix(curRelX_m),
+						relY: UnitConvertUtils.m2pix(curRelY_m),
+						time: simTime,
+						altM: curAltM,
+						passed: false
+					});
+				}
+			}
+		}
+
+		// (b) Stage Separation detection
+		if (lastStageState === 'STG_MECO' && rocket.stageState === 'INTERSTAGE_COAST') {
+			const sepStageNum = rocket.currentStageIndex; // Stage number that just separated
+			if (!recordedStageSep.has(sepStageNum)) {
+				recordedStageSep.add(sepStageNum);
+				const eventId = `stg_sep_${sepStageNum}`;
+				const eventName = `STG-${sepStageNum} SEP`;
+				if (!detectedEventsMap.has(eventId)) {
+					detectedEventsMap.set(eventId, {
+						id: eventId,
+						name: eventName,
+						type: 'staging',
+						worldX: UnitConvertUtils.m2pix(rocket.x),
+						worldY: UnitConvertUtils.m2pix(rocket.y),
+						relX: UnitConvertUtils.m2pix(curRelX_m),
+						relY: UnitConvertUtils.m2pix(curRelY_m),
+						time: simTime,
+						altM: curAltM,
+						passed: false
+					});
+				}
+			}
+		} else if (lastStageState === 'STG_MECO' && rocket.stageState === 'ORBITAL_COAST') {
+			// Final stage separation and payload separation
+			const sepStageNum = rocket.totalStages;
+			const stgEventId = `stg_sep_${sepStageNum}`;
+			if (!detectedEventsMap.has(stgEventId)) {
+				detectedEventsMap.set(stgEventId, {
+					id: stgEventId,
+					name: `${sepStageNum}-STG-SEP`,
+					type: 'staging',
+					worldX: UnitConvertUtils.m2pix(rocket.x),
+					worldY: UnitConvertUtils.m2pix(rocket.y),
+					relX: UnitConvertUtils.m2pix(curRelX_m),
+					relY: UnitConvertUtils.m2pix(curRelY_m),
+					time: simTime,
+					altM: curAltM,
+					passed: false
+				});
+			}
+			const payloadEventId = 'payload_sep';
+			if (!detectedEventsMap.has(payloadEventId)) {
+				detectedEventsMap.set(payloadEventId, {
+					id: payloadEventId,
+					name: 'PAYLOAD SEP',
+					type: 'staging',
 					worldX: UnitConvertUtils.m2pix(rocket.x),
 					worldY: UnitConvertUtils.m2pix(rocket.y),
 					relX: UnitConvertUtils.m2pix(curRelX_m),
@@ -401,6 +490,52 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 				});
 			}
 		}
+
+		// (c) Second / Upper Engine Start (SES)
+		if (lastStageState === 'INTERSTAGE_COAST' && rocket.stageState === 'STG_BURNING') {
+			const stgNum = rocket.currentStageIndex + 1;
+			if (!recordedStageSes.has(stgNum)) {
+				recordedStageSes.add(stgNum);
+				const eventId = `ses_${stgNum - 1}`;
+				const eventName = `SES-${stgNum - 1}`;
+				if (!detectedEventsMap.has(eventId)) {
+					detectedEventsMap.set(eventId, {
+						id: eventId,
+						name: eventName,
+						type: 'ignition',
+						worldX: UnitConvertUtils.m2pix(rocket.x),
+						worldY: UnitConvertUtils.m2pix(rocket.y),
+						relX: UnitConvertUtils.m2pix(curRelX_m),
+						relY: UnitConvertUtils.m2pix(curRelY_m),
+						time: simTime,
+						altM: curAltM,
+						passed: false
+					});
+				}
+			}
+		}
+
+		// (d) Fairing Separation detection
+		if (!hasSeparatedFairing && rocket.fairing && rocket.fairing.isSeparated) {
+			hasSeparatedFairing = true;
+			const eventId = 'fairing_sep';
+			if (!detectedEventsMap.has(eventId)) {
+				detectedEventsMap.set(eventId, {
+					id: eventId,
+					name: 'FAIRING JETTISON',
+					type: 'fairing',
+					worldX: UnitConvertUtils.m2pix(rocket.x),
+					worldY: UnitConvertUtils.m2pix(rocket.y),
+					relX: UnitConvertUtils.m2pix(curRelX_m),
+					relY: UnitConvertUtils.m2pix(curRelY_m),
+					time: simTime,
+					altM: curAltM,
+					passed: false
+				});
+			}
+		}
+
+		lastStageState = rocket.stageState;
 
 		// 5. Apoapsis (AP) Event detection
 		if (simTime > TRAJECTORY_PREDICTION.EVENTS.APOAPSIS_MIN_TIME_S && prevVv >= 0 && vV < 0 && curAltM > TRAJECTORY_PREDICTION.EVENTS.APOAPSIS_MIN_ALT_M) {

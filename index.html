@@ -43,6 +43,7 @@
 		<div id="telemetry-panel">
 			<div class="telemetry-header">TELEMETRY HUD</div>
 			<div class="telemetry-line">TARGET   : <select id="tm-target-select"></select></div>
+			<div class="telemetry-line" id="tm-stage-line">STAGE    : <span id="tm-stage-info">---</span></div>
 
 			<div id="tm-status-box">
 				<span id="tm-mission-status">PRE-LAUNCH</span>
@@ -66,11 +67,17 @@
 					<div class="tm-lamp lamp-cyan" id="tm-lamp-pitch" title="Pitch / Gravity Turn Program">PITCH</div>
 					<div class="tm-lamp lamp-green" id="tm-lamp-orbit" title="Orbital Velocity Acquired">ORBIT</div>
 
-					<!-- Row 3: Propulsion & Separation -->
+					<!-- Row 3: Stage 1 & Tank Pressure -->
 					<div class="tm-lamp lamp-green" id="tm-lamp-press" title="Tank Pressure Nominal">PRESS</div>
-					<div class="tm-lamp lamp-cyan" id="tm-lamp-eng" title="Main Engine Burning">ENG-ON</div>
-					<div class="tm-lamp lamp-amber" id="tm-lamp-meco" title="Main Engine Cutoff">MECO</div>
-					<div class="tm-lamp lamp-green" id="tm-lamp-sep" title="Fairing / Stage Separation">STG-SEP</div>
+					<div class="tm-lamp lamp-cyan" id="tm-lamp-1eng" title="Stage 1 Main Engine (1-ENG-ON)">1-ENG</div>
+					<div class="tm-lamp lamp-amber" id="tm-lamp-meco" title="Main Engine Cutoff (MECO)">MECO</div>
+					<div class="tm-lamp lamp-green" id="tm-lamp-1sep" title="Stage 1 Separation (1-STG-SEP)">1-SEP</div>
+
+					<!-- Row 4: Stage 2 & Payload -->
+					<div class="tm-lamp lamp-cyan" id="tm-lamp-2eng" title="Stage 2 Engine (2-ENG-ON)">2-ENG</div>
+					<div class="tm-lamp lamp-amber" id="tm-lamp-seco" title="Second Engine Cutoff (SECO)">SECO</div>
+					<div class="tm-lamp lamp-green" id="tm-lamp-2sep" title="Stage 2 / Fairing Separation (2-STG-SEP)">2-SEP</div>
+					<div class="tm-lamp lamp-green" id="tm-lamp-psep" title="Payload Separation (P-STG-SEP)">P-SEP</div>
 				</div>
 			</div>
 
@@ -361,6 +368,86 @@
 			</div>
 
 			<div class="panel-section launch-params">
+				<div class="panel-section-header" style="margin-top: 5px;">[ ROCKET CONFIGURATION ]</div>
+				<label>Preset:</label>
+				<div style="display: flex; gap: 5px;">
+					<select id="rl-preset-select" class="full-width">
+						<option value="FALCON9" selected>Falcon 9 Style (2-Stage)</option>
+						<option value="H3">H3 Style (2-Stage)</option>
+						<option value="SSTO">Single Stage (SSTO)</option>
+					</select>
+					<button type="button" id="rl-load-preset-btn" style="white-space: nowrap;">LOAD</button>
+				</div>
+
+				<div id="rl-stage-tabs" class="stage-tab-bar" style="display: flex; gap: 4px; margin-top: 12px; margin-bottom: 8px;">
+					<button type="button" class="rl-stage-tab-btn active" data-stage="0" style="flex: 1; padding: 5px 2px; font-size: 11px;">Stage 1</button>
+					<button type="button" class="rl-stage-tab-btn" data-stage="1" style="flex: 1; padding: 5px 2px; font-size: 11px;">Stage 2</button>
+					<button type="button" class="rl-stage-tab-btn" data-stage="payload" style="flex: 1; padding: 5px 2px; font-size: 11px;">Payload</button>
+				</div>
+
+				<!-- Dynamic Stage Parameters Panel -->
+				<div id="rl-stage-config-panel">
+					<div id="rl-stage-title" style="color: #00ffcc; font-weight: bold; margin: 6px 0 4px 0; font-size: 12px;">-- STAGE 1: BOOSTER --</div>
+					
+					<label>Fuel Type:</label>
+					<select id="rl-fuel-type" class="full-width">
+						<option value="solid">Solid (Isp: 250s, Heavy)</option>
+						<option value="liquid" selected>Liquid (Isp: 320s, Balanced)</option>
+						<option value="hydro">Cryogenic (Isp: 450s, Light/Bulky)</option>
+						<option value="ion">Ion (Isp: 3000s, Low Thrust)</option>
+					</select>
+
+					<label>Fuel Mass (t): <span id="rl-fuel-mass-val">140</span></label>
+					<input type="range" id="rl-fuel-mass" min="0" max="1500" step="1" value="140" class="slider-full">
+
+					<label>Oxidizer Mass (t): <span id="rl-oxid-mass-val">280</span></label>
+					<input type="range" id="rl-oxid-mass" min="0" max="3000" step="1" value="280" class="slider-full">
+
+					<label>Dry Mass (t): <span id="rl-launch-mass-val">25</span></label>
+					<input type="range" id="rl-launch-mass" min="1" max="500" step="1" value="25" class="slider-full">
+
+					<label>Thrust Force (kN): <span id="rl-launch-thrust-val">7600</span></label>
+					<input type="range" id="rl-launch-thrust" min="100" max="10000" step="50" value="7600" class="slider-full">
+
+					<div id="rl-separation-settings">
+						<label id="rl-sep-delay-label">Separation Delay (s): <span id="rl-sep-delay-val">2.0</span></label>
+						<input type="range" id="rl-sep-delay" min="0.5" max="10.0" step="0.5" value="2.0" class="slider-full">
+
+						<label id="rl-ign-delay-label" style="display:none;">Ignition Delay (s): <span id="rl-ign-delay-val">2.0</span></label>
+						<input type="range" id="rl-ign-delay" min="0.5" max="10.0" step="0.5" value="2.0" class="slider-full" style="display:none;">
+					</div>
+				</div>
+
+				<!-- Payload & Fairing Configuration Panel -->
+				<div id="rl-payload-config-panel" style="display: none;">
+					<div style="color: #00ffcc; font-weight: bold; margin: 6px 0 4px 0; font-size: 12px;">-- PAYLOAD &amp; FAIRING --</div>
+					
+					<label>Payload Mass (t): <span id="rl-payload-mass-val">8.0</span></label>
+					<input type="range" id="rl-payload-mass" min="0" max="100" step="0.5" value="8.0" class="slider-full">
+
+					<label style="display:flex; align-items:center; gap:5px; margin-top:10px; color:#fff; cursor: pointer;">
+						<input type="checkbox" id="rl-fairing-enabled" checked> Enable Protective Fairing
+					</label>
+
+					<div id="rl-fairing-options">
+						<label>Fairing Mass (t): <span id="rl-fairing-mass-val">1.7</span></label>
+						<input type="range" id="rl-fairing-mass" min="0.1" max="10" step="0.1" value="1.7" class="slider-full">
+
+						<label>Separation Alt (km): <span id="rl-fairing-alt-val">100</span></label>
+						<input type="range" id="rl-fairing-alt" min="50" max="150" step="5" value="100" class="slider-full">
+					</div>
+				</div>
+
+				<!-- Avionics / Flight Computer Global Settings -->
+				<div style="margin-top: 12px; border-top: 1px solid #444; padding-top: 8px;">
+					<label>Max G Limit: <span id="rl-launch-maxg-val">4.0</span></label>
+					<input type="range" id="rl-launch-maxg" min="1.5" max="15.0" step="0.1" value="4.0" class="slider-full">
+
+					<label style="display:flex; align-items:center; gap:5px; margin-top:8px; color:#00ffcc; cursor: pointer;">
+						<input type="checkbox" id="rl-auto-control" checked> Enable Flight Computer (Auto Control)
+					</label>
+				</div>
+
 				<div class="panel-section-header" style="margin-top: 15px;">[ FLIGHT PROFILE ]</div>
 				<table id="rl-flight-profile-table" class="profile-table">
 					<thead>
@@ -377,42 +464,13 @@
 					</tbody>
 				</table>
 				<button type="button" id="rl-add-profile-btn" style="width: 100%; margin-top: 5px;">+ Add Step</button>
-
-				<label>Fuel Type:</label>
-				<select id="rl-fuel-type" class="full-width">
-					<option value="solid">Solid (Isp: 250s, Heavy)</option>
-					<option value="liquid" selected>Liquid (Isp: 320s, Balanced)</option>
-					<option value="hydro">Cryogenic (Isp: 450s, Light/Bulky)</option>
-					<option value="ion">Ion (Isp: 3000s, Low Thrust)</option>
-				</select>
-
-				<label>Fuel Mass (t): <span id="rl-fuel-mass-val">88</span></label>
-				<input type="range" id="rl-fuel-mass" min="0" max="1500" step="1" value="88" class="slider-full">
-
-				<label>Oxidizer Mass (t): <span id="rl-oxid-mass-val">220</span></label>
-				<input type="range" id="rl-oxid-mass" min="0" max="3000" step="1" value="220" class="slider-full">
-
-				<label>Dry Mass (t): <span id="rl-launch-mass-val">7</span></label>
-				<input type="range" id="rl-launch-mass" min="1" max="500" step="1" value="7" class="slider-full">
-
-				<label>Thrust Force (kN): <span id="rl-launch-thrust-val">7600</span></label>
-				<input type="range" id="rl-launch-thrust" min="600" max="10000" step="50" value="7600" class="slider-full">
-
-				<label>Max G Limit: <span id="rl-launch-maxg-val">4.0</span></label>
-				<input type="range" id="rl-launch-maxg" min="1.5" max="15.0" step="0.1" value="4.0" class="slider-full">
-
-				<label style="display:flex; align-items:center; gap:5px; margin-top:15px; color:#00ffcc; cursor: pointer;">
-					<input type="checkbox" id="rl-auto-control" checked> Enable Flight Computer (Auto Control)
-				</label>
 			</div>
 
 			<div id="rl-stats-panel">
 				Total Delta-v: <span id="rl-stat-dv">0.00</span> km/s<br>
 				TWR (<span id="rl-stat-host-name">Earth</span>): Y(Vert) <span id="rl-stat-twr-y">0.00</span> / X(Horz) <span id="rl-stat-twr-x">0.00</span><br>
-				Fuel Type: <span id="rl-stat-fuel-type">Liquid</span><br>
-				Total Propellant: <span id="rl-stat-fuel-amount">0</span> t<br>
-				Isp: <span id="rl-stat-fuel-isp">0</span> s<br>
-				Max Burn: <span id="rl-stat-fuel-max-burn">0</span> s<br>
+				Total Mass: <span id="rl-stat-total-mass">0.0</span> t | Stages: <span id="rl-stat-stage-count">1</span><br>
+				<div id="rl-stage-dv-breakdown" style="font-size: 11px; margin-top: 4px; border-top: 1px dashed rgba(0,255,200,0.3); padding-top: 4px;"></div>
 			</div>
 			
 			<div id="rl-action-buttons">

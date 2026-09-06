@@ -1,7 +1,7 @@
 
 // gravsim_tab_rocket.js
 
-import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS } from './gravsim_const.js';
+import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, MULTISTAGE_PRESETS } from './gravsim_const.js';
 import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 
@@ -12,6 +12,7 @@ export class RocketTab {
 		this.previousZoomScaleVal = null;
 		this.previousCameraTarget = null;
 		this.previousCameraOffset = null;
+		this.currentTab = 0;
 		this._initElements();
 		this._bindEvents();
 		this.isOpened = false;
@@ -31,28 +32,47 @@ export class RocketTab {
 			rlHostAngleVal: document.getElementById('rl-host-angle-val'),
 			rlHostAlt: document.getElementById('rl-host-alt'),
 			rlHostAltVal: document.getElementById('rl-host-alt-val'),
-			rlFlightProfileBody: document.getElementById('rl-flight-profile-body'),
-			rlAddProfileBtn: document.getElementById('rl-add-profile-btn'),
-			rlLaunchMass: document.getElementById('rl-launch-mass'),
-			rlLaunchMassVal: document.getElementById('rl-launch-mass-val'),
+			rlPresetSelect: document.getElementById('rl-preset-select'),
+			rlLoadPresetBtn: document.getElementById('rl-load-preset-btn'),
+			rlStageTabs: document.getElementById('rl-stage-tabs'),
+			rlStageConfigPanel: document.getElementById('rl-stage-config-panel'),
+			rlStageTitle: document.getElementById('rl-stage-title'),
 			rlFuelType: document.getElementById('rl-fuel-type'),
 			rlFuelMass: document.getElementById('rl-fuel-mass'),
 			rlFuelMassVal: document.getElementById('rl-fuel-mass-val'),
 			rlOxidMass: document.getElementById('rl-oxid-mass'),
 			rlOxidMassVal: document.getElementById('rl-oxid-mass-val'),
+			rlLaunchMass: document.getElementById('rl-launch-mass'),
+			rlLaunchMassVal: document.getElementById('rl-launch-mass-val'),
 			rlLaunchThrust: document.getElementById('rl-launch-thrust'),
 			rlLaunchThrustVal: document.getElementById('rl-launch-thrust-val'),
+			rlSepDelay: document.getElementById('rl-sep-delay'),
+			rlSepDelayVal: document.getElementById('rl-sep-delay-val'),
+			rlSepDelayLabel: document.getElementById('rl-sep-delay-label'),
+			rlIgnDelay: document.getElementById('rl-ign-delay'),
+			rlIgnDelayVal: document.getElementById('rl-ign-delay-val'),
+			rlIgnDelayLabel: document.getElementById('rl-ign-delay-label'),
+			rlPayloadConfigPanel: document.getElementById('rl-payload-config-panel'),
+			rlPayloadMass: document.getElementById('rl-payload-mass'),
+			rlPayloadMassVal: document.getElementById('rl-payload-mass-val'),
+			rlFairingEnabled: document.getElementById('rl-fairing-enabled'),
+			rlFairingOptions: document.getElementById('rl-fairing-options'),
+			rlFairingMass: document.getElementById('rl-fairing-mass'),
+			rlFairingMassVal: document.getElementById('rl-fairing-mass-val'),
+			rlFairingAlt: document.getElementById('rl-fairing-alt'),
+			rlFairingAltVal: document.getElementById('rl-fairing-alt-val'),
 			rlLaunchMaxG: document.getElementById('rl-launch-maxg'),
 			rlLaunchMaxGVal: document.getElementById('rl-launch-maxg-val'),
 			rlAutoControl: document.getElementById('rl-auto-control'),
+			rlFlightProfileBody: document.getElementById('rl-flight-profile-body'),
+			rlAddProfileBtn: document.getElementById('rl-add-profile-btn'),
 			rlStatDv: document.getElementById('rl-stat-dv'),
 			rlStatHostName: document.getElementById('rl-stat-host-name'),
 			rlStatTwrY: document.getElementById('rl-stat-twr-y'),
 			rlStatTwrX: document.getElementById('rl-stat-twr-x'),
-			rlStatFuelType: document.getElementById('rl-stat-fuel-type'),
-			rlStatFuelAmount: document.getElementById('rl-stat-fuel-amount'),
-			rlStatFuelIsp: document.getElementById('rl-stat-fuel-isp'),
-			rlStatFuelMaxBurn: document.getElementById('rl-stat-fuel-max-burn'),
+			rlStatTotalMass: document.getElementById('rl-stat-total-mass'),
+			rlStatStageCount: document.getElementById('rl-stat-stage-count'),
+			rlStageDvBreakdown: document.getElementById('rl-stage-dv-breakdown'),
 			massSelect: document.getElementById('mass-select'),
 			rlRolloutBtn: document.getElementById('rl-rollout-btn'),
 			rlIgnitionGroup: document.getElementById('rl-ignition-group'),
@@ -77,23 +97,148 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
+		// Preset Load
+		this.ui.rlLoadPresetBtn.addEventListener('click', () => {
+			this.loadPreset(this.ui.rlPresetSelect.value);
+		});
+		this.ui.rlPresetSelect.addEventListener('change', (e) => {
+			this.loadPreset(e.target.value);
+		});
+
+		// Initial stage tab rendering
+		this._renderStageTabs();
+		this.selectTab(0);
+
 		this.ui.rlFuelType.addEventListener('change', (e) => {
-			this.universe.RocketLauncher.fuelType = e.target.value;
+			const stg = this._getCurrentStage();
+			if (!stg) { return; }
+			stg.fuelType = e.target.value;
 			const fuelDef = ROCKET_FUELS[e.target.value];
 			if (fuelDef && fuelDef.ofRatio === 0) {
+				stg.oxidMassT = 0;
 				this.ui.rlOxidMass.value = 0;
 				this.ui.rlOxidMass.disabled = true;
-				this.universe.RocketLauncher.oxidMassT = 0;
 			} else if (fuelDef) {
 				this.ui.rlOxidMass.disabled = false;
-				const currentFuel = parseFloat(this.ui.rlFuelMass.value);
-				const newOxid = Math.round(currentFuel * fuelDef.ofRatio);
-				this.ui.rlOxidMass.value = newOxid;
-				this.universe.RocketLauncher.oxidMassT = newOxid;
+				stg.oxidMassT = Math.round(stg.fuelMassT * fuelDef.ofRatio);
+				this.ui.rlOxidMass.value = stg.oxidMassT;
 			}
 			if (this.ui.rlOxidMassVal) {
 				this.ui.rlOxidMassVal.textContent = this.ui.rlOxidMass.value;
 			}
+			this._syncStageZero();
+			this._updateRocketStats();
+		});
+
+		this.ui.rlFuelMass.addEventListener('input', (e) => {
+			const val = parseInt(e.target.value, 10);
+			const stg = this._getCurrentStage();
+			if (!stg) { return; }
+			stg.fuelMassT = val;
+			this.ui.rlFuelMassVal.textContent = val;
+
+			const fuelDef = ROCKET_FUELS[stg.fuelType || 'liquid'];
+			if (fuelDef && fuelDef.ofRatio > 0) {
+				const newOxid = Math.round(val * fuelDef.ofRatio);
+				stg.oxidMassT = newOxid;
+				this.ui.rlOxidMass.value = newOxid;
+				this.ui.rlOxidMassVal.textContent = newOxid;
+			}
+			this._syncStageZero();
+			this._updateRocketStats();
+		});
+
+		this.ui.rlOxidMass.addEventListener('input', (e) => {
+			const val = parseInt(e.target.value, 10);
+			const stg = this._getCurrentStage();
+			if (!stg) { return; }
+			stg.oxidMassT = val;
+			this.ui.rlOxidMassVal.textContent = val;
+
+			const fuelDef = ROCKET_FUELS[stg.fuelType || 'liquid'];
+			if (fuelDef && fuelDef.ofRatio > 0) {
+				const newFuel = Math.round(val / fuelDef.ofRatio);
+				stg.fuelMassT = newFuel;
+				this.ui.rlFuelMass.value = newFuel;
+				this.ui.rlFuelMassVal.textContent = newFuel;
+			}
+			this._syncStageZero();
+			this._updateRocketStats();
+		});
+
+		this.ui.rlLaunchMass.addEventListener('input', (e) => {
+			const val = parseInt(e.target.value, 10);
+			const stg = this._getCurrentStage();
+			if (!stg) { return; }
+			stg.dryMassT = val;
+			this.ui.rlLaunchMassVal.textContent = val;
+			this._syncStageZero();
+			this._updateRocketStats();
+		});
+
+		this.ui.rlLaunchThrust.addEventListener('input', (e) => {
+			const val = parseInt(e.target.value, 10);
+			const stg = this._getCurrentStage();
+			if (!stg) { return; }
+			stg.thrustKN = val;
+			this.ui.rlLaunchThrustVal.textContent = val;
+			this._syncStageZero();
+			this._updateRocketStats();
+		});
+
+		this.ui.rlSepDelay.addEventListener('input', (e) => {
+			const val = parseFloat(e.target.value);
+			const stg = this._getCurrentStage();
+			if (!stg) { return; }
+			stg.separationDelaySec = val;
+			if (this.ui.rlSepDelayVal) this.ui.rlSepDelayVal.textContent = val.toFixed(1);
+			this._updateRocketStats();
+		});
+
+		this.ui.rlIgnDelay.addEventListener('input', (e) => {
+			const val = parseFloat(e.target.value);
+			const stg = this._getCurrentStage();
+			if (!stg) { return; }
+			stg.ignitionDelaySec = val;
+			if (this.ui.rlIgnDelayVal) this.ui.rlIgnDelayVal.textContent = val.toFixed(1);
+			this._updateRocketStats();
+		});
+
+		// Payload & Fairing Inputs
+		this.ui.rlPayloadMass.addEventListener('input', (e) => {
+			const val = parseFloat(e.target.value);
+			const rl = this.universe.RocketLauncher;
+			if (!rl.payload) rl.payload = {};
+			rl.payload.massT = val;
+			if (this.ui.rlPayloadMassVal) this.ui.rlPayloadMassVal.textContent = val.toFixed(1);
+			this._updateRocketStats();
+		});
+
+		this.ui.rlFairingEnabled.addEventListener('change', (e) => {
+			const rl = this.universe.RocketLauncher;
+			if (!rl.fairing) rl.fairing = {};
+			rl.fairing.enabled = e.target.checked;
+			if (this.ui.rlFairingOptions) {
+				this.ui.rlFairingOptions.style.display = e.target.checked ? 'block' : 'none';
+			}
+			this._updateRocketStats();
+		});
+
+		this.ui.rlFairingMass.addEventListener('input', (e) => {
+			const val = parseFloat(e.target.value);
+			const rl = this.universe.RocketLauncher;
+			if (!rl.fairing) rl.fairing = {};
+			rl.fairing.massT = val;
+			if (this.ui.rlFairingMassVal) this.ui.rlFairingMassVal.textContent = val.toFixed(1);
+			this._updateRocketStats();
+		});
+
+		this.ui.rlFairingAlt.addEventListener('input', (e) => {
+			const val = parseInt(e.target.value, 10);
+			const rl = this.universe.RocketLauncher;
+			if (!rl.fairing) rl.fairing = {};
+			rl.fairing.separationAltKm = val;
+			if (this.ui.rlFairingAltVal) this.ui.rlFairingAltVal.textContent = val;
 			this._updateRocketStats();
 		});
 
@@ -155,43 +300,10 @@ export class RocketTab {
 			}
 		};
 
-		// Bind all Rocket Launcher sliders
+		// Bind Rocket Launcher global sliders
 		bindSlider('rlHostAngle', 'rlHostAngleVal', 'hostAngleDeg');
 		bindSlider('rlHostAlt', 'rlHostAltVal', 'hostAltitudeM', true);
-		bindSlider('rlLaunchMass', 'rlLaunchMassVal', 'dryMassT');
-		bindSlider('rlLaunchThrust', 'rlLaunchThrustVal', 'thrustKN');
 		bindSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', 'maxGLimit', true);
-
-		// Custom binding for Fuel and Oxidizer to keep ratio
-		this.ui.rlFuelMass.addEventListener('input', (e) => {
-			const val = parseInt(e.target.value, 10);
-			this.universe.RocketLauncher.fuelMassT = val;
-			this.ui.rlFuelMassVal.textContent = val;
-			
-			const fuelDef = ROCKET_FUELS[this.universe.RocketLauncher.fuelType];
-			if (fuelDef && fuelDef.ofRatio > 0) {
-				const newOxid = Math.round(val * fuelDef.ofRatio);
-				this.universe.RocketLauncher.oxidMassT = newOxid;
-				this.ui.rlOxidMass.value = newOxid;
-				this.ui.rlOxidMassVal.textContent = newOxid;
-			}
-			this._updateRocketStats();
-		});
-
-		this.ui.rlOxidMass.addEventListener('input', (e) => {
-			const val = parseInt(e.target.value, 10);
-			this.universe.RocketLauncher.oxidMassT = val;
-			this.ui.rlOxidMassVal.textContent = val;
-			
-			const fuelDef = ROCKET_FUELS[this.universe.RocketLauncher.fuelType];
-			if (fuelDef && fuelDef.ofRatio > 0) {
-				const newFuel = Math.round(val / fuelDef.ofRatio);
-				this.universe.RocketLauncher.fuelMassT = newFuel;
-				this.ui.rlFuelMass.value = newFuel;
-				this.ui.rlFuelMassVal.textContent = newFuel;
-			}
-			this._updateRocketStats();
-		});
 
 		this.ui.massSelect.addEventListener('change', () => this._updateRocketStats());
 
@@ -252,6 +364,135 @@ export class RocketTab {
 		});
 	}
 
+	_getCurrentStage() {
+		const rl = this.universe.RocketLauncher;
+		if (!rl.stages) return null;
+		if (typeof this.currentTab === 'number') {
+			return rl.stages[this.currentTab] || null;
+		}
+		return null;
+	}
+
+	_syncStageZero() {
+		if (this.currentTab === 0) {
+			const rl = this.universe.RocketLauncher;
+			const stg0 = rl.stages?.[0];
+			if (stg0) {
+				rl.dryMassT = stg0.dryMassT;
+				rl.fuelMassT = stg0.fuelMassT;
+				rl.oxidMassT = stg0.oxidMassT;
+				rl.thrustKN = stg0.thrustKN;
+				rl.fuelType = stg0.fuelType;
+			}
+		}
+	}
+
+	_renderStageTabs() {
+		if (!this.ui.rlStageTabs) return;
+		this.ui.rlStageTabs.innerHTML = '';
+		const rl = this.universe.RocketLauncher;
+		const stages = rl.stages || [];
+		stages.forEach((stg, i) => {
+			const btn = document.createElement('button');
+			btn.type = 'button';
+			btn.className = `rl-stage-tab-btn ${this.currentTab === i ? 'active' : ''}`;
+			btn.style.cssText = 'flex: 1; padding: 5px 2px; font-size: 11px;';
+			btn.textContent = `Stage ${i + 1}`;
+			btn.onclick = () => this.selectTab(i);
+			this.ui.rlStageTabs.appendChild(btn);
+		});
+
+		const pBtn = document.createElement('button');
+		pBtn.type = 'button';
+		pBtn.className = `rl-stage-tab-btn ${this.currentTab === 'payload' ? 'active' : ''}`;
+		pBtn.style.cssText = 'flex: 1; padding: 5px 2px; font-size: 11px;';
+		pBtn.textContent = 'Payload';
+		pBtn.onclick = () => this.selectTab('payload');
+		this.ui.rlStageTabs.appendChild(pBtn);
+	}
+
+	selectTab(tabKey) {
+		this.currentTab = tabKey;
+		const rl = this.universe.RocketLauncher;
+
+		if (this.ui.rlStageTabs) {
+			const buttons = this.ui.rlStageTabs.querySelectorAll('.rl-stage-tab-btn');
+			buttons.forEach(btn => {
+				const isP = btn.textContent.toLowerCase().includes('payload');
+				if (tabKey === 'payload' && isP) {
+					btn.classList.add('active');
+				} else if (tabKey !== 'payload' && !isP && btn.textContent.includes(`${Number(tabKey) + 1}`)) {
+					btn.classList.add('active');
+				} else {
+					btn.classList.remove('active');
+				}
+			});
+		}
+
+		if (tabKey === 'payload') {
+			if (this.ui.rlStageConfigPanel) this.ui.rlStageConfigPanel.style.display = 'none';
+			if (this.ui.rlPayloadConfigPanel) this.ui.rlPayloadConfigPanel.style.display = 'block';
+			const pMass = rl.payload?.massT !== undefined ? rl.payload.massT : 8.0;
+			if (this.ui.rlPayloadMass) this.ui.rlPayloadMass.value = pMass;
+			if (this.ui.rlPayloadMassVal) this.ui.rlPayloadMassVal.textContent = pMass;
+			const fEnabled = !!rl.fairing?.enabled;
+			if (this.ui.rlFairingEnabled) this.ui.rlFairingEnabled.checked = fEnabled;
+			if (this.ui.rlFairingOptions) this.ui.rlFairingOptions.style.display = fEnabled ? 'block' : 'none';
+			const fMass = rl.fairing?.massT !== undefined ? rl.fairing.massT : 1.7;
+			if (this.ui.rlFairingMass) this.ui.rlFairingMass.value = fMass;
+			if (this.ui.rlFairingMassVal) this.ui.rlFairingMassVal.textContent = fMass;
+			const fAlt = rl.fairing?.separationAltKm !== undefined ? rl.fairing.separationAltKm : 100;
+			if (this.ui.rlFairingAlt) this.ui.rlFairingAlt.value = fAlt;
+			if (this.ui.rlFairingAltVal) this.ui.rlFairingAltVal.textContent = fAlt;
+		} else {
+			const stgIdx = Number(tabKey);
+			const stg = rl.stages?.[stgIdx];
+			if (!stg) { return; }
+			if (this.ui.rlStageConfigPanel) this.ui.rlStageConfigPanel.style.display = 'block';
+			if (this.ui.rlPayloadConfigPanel) this.ui.rlPayloadConfigPanel.style.display = 'none';
+			const titleText = stg.name ? stg.name.toUpperCase() : (stgIdx === 0 ? 'BOOSTER' : 'UPPER');
+			if (this.ui.rlStageTitle) this.ui.rlStageTitle.textContent = `-- STAGE ${stgIdx + 1}: ${titleText} --`;
+			if (this.ui.rlFuelType) this.ui.rlFuelType.value = stg.fuelType || 'liquid';
+			if (this.ui.rlFuelMass) this.ui.rlFuelMass.value = stg.fuelMassT;
+			if (this.ui.rlFuelMassVal) this.ui.rlFuelMassVal.textContent = stg.fuelMassT;
+			if (this.ui.rlOxidMass) this.ui.rlOxidMass.value = stg.oxidMassT;
+			if (this.ui.rlOxidMassVal) this.ui.rlOxidMassVal.textContent = stg.oxidMassT;
+			if (this.ui.rlLaunchMass) this.ui.rlLaunchMass.value = stg.dryMassT;
+			if (this.ui.rlLaunchMassVal) this.ui.rlLaunchMassVal.textContent = stg.dryMassT;
+			if (this.ui.rlLaunchThrust) this.ui.rlLaunchThrust.value = stg.thrustKN;
+			if (this.ui.rlLaunchThrustVal) this.ui.rlLaunchThrustVal.textContent = stg.thrustKN;
+			if (this.ui.rlSepDelay) {
+				this.ui.rlSepDelay.value = stg.separationDelaySec !== undefined ? stg.separationDelaySec : 2.0;
+				if (this.ui.rlSepDelayVal) this.ui.rlSepDelayVal.textContent = Number(this.ui.rlSepDelay.value).toFixed(1);
+			}
+			if (this.ui.rlIgnDelay) {
+				this.ui.rlIgnDelay.value = stg.ignitionDelaySec !== undefined ? stg.ignitionDelaySec : 2.0;
+				if (this.ui.rlIgnDelayVal) this.ui.rlIgnDelayVal.textContent = Number(this.ui.rlIgnDelay.value).toFixed(1);
+			}
+			const isFirstStage = stgIdx === 0;
+			if (this.ui.rlIgnDelayLabel) this.ui.rlIgnDelayLabel.style.display = isFirstStage ? 'none' : 'block';
+			if (this.ui.rlIgnDelay) this.ui.rlIgnDelay.style.display = isFirstStage ? 'none' : 'block';
+			const isLastStage = stgIdx + 1 >= (rl.stages?.length || 1);
+			if (this.ui.rlSepDelayLabel) this.ui.rlSepDelayLabel.style.display = isLastStage ? 'none' : 'block';
+			if (this.ui.rlSepDelay) this.ui.rlSepDelay.style.display = isLastStage ? 'none' : 'block';
+		}
+	}
+
+	loadPreset(presetKey) {
+		const preset = MULTISTAGE_PRESETS[presetKey];
+		if (!preset) return;
+		const rl = this.universe.RocketLauncher;
+		rl.currentPresetId = presetKey;
+		rl.stages = JSON.parse(JSON.stringify(preset.stages));
+		rl.payload = JSON.parse(JSON.stringify(preset.payload || { massT: 0 }));
+		rl.fairing = JSON.parse(JSON.stringify(preset.fairing || { enabled: false, massT: 0, separationAltKm: 100 }));
+		this._syncStageZero();
+		this.currentTab = 0;
+		this._renderStageTabs();
+		this.selectTab(0);
+		this._updateRocketStats();
+	}
+
 	_updateRocketHostOptions() {
 		const currentHostId = this.universe.RocketLauncher.hostId;
 		this.ui.rlHostSelect.innerHTML = '';
@@ -276,18 +517,49 @@ export class RocketTab {
 		const objName = 'Rocket';
 		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
 		
-		const fuel = ROCKET_FUELS[rl.fuelType] || ROCKET_FUELS['liquid'];
-		const ve = fuel.isp * PHYSICS.G0;
-		const totalPropellantT = rl.fuelMassT + rl.oxidMassT;
-		const m0 = UnitConvertUtils.ton2kg(rl.dryMassT + totalPropellantT);
-		const mf = UnitConvertUtils.ton2kg(rl.dryMassT);
-		
-		const massFlowRateKgS = UnitConvertUtils.kn2n(rl.thrustKN) / ve;
-		const maxBurnTime = massFlowRateKgS > 0 ? UnitConvertUtils.ton2kg(totalPropellantT) / massFlowRateKgS : 0;
-		
-		let dvKmS = 0;
-		if (maxBurnTime > 0 && rl.thrustKN > 0) {
-			dvKmS = UnitConvertUtils.m2km(ve * Math.log(m0 / mf));
+		const stages = rl.stages || [{
+			dryMassT: rl.dryMassT, fuelMassT: rl.fuelMassT, oxidMassT: rl.oxidMassT,
+			thrustKN: rl.thrustKN, fuelType: rl.fuelType, name: 'Core Stage'
+		}];
+		const numStages = stages.length;
+		const payloadMassT = (rl.payload?.massT !== undefined) ? rl.payload.massT : 8.0;
+		const fairingMassT = (rl.fairing?.enabled ? rl.fairing.massT : 0) || 0;
+
+		let totalDvKmS = 0;
+		const stageDvs = [];
+
+		for (let i = 0; i < numStages; i++) {
+			const stg = stages[i];
+			const fuel = ROCKET_FUELS[stg.fuelType] || ROCKET_FUELS['liquid'];
+			const ve = fuel.isp * PHYSICS.G0;
+
+			// Initial mass for stage i (payload + fairing (if stage 1) + this stage + upper stages)
+			let m0_T = payloadMassT + (i === 0 ? fairingMassT : 0);
+			for (let j = i; j < numStages; j++) {
+				m0_T += stages[j].dryMassT + stages[j].fuelMassT + stages[j].oxidMassT;
+			}
+			const propT = stg.fuelMassT + stg.oxidMassT;
+			const mf_T = m0_T - propT;
+
+			let stgDv = 0;
+			if (propT > 0 && mf_T > 0 && stg.thrustKN > 0) {
+				stgDv = UnitConvertUtils.m2km(ve * Math.log(m0_T / mf_T));
+			}
+			totalDvKmS += stgDv;
+
+			const stgTwr = (UnitConvertUtils.kn2n(stg.thrustKN)) / (UnitConvertUtils.ton2kg(m0_T) * PHYSICS.G0);
+			stageDvs.push({
+				stageNum: i + 1,
+				name: stg.name || `Stage ${i + 1}`,
+				dv: stgDv,
+				twr: stgTwr
+			});
+		}
+
+		// Initial liftoff total mass
+		let initialTotalMassT = payloadMassT + fairingMassT;
+		for (const stg of stages) {
+			initialTotalMassT += stg.dryMassT + stg.fuelMassT + stg.oxidMassT;
 		}
 
 		// Calculate Local Gravity and Direction
@@ -314,17 +586,17 @@ export class RocketTab {
 		let twrX = 0;
 		let hostName = "Unknown";
 
-		// Calculate Vector TWR
+		// Calculate Vector TWR for Stage 1
+		const stg0ThrustKN = stages[0]?.thrustKN || rl.thrustKN;
 		if (host && rMeters > 0) {
 			hostName = host.name;
 			const hostMassKg = UnitConvertUtils.ton2kg(host.mass);
 
 			// Calculate local gravity (g = GM / r^2)
 			const localG = (PHYSICS.G * hostMassKg) / (rMeters * rMeters);
-			const weightN = UnitConvertUtils.ton2kg(rl.dryMassT + totalPropellantT) * localG;
-			const thrustN = UnitConvertUtils.kn2n(rl.thrustKN);
+			const weightN = UnitConvertUtils.ton2kg(initialTotalMassT) * localG;
+			const thrustN = UnitConvertUtils.kn2n(stg0ThrustKN);
 
-			// Since launchAngleDeg is relative to zenith, we can resolve directly
 			const relAngleDeg = rl.flightProfile.length > 0 ? Number(rl.flightProfile[0].angle) : 0;
 			const relAngleRad = UnitConvertUtils.deg2rad(relAngleDeg);
 
@@ -335,16 +607,16 @@ export class RocketTab {
 			twrX = thrustX / weightN;
 		}
 
-		this.ui.rlStatDv.textContent = dvKmS.toFixed(2);
-		this.ui.rlStatHostName.textContent = hostName;
-		this.ui.rlStatTwrY.textContent = twrY.toFixed(2);
-		this.ui.rlStatTwrX.textContent = twrX.toFixed(2);
+		if (this.ui.rlStatDv) this.ui.rlStatDv.textContent = totalDvKmS.toFixed(2);
+		if (this.ui.rlStatHostName) this.ui.rlStatHostName.textContent = hostName;
+		if (this.ui.rlStatTwrY) this.ui.rlStatTwrY.textContent = twrY.toFixed(2);
+		if (this.ui.rlStatTwrX) this.ui.rlStatTwrX.textContent = twrX.toFixed(2);
+		if (this.ui.rlStatTotalMass) this.ui.rlStatTotalMass.textContent = initialTotalMassT.toFixed(1);
+		if (this.ui.rlStatStageCount) this.ui.rlStatStageCount.textContent = numStages;
 
-		if (totalPropellantT > 0 && fuel) {
-			this.ui.rlStatFuelType.textContent = fuel.name;
-			this.ui.rlStatFuelAmount.textContent = totalPropellantT.toLocaleString();
-			this.ui.rlStatFuelIsp.textContent = fuel.isp;
-			this.ui.rlStatFuelMaxBurn.textContent = maxBurnTime.toFixed(1);
+		if (this.ui.rlStageDvBreakdown) {
+			const breakdownHtml = stageDvs.map(s => `<div>${s.name}: ${s.dv.toFixed(2)} km/s <span style="color:#aaa;">(TWR: ${s.twr.toFixed(2)})</span></div>`).join('');
+			this.ui.rlStageDvBreakdown.innerHTML = breakdownHtml;
 		}
 
 		// Trigger debounced trajectory prediction update on configuration change

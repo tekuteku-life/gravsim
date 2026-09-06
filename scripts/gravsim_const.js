@@ -420,7 +420,7 @@ export const FLIGHT_COMPUTER_CONFIG = {
 
 // Communication buffer structure
 export const CALC_BUFFER_CONFIG = {
-	OBJ_ATTR_COUNT: 42
+	OBJ_ATTR_COUNT: 46
 };
 
 export const BUFFER_INDEX = {
@@ -433,7 +433,8 @@ export const BUFFER_INDEX = {
 	TM_REM_DV: 27, TM_TWR: 28, TM_ALT_M: 29, TM_VV: 30, TM_VH: 31,
 	TM_AV: 32, TM_AH: 33, TM_CURRENT_G: 34, TM_FLIGHT_TIME: 35, THRUST_ANGLE: 36,
 	DOMINANT_BODY_ID: 37, DIST_TO_DOMINANT: 38, OXID_MASS: 39,
-	TM_TANK_PRES_FUEL: 40, TM_TANK_PRES_OXID: 41
+	TM_TANK_PRES_FUEL: 40, TM_TANK_PRES_OXID: 41,
+	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, TM_STG_SEP_ACTIVE: 44, TM_FAIRING_SEPARATED: 45
 };
 
 export const OBJECT_STATE = {
@@ -997,6 +998,205 @@ export const ROCKET_LAUNCHER_CONFIG = {
 		TRACKING_ATL_LIMIT_RATIO: 0.2
 	}
 };
+
+// Multi-stage rocket parameters and presets
+export const MULTISTAGE_ROCKET = {
+	DEFAULT_SEPARATION_DELAY_SEC: 1.5,
+	DEFAULT_IGNITION_DELAY_SEC: 2.5,
+	DEFAULT_JETTISON_SPEED_M_S: 1.5,
+	FAIRING_DEFAULT_ALT_KM: 100,
+	STG_SEP_LAMP_DURATION_SEC: 3.5,
+};
+
+export const MULTISTAGE_PRESETS = {
+	"FALCON9": {
+		id: "FALCON9",
+		name: "Falcon 9 Style (2-Stage)",
+		description: "Two-stage orbital launch vehicle with liquid oxygen and kerosene propellants",
+		stages: [
+			{
+				stageNumber: 1,
+				name: "1st Stage (Booster)",
+				fuelType: "liquid",
+				thrustKN: 7600,
+				dryMassT: 25.0,
+				fuelMassT: 140.0,
+				oxidMassT: 280.0,
+				burnTime: 162.0,
+				ofRatio: 2.0,
+				radius: 2.5,
+				separationDelaySec: 1.5,
+				ignitionDelaySec: 2.5,
+				jettisonSpeedM_S: 1.5
+			},
+			{
+				stageNumber: 2,
+				name: "2nd Stage (Upper)",
+				fuelType: "liquid",
+				thrustKN: 980,
+				dryMassT: 4.5,
+				fuelMassT: 32.0,
+				oxidMassT: 64.0,
+				burnTime: 390.0,
+				ofRatio: 2.0,
+				radius: 2.0,
+				separationDelaySec: 1.5,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 1.0
+			}
+		],
+		payload: {
+			name: "Satellite Payload",
+			massT: 8.0,
+			radius: 1.5
+		},
+		fairing: {
+			enabled: true,
+			massT: 1.7,
+			separationAltKm: 100
+		}
+	},
+	"H3": {
+		id: "H3",
+		name: "H3 Style (2-Stage)",
+		description: "Two-stage heavy launch vehicle with cryogenic hydrogen and liquid oxygen",
+		stages: [
+			{
+				stageNumber: 1,
+				name: "1st Stage (LE-9 x2)",
+				fuelType: "hydro",
+				thrustKN: 2940,
+				dryMassT: 25.0,
+				fuelMassT: 34.0,
+				oxidMassT: 206.0,
+				burnTime: 290.0,
+				ofRatio: 6.0,
+				radius: 2.6,
+				separationDelaySec: 1.5,
+				ignitionDelaySec: 3.0,
+				jettisonSpeedM_S: 1.5
+			},
+			{
+				stageNumber: 2,
+				name: "2nd Stage (LE-5B-3)",
+				fuelType: "hydro",
+				thrustKN: 137,
+				dryMassT: 3.5,
+				fuelMassT: 4.0,
+				oxidMassT: 24.0,
+				burnTime: 530.0,
+				ofRatio: 6.0,
+				radius: 2.6,
+				separationDelaySec: 1.5,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 1.0
+			}
+		],
+		payload: {
+			name: "HTV-X Cargo",
+			massT: 4.0,
+			radius: 2.0
+		},
+		fairing: {
+			enabled: true,
+			massT: 2.0,
+			separationAltKm: 100
+		}
+	},
+	"SSTO": {
+		id: "SSTO",
+		name: "Single Stage (SSTO)",
+		description: "Single-stage-to-orbit rocket (Legacy baseline)",
+		stages: [
+			{
+				stageNumber: 1,
+				name: "Core Stage",
+				fuelType: "liquid",
+				thrustKN: 7600,
+				dryMassT: 7.0,
+				fuelMassT: 88.0,
+				oxidMassT: 220.0,
+				burnTime: 160.0,
+				ofRatio: 2.5,
+				radius: 2.5,
+				separationDelaySec: 2.0,
+				ignitionDelaySec: 3.0,
+				jettisonSpeedM_S: 1.5
+			}
+		],
+		payload: {
+			name: "Payload",
+			massT: 0.0,
+			radius: 1.0
+		},
+		fairing: {
+			enabled: false,
+			massT: 0.0,
+			separationAltKm: 100
+		}
+	}
+};
+
+/**
+ * Normalizes any rocket config (legacy single-stage or new multi-stage)
+ * into a valid multi-stage configuration structure.
+ */
+export function normalizeRocketConfig(config) {
+	if (!config) return null;
+	if (config.stages && Array.isArray(config.stages) && config.stages.length > 0) {
+		return {
+			...config,
+			stages: config.stages.map((stg, idx) => ({
+				stageNumber: stg.stageNumber || (idx + 1),
+				name: stg.name || `Stage ${idx + 1}`,
+				fuelType: stg.fuelType || 'liquid',
+				thrustKN: stg.thrustKN !== undefined ? stg.thrustKN : 7600,
+				dryMassT: stg.dryMassT !== undefined ? stg.dryMassT : 7,
+				fuelMassT: stg.fuelMassT !== undefined ? stg.fuelMassT : 88,
+				oxidMassT: stg.oxidMassT !== undefined ? stg.oxidMassT : 220,
+				burnTime: stg.burnTime !== undefined ? stg.burnTime : 160,
+				ofRatio: stg.ofRatio !== undefined ? stg.ofRatio : 2.5,
+				radius: stg.radius !== undefined ? stg.radius : 2.5,
+				separationDelaySec: stg.separationDelaySec !== undefined ? stg.separationDelaySec : MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC,
+				ignitionDelaySec: stg.ignitionDelaySec !== undefined ? stg.ignitionDelaySec : MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC,
+				jettisonSpeedM_S: stg.jettisonSpeedM_S !== undefined ? stg.jettisonSpeedM_S : MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S,
+			})),
+			payload: config.payload || { name: 'Payload', massT: 0, radius: 1.0 },
+			fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }
+		};
+	}
+
+	// Convert legacy single-stage config to 1-stage multistage config
+	const dryMassT = config.dryMassT !== undefined ? config.dryMassT : (config.emptyMass !== undefined ? config.emptyMass : 7);
+	const fuelMassT = config.fuelMassT !== undefined ? config.fuelMassT : (config.fuelMass !== undefined ? config.fuelMass : 88);
+	const oxidMassT = config.oxidMassT !== undefined ? config.oxidMassT : (config.oxidMass !== undefined ? config.oxidMass : 220);
+	const thrustKN = config.thrustKN !== undefined ? config.thrustKN : (config.thrustForce ? config.thrustForce / 1000 : 7600);
+	const burnTime = config.burnTime !== undefined ? config.burnTime : (config.time !== undefined ? config.time : 160);
+	const ofRatio = config.ofRatio !== undefined ? config.ofRatio : 2.5;
+
+	return {
+		...config,
+		stages: [
+			{
+				stageNumber: 1,
+				name: 'Core Stage',
+				fuelType: config.fuelType || 'liquid',
+				thrustKN: thrustKN,
+				dryMassT: dryMassT,
+				fuelMassT: fuelMassT,
+				oxidMassT: oxidMassT,
+				burnTime: burnTime,
+				ofRatio: ofRatio,
+				radius: config.radius || 2.5,
+				separationDelaySec: MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC,
+				ignitionDelaySec: MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC,
+				jettisonSpeedM_S: MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S
+			}
+		],
+		payload: config.payload || { name: 'Payload', massT: 0, radius: 1.0 },
+		fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }
+	};
+}
 
 // Pad Effect Constants
 export const PAD_EFFECT = {

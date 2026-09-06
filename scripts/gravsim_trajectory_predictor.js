@@ -150,6 +150,9 @@ export class TrajectoryPredictor {
 			vx: rocketVx_m,
 			vy: rocketVy_m,
 			radius: config.radius || 1,
+			dryMassT: config.dryMassT !== undefined ? config.dryMassT : 7,
+			fuelMassT: config.fuelMassT !== undefined ? config.fuelMassT : 88,
+			oxidMassT: config.oxidMassT !== undefined ? config.oxidMassT : 220,
 			dryMassKg: UnitConvertUtils.ton2kg(config.dryMassT || 7),
 			fuelMassKg: UnitConvertUtils.ton2kg(config.fuelMassT || 88),
 			oxidMassKg: UnitConvertUtils.ton2kg(config.oxidMassT || 220),
@@ -161,7 +164,10 @@ export class TrajectoryPredictor {
 			maxGLimit: config.maxGLimit || 4.0,
 			massLossRateKg: massFlowRateKgS,
 			hostAngleRad: config.hostAngleRad !== undefined ? config.hostAngleRad : initialZenithRad,
-			hostAltM: config.hostAltitudeM || 0
+			hostAltM: config.hostAltitudeM || 0,
+			stages: config.stages,
+			payload: config.payload,
+			fairing: config.fairing
 		};
 
 		// Collect all celestial bodies with full inertial coordinates and velocities
@@ -320,7 +326,27 @@ export class TrajectoryPredictor {
 					}
 					break;
 				case 'meco':
-					if (status >= TELEMETRY.STATUS.MECO || rocket.fuelMass <= 0 || rocket.burnTime <= 0) {
+					if (status >= TELEMETRY.STATUS.MECO || (rocket.totalStages === 1 && (rocket.fuelMass <= 0 || rocket.burnTime <= 0)) || (rocket.totalStages > 1 && rocket.currentStageIndex + 1 >= rocket.totalStages && rocket.burnTime <= 0)) {
+						passed = true;
+					}
+					break;
+				case 'stg_meco':
+					if (flightTime >= ev.time || rocket.currentStageIndex > 0) {
+						passed = true;
+					}
+					break;
+				case 'staging':
+					if (flightTime >= ev.time || rocket.currentStageIndex > 0) {
+						passed = true;
+					}
+					break;
+				case 'ignition':
+					if (flightTime >= ev.time || (rocket.currentStageIndex > 0 && rocket.isIgnited)) {
+						passed = true;
+					}
+					break;
+				case 'fairing':
+					if (flightTime >= ev.time || rocket.telemetry?.isFairingSeparated) {
 						passed = true;
 					}
 					break;

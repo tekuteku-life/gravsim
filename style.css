@@ -1097,3 +1097,31 @@ button:hover { background: #444; }
 	margin: 0;
 }
 
+/* Multistage Rocket Tab UI */
+.stage-tab-bar {
+	display: flex;
+	gap: 4px;
+	margin-top: 8px;
+	margin-bottom: 8px;
+}
+.rl-stage-tab-btn {
+	background: #222;
+	color: #888;
+	border: 1px solid #444;
+	border-radius: 3px;
+	cursor: pointer;
+	transition: all 0.15s ease;
+}
+.rl-stage-tab-btn:hover {
+	background: #333;
+	color: #fff;
+	border-color: #666;
+}
+.rl-stage-tab-btn.active {
+	background: #003322;
+	color: #00ffcc;
+	border-color: #00ffcc;
+	font-weight: bold;
+}
+
+

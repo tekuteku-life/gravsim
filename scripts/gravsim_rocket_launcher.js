@@ -4,7 +4,8 @@
 import {
 	PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS,
 	ROCKET_FUELS, LAUNCH_SEQUENCES, EVENT_PRIORITY,
-	TRAJECTORY_PREDICTION, OBJECT_TYPES, OBJECT_STATE
+	TRAJECTORY_PREDICTION, OBJECT_TYPES, OBJECT_STATE,
+	MULTISTAGE_PRESETS
 } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
@@ -13,7 +14,7 @@ import { TrajectoryPredictor } from './gravsim_trajectory_predictor.js';
 /*******************************************************************
  * RocketLauncher Class
  * Manages the preview state and rendering for continuous-thrust rocket launches.
-*******************************************************************/
+ *******************************************************************/
 export class RocketLauncher {
 	constructor(universe) {
 		this.universe = universe;
@@ -31,11 +32,19 @@ export class RocketLauncher {
 		this.hostAngleDeg = 0;
 		this.hostAltitudeM = 10; // (m)
 
-		// Rocket parameters
-		this.dryMassT = 7;	// (t) Payload + empty structure
-		this.fuelMassT = 88; // (t)
-		this.oxidMassT = 220; // (t)
-		this.fuelType = 'liquid';
+		// Multi-stage setup (default: Falcon 9 Style 2-stage)
+		const preset = MULTISTAGE_PRESETS.FALCON9;
+		this.currentPresetId = 'FALCON9';
+		this.stages = JSON.parse(JSON.stringify(preset.stages));
+		this.payload = JSON.parse(JSON.stringify(preset.payload));
+		this.fairing = JSON.parse(JSON.stringify(preset.fairing));
+
+		// Rocket parameters (synced with active/booster stage for launcher UI)
+		this.dryMassT = this.stages[0].dryMassT;
+		this.fuelMassT = this.stages[0].fuelMassT;
+		this.oxidMassT = this.stages[0].oxidMassT;
+		this.fuelType = this.stages[0].fuelType;
+		this.thrustKN = this.stages[0].thrustKN;
 
 		// Default Flight Profile
 		this.flightProfile = [
@@ -320,7 +329,10 @@ export class RocketLauncher {
 			flightProfile: this.flightProfile,
 			hostAngleRad: hostAngleRad,
 			thrustAngle: currentThrustAngle,
-			maxSimTime: this.maxSimTimeSec
+			maxSimTime: this.maxSimTimeSec,
+			stages: this.stages,
+			payload: this.payload,
+			fairing: this.fairing
 		};
 
 		return { host, hostAngleRad, config };
@@ -496,7 +508,10 @@ export class RocketLauncher {
 			hostAngleRad: UnitConvertUtils.deg2rad(hAngleCanvas),
 			hostAltM: this.hostAltitudeM,
 			isHoldDown: true,
-			isIgnited: false
+			isIgnited: false,
+			stages: this.stages,
+			payload: this.payload,
+			fairing: this.fairing
 		};
 
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
@@ -558,7 +573,11 @@ export class RocketLauncher {
 			thrustKN: this.thrustKN,
 			burnTime: this.calculatedBurnTime,
 			maxGLimit: this.maxGLimit,
-			autoControl: this.autoControl
+			autoControl: this.autoControl,
+			currentPresetId: this.currentPresetId,
+			stages: JSON.parse(JSON.stringify(this.stages || [])),
+			payload: JSON.parse(JSON.stringify(this.payload || {})),
+			fairing: JSON.parse(JSON.stringify(this.fairing || {}))
 		};
 	}
 
@@ -576,5 +595,9 @@ export class RocketLauncher {
 		if (state.burnTime !== undefined) this.calculatedBurnTime = state.burnTime;
 		if (state.maxGLimit !== undefined) this.maxGLimit = state.maxGLimit;
 		if (state.autoControl !== undefined) this.autoControl = state.autoControl;
+		if (state.currentPresetId !== undefined) this.currentPresetId = state.currentPresetId;
+		if (state.stages && Array.isArray(state.stages)) this.stages = JSON.parse(JSON.stringify(state.stages));
+		if (state.payload) this.payload = JSON.parse(JSON.stringify(state.payload));
+		if (state.fairing) this.fairing = JSON.parse(JSON.stringify(state.fairing));
 	}
 }

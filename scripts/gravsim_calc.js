@@ -28,8 +28,9 @@ export class PhysicsEngine {
 	}
 
 	addObject(data) {
+		let newObj;
 		if (data.type === OBJECT_TYPES.ROCKET) {
-			this.objects.push(new CalcRocket(
+			newObj = new CalcRocket(
 				data.id, data.name,
 				data.x, data.y,
 				data.vx || 0, data.vy || 0,
@@ -49,30 +50,38 @@ export class PhysicsEngine {
 					hostAngleRad: data.hostAngleRad,
 					hostAltM: data.hostAltM,
 					isHoldDown: data.isHoldDown,
-					isIgnited: data.isIgnited
+					isIgnited: data.isIgnited,
+					stages: data.stages,
+					payload: data.payload,
+					fairing: data.fairing
 				}
-			));
+			);
 		} else if (data.type === OBJECT_TYPES.DEBRIS) {
-			this.objects.push(new CalcDebris(
+			newObj = new CalcDebris(
 				data.id, data.name,
 				data.x, data.y,
 				data.vx || 0, data.vy || 0,
 				data.ax || 0, data.ay || 0,
 				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
-				data.mass || SIMULATION.DEFAULT_OBJECT_MASS
-			));
+				data.mass || SIMULATION.DEFAULT_OBJECT_MASS,
+				data.debrisSubType || 0
+			);
 		} else {
-			this.objects.push(new CalcCelestialBody(
+			newObj = new CalcCelestialBody(
 				data.id, data.name,
 				data.x, data.y,
 				data.vx || 0, data.vy || 0,
 				data.ax || 0, data.ay || 0,
 				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
 				data.mass || SIMULATION.DEFAULT_OBJECT_MASS
-			));
+			);
 		}
+		newObj._half_vx = newObj.vx;
+		newObj._half_vy = newObj.vy;
+		this.objects.push(newObj);
 		this._categorizeBodies();
 		this._calculateForces();
+		return newObj;
 	}
 
 	removeObject(id) {
@@ -401,11 +410,36 @@ export class PhysicsEngine {
 	}
 
 	_updateFlightControl(dt) {
+		const newDebris = [];
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
 
 			if (obj.type === OBJECT_TYPES.ROCKET) {
 				obj.flightControl(dt, obj.dominantBody, obj.distToDominantM);
+				if (obj._pendingDebris && obj._pendingDebris.length > 0) {
+					while (obj._pendingDebris.length > 0) {
+						newDebris.push(obj._pendingDebris.shift());
+					}
+				}
+			}
+		}
+
+		if (newDebris.length > 0) {
+			for (const deb of newDebris) {
+				const nextId = -Math.floor(Math.random() * 10000000) - 1;
+				this.addObject({
+					id: deb.id || nextId,
+					name: deb.name,
+					type: OBJECT_TYPES.DEBRIS,
+					debrisSubType: deb.debrisSubType || 0,
+					x: deb.x,
+					y: deb.y,
+					vx: deb.vx,
+					vy: deb.vy,
+					radius: deb.radius || 1.5,
+					mass: deb.mass,
+					generation: 1
+				});
 			}
 		}
 	}
@@ -813,4 +847,7 @@ class SimulationController {
 	}
 }
 
-const calc = new SimulationController();
+// Instantiate only in dedicated Web Worker context
+if (typeof self !== 'undefined' && typeof self.postMessage === 'function' && typeof document === 'undefined') {
+	const calc = new SimulationController();
+}

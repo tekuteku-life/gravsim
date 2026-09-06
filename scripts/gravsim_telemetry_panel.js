@@ -29,6 +29,7 @@ export class TelemetryPanel {
 			toggleBtn: document.getElementById('telemetry-toggle-btn'),
 			panel: document.getElementById('telemetry-panel'),
 			targetSelect: document.getElementById('tm-target-select'),
+			stageInfo: document.getElementById('tm-stage-info'),
 			missionStatus: document.getElementById('tm-mission-status'),
 			missionTime: document.getElementById('tm-met'),
 			annunciator: document.getElementById('tm-annunciator'),
@@ -41,9 +42,13 @@ export class TelemetryPanel {
 			lampPitch: document.getElementById('tm-lamp-pitch'),
 			lampOrbit: document.getElementById('tm-lamp-orbit'),
 			lampPress: document.getElementById('tm-lamp-press'),
-			lampEng: document.getElementById('tm-lamp-eng'),
+			lamp1eng: document.getElementById('tm-lamp-1eng'),
 			lampMeco: document.getElementById('tm-lamp-meco'),
-			lampSep: document.getElementById('tm-lamp-sep'),
+			lamp1sep: document.getElementById('tm-lamp-1sep'),
+			lamp2eng: document.getElementById('tm-lamp-2eng'),
+			lampSeco: document.getElementById('tm-lamp-seco'),
+			lamp2sep: document.getElementById('tm-lamp-2sep'),
+			lampPsep: document.getElementById('tm-lamp-psep'),
 			carousel: document.getElementById('tm-carousel'),
 			dots: document.getElementById('tm-dots'),
 			minimalHud: document.getElementById('minimal-hud-bar'),
@@ -71,9 +76,13 @@ export class TelemetryPanel {
 			pitch: this.ui.lampPitch,
 			orbit: this.ui.lampOrbit,
 			press: this.ui.lampPress,
-			eng: this.ui.lampEng,
+			'1eng': this.ui.lamp1eng,
 			meco: this.ui.lampMeco,
-			sep: this.ui.lampSep,
+			'1sep': this.ui.lamp1sep,
+			'2eng': this.ui.lamp2eng,
+			seco: this.ui.lampSeco,
+			'2sep': this.ui.lamp2sep,
+			psep: this.ui.lampPsep,
 		};
 
 		this.subRenderer = new Renderer(this.ui.subCanvas, 'telemetry');
@@ -126,7 +135,7 @@ export class TelemetryPanel {
 				for (const entry of entries) {
 					const cardEl = entry.target;
 					const card = this.cards.find(c => c.element === cardEl);
-					if (!card) continue;
+					if (!card) { continue; }
 
 					const wasVisible = card.isVisible;
 					card.isVisible = entry.isIntersecting;
@@ -483,12 +492,21 @@ export class TelemetryPanel {
 		}
 
 		DOMUtils.setText(this.ui.missionTime, FormatUtils.timeMission(displayTimeSec));
+
+		// Update Multi-Stage Indicator
+		const totalStg = tm.totalStages || target.stages?.length || 1;
+		const curStg = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
+		const stageNum = curStg + 1;
+		const curStageObj = target.stages && target.stages[curStg];
+		const stageName = curStageObj?.name ? curStageObj.name : (totalStg > 1 ? (stageNum === 1 ? 'BOOSTER' : 'UPPER') : 'CORE');
+		DOMUtils.setText(this.ui.stageInfo, `${stageNum} / ${totalStg} (${stageName})`);
 	}
 
 	_resetPinnedHeader(target) {
 		DOMUtils.setText(this.ui.missionStatus, TELEMETRY.STATUS_MAP[6]);
 		DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.NORMAL_COLOR);
 		DOMUtils.setText(this.ui.missionTime, "T+ ---y ---d --:--:--");
+		DOMUtils.setText(this.ui.stageInfo, "---");
 	}
 
 	_updateMinimalHud(target) {
@@ -606,17 +624,50 @@ export class TelemetryPanel {
 		const isPress = target.presState === 'NOMINAL' || (tm.tankPresFuel >= threshold && tm.tankPresOxid >= threshold);
 		this._setLamp('press', isPress, false);
 
-		// 10. ENG-ON (Main engine thrusting)
-		const isEngOn = Boolean(target.thrustRatio > 0.01 && target.fuelMass > 0.01 && (target.burnTime > 0 || target.isIgnited));
-		this._setLamp('eng', isEngOn, false);
+		// Multi-stage context
+		const curStage = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
+		const totalStages = (tm.totalStages !== undefined ? tm.totalStages : target.totalStages) || 1;
+		const isEngThrusting = Boolean(target.thrustRatio > 0.01 && target.fuelMass > 0.001 && (target.burnTime > 0 || target.isIgnited));
+		const isSeparating = Boolean(tm.isStgSepActive || (target.stgSepLampTimer > 0));
+		const fairingSep = Boolean(tm.isFairingSeparated || target.fairing?.isSeparated);
 
-		// 11. MECO (Main engine cutoff)
-		const isMeco = isLaunched && (tm.status === TELEMETRY.STATUS.MECO || tm.status === TELEMETRY.STATUS.COASTING || tm.status === TELEMETRY.STATUS.TRACKING || (target.fuelMass <= 0.01 && !isEngOn));
+		// 10. 1-ENG (Stage 1 Engine Burning)
+		const is1EngOn = isLaunched && curStage === 0 && isEngThrusting;
+		this._setLamp('1eng', is1EngOn, false);
+
+		// 11. MECO (Main Engine Cutoff)
+		const isMeco = isLaunched && (
+			(curStage > 0) ||
+			(curStage === 0 && (!isEngThrusting && (tm.status === TELEMETRY.STATUS.MECO || tm.status === TELEMETRY.STATUS.COASTING || target.fuelMass <= 0.01 || target.burnTime <= 0)))
+		);
 		this._setLamp('meco', isMeco, false);
 
-		// 12. STG-SEP (Fairing / Stage separation)
-		const isStageSep = isLaunched && (tm.altM >= fairingAltTh || (isMeco && tm.flightTime > 15));
-		this._setLamp('sep', isStageSep, false);
+		// 12. 1-SEP (Stage 1 Separation)
+		const is1Sep = totalStages > 1 && (curStage >= 1 || (isSeparating && curStage === 0));
+		this._setLamp('1sep', is1Sep, isSeparating && curStage <= 1);
+
+		// 13. 2-ENG (Stage 2 Engine Burning)
+		const is2EngOn = isLaunched && totalStages > 1 && curStage === 1 && isEngThrusting;
+		this._setLamp('2eng', is2EngOn, false);
+
+		// 14. SECO (Second Engine Cutoff)
+		const isSeco = isLaunched && totalStages > 1 && (
+			(curStage > 1) ||
+			(curStage === 1 && (!isEngThrusting && (tm.status === TELEMETRY.STATUS.MECO || tm.status === TELEMETRY.STATUS.COASTING || target.fuelMass <= 0.01 || target.burnTime <= 0)))
+		);
+		this._setLamp('seco', isSeco, false);
+
+		// 15. 2-SEP (Stage 2 Separation)
+		const is2Sep = totalStages > 1 && (curStage >= 2 || target.isPayloadSeparated || tm.isPayloadSeparated || (isSeparating && curStage >= 1));
+		this._setLamp('2sep', is2Sep, isSeparating && curStage >= 1 && !target.isPayloadSeparated);
+
+		// 16. P-SEP (Payload Separation)
+		const isPsep = Boolean(
+			target.isPayloadSeparated || tm.isPayloadSeparated ||
+			(curStage >= totalStages && target.stageState === 'ORBITAL_COAST') ||
+			(isOrbit && curStage >= totalStages - 1 && !isEngThrusting && (tm.status === TELEMETRY.STATUS.COASTING || target.burnTime <= 0))
+		);
+		this._setLamp('psep', isPsep, false);
 	}
 
 	_setLamp(lampKey, isOn, isBlink = false) {

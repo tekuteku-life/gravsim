@@ -4,7 +4,8 @@
 import {
 	PHYSICS, ROCHE_LIMIT, AERO_DYNAMIC,
 	DEFAULT_OBJECT_PARAMS, TANK_PRESSURE_SIM,
-	OBJECT_TYPES, SIMULATION
+	OBJECT_TYPES, SIMULATION,
+	MULTISTAGE_ROCKET, normalizeRocketConfig
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
 import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
@@ -186,8 +187,8 @@ class GravSimCalcObject {
 
 		const dragForce = q * aeroDynamicParam.cd * aeroDynamicParam.area; // N
 
-		// Division by mass is replaced with multiplication by invMass
-		const accelDrag = dragForce * this.invMass; // m/s^2
+		// Division by mass in kg using invMassKg
+		const accelDrag = dragForce * (this.invMassKg || (this.invMass / 1000)); // m/s^2
 
 		this.ax -= (vRelX / vRel) * accelDrag;
 		this.ay -= (vRelY / vRel) * accelDrag;
@@ -219,31 +220,54 @@ export class CalcRocket extends GravSimCalcObject {
 	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, dryMass, fuelMass, oxidMass, thrustData) {
 		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, ax, ay, radius, generation);
 
-		this.dryMass = dryMass; // t
-		this.fuelMass = fuelMass; // t
-		this.oxidMass = oxidMass; // t
-		this.mass = this.dryMass + this.fuelMass + this.oxidMass; // t
-		this.invMass = this.mass > 0 ? 1.0 / this.mass : 0; // 1/t
+		// Multi-stage setup & configuration normalization
+		const normConfig = normalizeRocketConfig({
+			stages: thrustData?.stages,
+			payload: thrustData?.payload,
+			fairing: thrustData?.fairing,
+			dryMassT: dryMass,
+			fuelMassT: fuelMass,
+			oxidMassT: oxidMass,
+			thrustKN: thrustData?.thrustForce ? thrustData.thrustForce / 1000 : undefined,
+			burnTime: thrustData?.burnTime,
+			ofRatio: thrustData?.ofRatio,
+			radius: radius
+		});
 
-		this.ofRatio = thrustData?.ofRatio || 0;
-		this.thrustForce = thrustData?.thrustForce || 0; // N
-		this.burnTime = thrustData?.burnTime || 0; // s
+		this.stages = normConfig.stages;
+		this.payload = normConfig.payload;
+		this.fairing = {
+			enabled: !!normConfig.fairing?.enabled,
+			massT: normConfig.fairing?.massT || 0,
+			separationAltKm: normConfig.fairing?.separationAltKm || MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM,
+			isSeparated: false
+		};
+		this.currentStageIndex = 0;
+		this.totalStages = this.stages.length;
+		this.isHoldDown = thrustData?.isHoldDown || false;
+		this.isIgnited = thrustData?.isIgnited !== undefined ? thrustData.isIgnited : true;
+		this.stageState = this.isHoldDown ? 'PRE_LAUNCH' : 'STG_BURNING';
+		this.stgTimer = 0;
+		this.stgSepLampTimer = 0;
+		this.isPayloadSeparated = false;
+		this._pendingDebris = [];
+
 		this.thrustAngle = thrustData?.thrustAngle || 0; // rad
 		this.flightProfile = thrustData?.flightProfile || [];
-		this.massLossRate = thrustData?.massLossRate || 0; // t/s
 		this.maxGLimit = thrustData?.maxGLimit || 0; // G
 		this.autoControl = thrustData?.autoControl !== undefined ? thrustData.autoControl : true;
 		this.hostId = thrustData?.hostId !== undefined ? thrustData.hostId : null;
 		this.hostAngleRad = thrustData?.hostAngleRad || 0; // rad
 		this.hostAltM = thrustData?.hostAltM || 0; // m
-		this.isHoldDown = thrustData?.isHoldDown || false;
-		this.isIgnited = thrustData?.isIgnited !== undefined ? thrustData.isIgnited : true;
 		this._thrustRatio = 0;
 		this._qAxialKpa = 0; // kPa
 		this._qLateralKpa = 0; // kPa
 		this._aoaDeg = 0; // deg
 		this._progradeAngle = this.thrustAngle; // rad (aligned with initial thrust angle)
 		this._lastDominantBody = null;
+
+		// Activate initial stage
+		this._activateStage(0);
 
 		this.flightComputer = new FlightComputer({
 			maxGLimit: this.maxGLimit,
@@ -268,8 +292,152 @@ export class CalcRocket extends GravSimCalcObject {
 			dt: 0, mass: 0, dryMass: 0, fuelMass: 0, thrustForce: 0, thrustRatio: 0,
 			burnTime: 0, massLossRate: 0, x: 0, y: 0, vx: 0, vy: 0, ax: 0, ay: 0,
 			qAxialKpa: 0, qLateralKpa: 0, aoaDeg: 0, progradeAngle: 0, refBody: null,
-		distToRefM: 0, isHoldDown: false, isIgnited: false
+			distToRefM: 0, isHoldDown: false, isIgnited: false
 		};
+	}
+
+	_activateStage(stageIdx) {
+		const stage = this.stages[stageIdx];
+		if (!stage) { return; }
+		this.currentStageIndex = stageIdx;
+		this.fuelType = stage.fuelType;
+		this.thrustForce = UnitConvertUtils.kn2n(stage.thrustKN); // N
+		this.burnTime = stage.burnTime; // s
+		this.ofRatio = stage.ofRatio;
+
+		this.dryMass = stage.dryMassT;
+		this.fuelMass = stage.fuelMassT;
+		this.oxidMass = stage.oxidMassT;
+
+		const totalPropT = stage.fuelMassT + stage.oxidMassT;
+		this.massLossRate = stage.burnTime > 0 ? (totalPropT / stage.burnTime) : 0; // t/s
+
+		this.updateTotalMass();
+	}
+
+	updateTotalMass() {
+		if (this.isPayloadSeparated) {
+			this.mass = (this.payload?.massT || 0);
+			this.invMass = this.mass > 0 ? 1.0 / this.mass : 0;
+			this.invMassKg = this.mass > 0 ? 1.0 / (this.mass * 1000) : 0;
+			return this.mass;
+		}
+
+		let total = (this.payload?.massT || 0);
+		if (this.fairing?.enabled && !this.fairing.isSeparated) {
+			total += (this.fairing.massT || 0);
+		}
+		// Active stage
+		total += (this.dryMass + this.fuelMass + this.oxidMass);
+
+		// Upper stages not yet activated
+		for (let i = this.currentStageIndex + 1; i < this.stages.length; i++) {
+			const stg = this.stages[i];
+			total += (stg.dryMassT + stg.fuelMassT + stg.oxidMassT);
+		}
+
+		this.mass = total;
+		this.invMass = this.mass > 0 ? 1.0 / this.mass : 0;
+		this.invMassKg = this.mass > 0 ? 1.0 / (this.mass * 1000) : 0;
+		return this.mass;
+	}
+
+	separateCurrentStage() {
+		const stage = this.stages[this.currentStageIndex];
+		if (!stage) { return; }
+
+		// 1. Calculate jettison velocity & position (backward separation)
+		const sepAngle = this.thrustAngle + Math.PI;
+		const sepSpeedM = stage.jettisonSpeedM_S || MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S;
+		const sepVx = this.vx + Math.cos(sepAngle) * sepSpeedM;
+		const sepVy = this.vy + Math.sin(sepAngle) * sepSpeedM;
+		const sepOffsetDist = (stage.radius * 2.5) || 5.0;
+
+		const isFinalStage = (this.currentStageIndex + 1 >= this.totalStages);
+
+		// 2. Queue spent booster debris
+		this._pendingDebris.push({
+			name: isFinalStage ? `${this.name} - Stage ${stage.stageNumber} Upper Stage` : `${this.name} - Stage ${stage.stageNumber} Booster`,
+			debrisSubType: isFinalStage ? 2 : 1,
+			x: this.x - Math.cos(this.thrustAngle) * sepOffsetDist,
+			y: this.y - Math.sin(this.thrustAngle) * sepOffsetDist,
+			vx: sepVx,
+			vy: sepVy,
+			mass: stage.dryMassT,
+			radius: stage.radius,
+			color: '#d0d8e0'
+		});
+
+		// 3. Trigger STG-SEP annunciator lamp
+		this.stgSepLampTimer = MULTISTAGE_ROCKET.STG_SEP_LAMP_DURATION_SEC;
+
+		// 4. Advance to next stage or finish with payload separation
+		if (!isFinalStage) {
+			this.currentStageIndex++;
+			this._activateStage(this.currentStageIndex);
+			this.isIgnited = false;
+			this.stageState = 'INTERSTAGE_COAST';
+			this.stgTimer = 0;
+			this.presState = 'POST_MECO_HOLD';
+			this.presTimer = 0;
+		} else {
+			// Final stage jettisoned: The remaining craft is the payload
+			this.currentStageIndex = this.totalStages;
+			this.dryMass = 0;
+			this.fuelMass = 0;
+			this.oxidMass = 0;
+			this.burnTime = 0;
+			this.thrustForce = 0;
+			this.massLossRate = 0;
+			if (this.payload?.radius) {
+				this.radius = this.payload.radius;
+			}
+			this.isPayloadSeparated = true;
+			this.updateTotalMass();
+
+			this.stageState = 'ORBITAL_COAST';
+			this.isIgnited = false;
+			this.presState = 'POST_MECO_VENT';
+			this.presTimer = 0;
+		}
+	}
+
+	separateFairing(curAltM) {
+		if (!this.fairing.enabled || this.fairing.isSeparated) { return; }
+		const sepAltM = (this.fairing.separationAltKm || MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM) * 1000;
+		if (curAltM >= sepAltM) {
+			this.fairing.isSeparated = true;
+			this.updateTotalMass();
+
+			const latAngle1 = this.thrustAngle + Math.PI / 2;
+			const latAngle2 = this.thrustAngle - Math.PI / 2;
+			const sepSpeed = 3.0; // m/s
+			const halfMass = this.fairing.massT / 2;
+			const offset = (this.radius * 1.5) || 3.0;
+
+			this._pendingDebris.push({
+				name: `${this.name} - Fairing Half A`,
+				debrisSubType: 3,
+				x: this.x + Math.cos(latAngle1) * offset,
+				y: this.y + Math.sin(latAngle1) * offset,
+				vx: this.vx + Math.cos(latAngle1) * sepSpeed,
+				vy: this.vy + Math.sin(latAngle1) * sepSpeed,
+				mass: halfMass,
+				radius: 1.0,
+				color: '#e0e0e0'
+			});
+			this._pendingDebris.push({
+				name: `${this.name} - Fairing Half B`,
+				debrisSubType: 3,
+				x: this.x + Math.cos(latAngle2) * offset,
+				y: this.y + Math.sin(latAngle2) * offset,
+				vx: this.vx + Math.cos(latAngle2) * sepSpeed,
+				vy: this.vy + Math.sin(latAngle2) * sepSpeed,
+				mass: halfMass,
+				radius: 1.0,
+				color: '#e0e0e0'
+			});
+		}
 	}
 
 	handleCommand(cmd) {
@@ -290,6 +458,12 @@ export class CalcRocket extends GravSimCalcObject {
 				this.tankPresOxid = TANK_PRESSURE_SIM.TARGET_KPA * TANK_PRESSURE_SIM.IGNITION_DROP_RATIO;
 				this.presState = 'IGNITION_TRANSIENT';
 				this.presTimer = 0;
+			}
+		} else if (cmd === 'RELEASE_HOLD_DOWN') {
+			this.isHoldDown = false;
+			if (this.stageState === 'PRE_LAUNCH') {
+				this.stageState = 'STG_BURNING';
+				this.stgTimer = 0;
 			}
 		}
 	}
@@ -545,6 +719,8 @@ export class CalcRocket extends GravSimCalcObject {
 		this._sensorData.distToRefM = distToRefM;
 		this._sensorData.isHoldDown = this.isHoldDown;
 		this._sensorData.isIgnited = this.isIgnited;
+		this._sensorData.stageIndex = this.currentStageIndex !== undefined ? this.currentStageIndex : 0;
+		this._sensorData.stages = this.stages;
 
 		this.flightComputer.update(this._sensorData);
 
@@ -555,8 +731,46 @@ export class CalcRocket extends GravSimCalcObject {
 			throttle = 1.0;
 		}
 
-		// Force cut throttle before ignition
-		if (!this.isIgnited) {
+		// Check fairing separation
+		if (distToRefM && refBody) {
+			const curAltM = distToRefM - refBody.radius;
+			this.separateFairing(curAltM);
+		}
+
+		// STG-SEP lamp timer countdown
+		if (this.stgSepLampTimer > 0) {
+			this.stgSepLampTimer -= dt;
+			if (this.stgSepLampTimer < 0) this.stgSepLampTimer = 0;
+		}
+
+		// Handle Staging State Machine
+		const curStage = this.stages[this.currentStageIndex];
+		if (this.stageState === 'PRE_LAUNCH') {
+			if (this.isIgnited && !this.isHoldDown) {
+				this.stageState = 'STG_BURNING';
+				this.stgTimer = 0;
+			}
+		} else if (this.stageState === 'STG_MECO') {
+			this.stgTimer += dt;
+			const sepDelay = curStage ? curStage.separationDelaySec : MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC;
+			if (this.stgTimer >= sepDelay) {
+				this.separateCurrentStage();
+			}
+		} else if (this.stageState === 'INTERSTAGE_COAST') {
+			this.stgTimer += dt;
+			const nextStage = this.stages[this.currentStageIndex];
+			const ignDelay = nextStage ? nextStage.ignitionDelaySec : MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC;
+			if (this.stgTimer >= ignDelay) {
+				this.isIgnited = true;
+				this.stageState = 'STG_BURNING';
+				this.stgTimer = 0;
+				this.presState = 'IGNITION_TRANSIENT';
+				this.presTimer = 0;
+			}
+		}
+
+		// Force cut throttle before ignition or during coast
+		if (!this.isIgnited || this.stageState === 'INTERSTAGE_COAST' || this.stageState === 'STG_MECO' || this.stageState === 'ORBITAL_COAST') {
 			throttle = 0;
 		}
 
@@ -589,9 +803,8 @@ export class CalcRocket extends GravSimCalcObject {
 			this.oxidMass -= dmOxid;
 			this.burnTime -= actualDt;
 
-			// Refresh mass and inverse mass automatically
-			this.mass = this.dryMass + this.fuelMass + this.oxidMass;
-			this.invMass = this.mass > 0 ? 1.0 / this.mass : 0;
+			// Refresh mass and inverse mass automatically using multi-stage logic
+			this.updateTotalMass();
 
 			if (this.burnTime <= 0 || this.fuelMass <= 0 || (this.ofRatio > 0 && this.oxidMass <= 0)) {
 				if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {
@@ -601,9 +814,13 @@ export class CalcRocket extends GravSimCalcObject {
 				if (this.fuelMass < 0) { this.fuelMass = 0; }
 				if (this.oxidMass < 0) { this.oxidMass = 0; }
 
-				this.mass = this.dryMass + this.fuelMass + this.oxidMass;
-				this.invMass = this.mass > 0 ? 1.0 / this.mass : 0;
 				this.burnTime = 0;
+				this.updateTotalMass();
+
+				if (this.stageState === 'STG_BURNING') {
+					this.stageState = 'STG_MECO';
+					this.stgTimer = 0;
+				}
 			}
 		}
 
@@ -613,9 +830,9 @@ export class CalcRocket extends GravSimCalcObject {
 
 	applyThrust() {
 		if (this._thrustRatio > 0 && this.mass > 0) {
-			// Division by mass is replaced with multiplication by invMass
-			const thrustAx = (this.thrustForce * Math.cos(this.thrustAngle)) * this.invMass; // m/s^2
-			const thrustAy = (this.thrustForce * Math.sin(this.thrustAngle)) * this.invMass; // m/s^2
+			const invM_kg = this.invMassKg || (this.invMass / 1000);
+			const thrustAx = (this.thrustForce * Math.cos(this.thrustAngle)) * invM_kg; // m/s^2
+			const thrustAy = (this.thrustForce * Math.sin(this.thrustAngle)) * invM_kg; // m/s^2
 
 			this.ax += thrustAx * this._thrustRatio;
 			this.ay += thrustAy * this._thrustRatio;
@@ -658,9 +875,10 @@ export class CalcRocket extends GravSimCalcObject {
  * Calculation Object Class for Debris
  *******************************************************************/
 export class CalcDebris extends GravSimCalcObject {
-	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass) {
+	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass, debrisSubType = 0) {
 		super(id, name, OBJECT_TYPES.DEBRIS, x, y, vx, vy, ax, ay, radius, generation);
 		this.mass = mass; // t
 		this.invMass = mass > 0 ? 1.0 / mass : 0; // 1/t
+		this.debrisSubType = debrisSubType;
 	}
 }

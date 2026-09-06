@@ -227,12 +227,33 @@ export class FlightComputer {
 		const currentG = totalAccel / PHYSICS.G0;
 
 		let remDv = 0; // m/s
-		if (sensor.dryMass > 0) {
+		const curProp = sensor.fuelMass || 0; // t (contains fuelMass + oxidMass)
+		const curBurnoutMass = sensor.mass - curProp; // t
+
+		if (sensor.mass > 0 && curBurnoutMass > 0 && curProp > 0) {
 			let ve = FLIGHT_COMPUTER_CONFIG.DEFAULT_ISP * PHYSICS.G0; // m/s
 			if (sensor.thrustForce > 0 && sensor.massLossRate > 0) {
-				ve = sensor.thrustForce / sensor.massLossRate;
+				ve = sensor.thrustForce / (sensor.massLossRate * 1000); // massLossRate is in t/s, convert to kg/s
 			}
-			remDv = (ve * Math.log(sensor.mass / sensor.dryMass));
+			remDv += ve * Math.log(sensor.mass / curBurnoutMass);
+		}
+
+		// If multi-stage, accumulate delta-V of remaining upper stages
+		if (sensor.stages && sensor.stages.length > 0 && sensor.stageIndex !== undefined) {
+			const curStg = sensor.stages[sensor.stageIndex];
+			let nextStageStackMass = curBurnoutMass - (curStg ? (curStg.dryMassT || 0) : 0);
+
+			for (let i = sensor.stageIndex + 1; i < sensor.stages.length; i++) {
+				const stg = sensor.stages[i];
+				const stgProp = (stg.fuelMassT || 0) + (stg.oxidMassT || 0);
+				const stgBurnoutMass = nextStageStackMass - stgProp;
+
+				if (nextStageStackMass > 0 && stgBurnoutMass > 0 && stgProp > 0) {
+					const stgVe = (stg.isp || FLIGHT_COMPUTER_CONFIG.DEFAULT_ISP) * PHYSICS.G0;
+					remDv += stgVe * Math.log(nextStageStackMass / stgBurnoutMass);
+				}
+				nextStageStackMass = stgBurnoutMass - (stg.dryMassT || 0);
+			}
 		}
 
 		this.telemetryCache.qAxialKpa = sensor.qAxialKpa;
@@ -262,7 +283,7 @@ export class FlightComputer {
 
 		if (localG_ms2 > 0) {
 			const previousThrustN = sensor.thrustForce * sensor.thrustRatio;
-			this.telemetryCache.twr = previousThrustN / (sensor.mass * localG_ms2);
+			this.telemetryCache.twr = previousThrustN / (UnitConvertUtils.ton2kg(sensor.mass) * localG_ms2);
 		} else {
 			this.telemetryCache.twr = 0;
 		}
@@ -275,7 +296,7 @@ export class FlightComputer {
 
 		// Max-G Limiter (Throttle down)
 		if (this.config.maxGLimit > 0) {
-			const maxAllowedThrust = this.config.maxGLimit * PHYSICS.G0 * sensor.mass;
+			const maxAllowedThrust = this.config.maxGLimit * PHYSICS.G0 * UnitConvertUtils.ton2kg(sensor.mass);
 			if (sensor.thrustForce > maxAllowedThrust) {
 				throttle = Math.min(throttle, maxAllowedThrust / sensor.thrustForce);
 			}

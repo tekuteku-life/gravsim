@@ -126,11 +126,13 @@ export class PropulsionCard extends TelemetryCard {
 		super(id, title, element);
 		this.maxFuel = {};
 		this.maxOxid = {};
+		this._lastStageIndex = null;
 		this._skipBarTransitionOnce = false;
 	}
 
 	initElements() {
 		this.ui = {
+			header: this.element.querySelector('.tm-section-header'),
 			remDv: document.getElementById('tm-rem-dv'),
 			twr: document.getElementById('tm-twr'),
 			thrtl: document.getElementById('tm-thrtl'),
@@ -152,6 +154,27 @@ export class PropulsionCard extends TelemetryCard {
 	}
 
 	update(target, tm) {
+		// Stage transition tracking for fuel/oxidizer bar max values
+		const curStgIdx = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
+		if (this._lastStageIndex !== curStgIdx) {
+			this._lastStageIndex = curStgIdx;
+			this._skipBarTransitionOnce = true;
+			const curStg = target.stages && target.stages[curStgIdx];
+			if (curStg) {
+				this.maxFuel[target.id] = curStg.fuelMassT;
+				this.maxOxid[target.id] = curStg.oxidMassT;
+			}
+		}
+
+		if (this.ui.header && target.stages && target.stages.length > 1) {
+			const stgNum = curStgIdx + 1;
+			const curStg = target.stages[curStgIdx];
+			const stgTitle = curStg?.name ? curStg.name.toUpperCase() : `STAGE ${stgNum}`;
+			DOMUtils.setText(this.ui.header, `[ PROPULSION: ${stgTitle} ]`);
+		} else if (this.ui.header) {
+			DOMUtils.setText(this.ui.header, `[ PROPULSION & TANKS ]`);
+		}
+
 		DOMUtils.setText(this.ui.remDv, FormatUtils.numFixPad(UnitConvertUtils.m2km(tm.remDv), 2, 6));
 		DOMUtils.setText(this.ui.twr, FormatUtils.numFixPad(tm.twr, 2, 6));
 

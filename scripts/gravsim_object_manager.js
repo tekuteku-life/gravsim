@@ -35,9 +35,13 @@ export class ObjectManager {
 		return id;
 	}
 
-	addObject(obj) {
+	addObject(obj, syncToWorker = true) {
 		if (!(obj instanceof GravSimObject)) { throw new Error("Invalid object type."); }
 		this.objects.push(obj);
+
+		if (!syncToWorker) {
+			return;
+		}
 
 		const payload = {
 			cmd: 'add',
@@ -53,8 +57,11 @@ export class ObjectManager {
 
 		if (obj.type === OBJECT_TYPES.ROCKET) {
 			Object.assign(payload, this._buildRocketPayload(obj));
-		} else {
+		} else if (obj.type === OBJECT_TYPES.CELESTIAL) {
 			payload.mass = UnitConvertUtils.ton2kg(obj.mass);
+			payload.fuelMass = 0;
+		} else {
+			payload.mass = obj.mass;
 			payload.fuelMass = 0;
 		}
 
@@ -63,22 +70,25 @@ export class ObjectManager {
 
 	_buildRocketPayload(obj) {
 		return {
-			mass: UnitConvertUtils.ton2kg(obj.dryMass),
-			fuelMass: UnitConvertUtils.ton2kg(obj.fuelMass),
-			oxidMass: UnitConvertUtils.ton2kg(obj.oxidMass),
+			mass: obj.dryMass,
+			fuelMass: obj.fuelMass,
+			oxidMass: obj.oxidMass,
 			ofRatio: obj.ofRatio || 0,
 			thrustForce: obj.thrustForce || 0,
 			burnTime: obj.burnTime || 0,
 			thrustAngle: obj.thrustAngle || 0,
 			flightProfile: obj.flightProfile || [],
-			massLossRate: UnitConvertUtils.ton2kg(obj.massLossRate || 0),
+			massLossRate: obj.massLossRate || 0,
 			maxGLimit: obj.maxGLimit || 0,
 			autoControl: obj.autoControl !== undefined ? obj.autoControl : true,
 			hostId: obj.hostId !== undefined ? obj.hostId : null,
 			hostAngleRad: obj.hostAngleRad || 0,
 			hostAltM: obj.hostAltM || 0,
 			isHoldDown: obj.isHoldDown || false,
-			isIgnited: obj.isIgnited !== undefined ? obj.isIgnited : true
+			isIgnited: obj.isIgnited !== undefined ? obj.isIgnited : true,
+			stages: obj.stages,
+			payload: obj.payload,
+			fairing: obj.fairing
 		};
 	}
 
@@ -90,13 +100,14 @@ export class ObjectManager {
 
 	updateObject(obj) {
 		if (!(obj instanceof GravSimObject)) { throw new Error("Invalid object type."); }
+		const massVal = (obj.type === OBJECT_TYPES.CELESTIAL) ? UnitConvertUtils.ton2kg(obj.mass) : obj.mass;
 		this.workerManager.postMessage({
 			cmd: 'update',
 			id: obj.id,
 			x: UnitConvertUtils.pix2m(obj.x), y: UnitConvertUtils.pix2m(obj.y),
 			vx: UnitConvertUtils.pix2m(obj.vx), vy: UnitConvertUtils.pix2m(obj.vy),
 			ax: UnitConvertUtils.pix2m(obj.ax), ay: UnitConvertUtils.pix2m(obj.ay),
-			mass: UnitConvertUtils.ton2kg(obj.mass),
+			mass: massVal,
 			radius: obj.radius,
 			generation: obj.generation,
 		});
@@ -145,6 +156,49 @@ export class ObjectManager {
 					// Emit event to DestructionManager
 					EventBus.emit('object:shattered', target);
 				}
+			} else if (objData.type === OBJECT_TYPES.DEBRIS && !objData.isCollided && !objData.isShattered) {
+				// Autonomously spawned debris in worker (e.g. stage separation or fairing jettison)
+				const x = UnitConvertUtils.m2pix(objData.x);
+				const y = UnitConvertUtils.m2pix(objData.y);
+				const vx = UnitConvertUtils.m2pix(objData.vx);
+				const vy = UnitConvertUtils.m2pix(objData.vy);
+				const massT = objData.mass;
+
+				let debrisName = 'Jettisoned Debris';
+				let debrisColor = '#c8d0d8';
+				let debrisSize = 3.5;
+				if (objData.debrisSubType === 1) {
+					debrisName = 'Stage 1 Booster';
+					debrisColor = '#d0d8e0';
+					debrisSize = 4.0;
+				} else if (objData.debrisSubType === 2) {
+					debrisName = 'Stage 2 Upper Stage';
+					debrisColor = '#d0d8e0';
+					debrisSize = 3.5;
+				} else if (objData.debrisSubType === 3) {
+					debrisName = 'Fairing Half';
+					debrisColor = '#e8e8e8';
+					debrisSize = 3.0;
+				}
+
+				const deb = new Debris(
+					objData.id,
+					debrisName,
+					x, y, vx, vy,
+					massT,
+					debrisColor,
+					debrisSize,
+					objData.radius || 1.5,
+					1,
+					'#00ffff',
+					0.5
+				);
+				this.addObject(deb, false);
+				this._applyBaseState(deb, objData);
+				deb.updateHistory(this.physicsSequence, this.objects);
+
+				const currentCount = this.objects.length;
+				EventBus.emit('object-list-changed', currentCount);
 			}
 		});
 
@@ -163,8 +217,10 @@ export class ObjectManager {
 		target.ax = UnitConvertUtils.m2pix(objData.ax);
 		target.ay = UnitConvertUtils.m2pix(objData.ay);
 
-		if (objData.type !== OBJECT_TYPES.ROCKET) {
+		if (objData.type === OBJECT_TYPES.CELESTIAL) {
 			target.mass = UnitConvertUtils.kg2ton(objData.mass);
+		} else if (objData.type !== OBJECT_TYPES.ROCKET) {
+			target.mass = objData.mass;
 		}
 		
 		target.radius = objData.radius;
@@ -175,13 +231,14 @@ export class ObjectManager {
 	}
 
 	_applyRocketState(target, objData) {
-		target.dryMass = UnitConvertUtils.kg2ton(objData.mass);
-		target.fuelMass = UnitConvertUtils.kg2ton(objData.fuelMass);
-		target.oxidMass = UnitConvertUtils.kg2ton(objData.oxidMass);
+		target.dryMass = objData.mass;
+		target.fuelMass = objData.fuelMass;
+		target.oxidMass = objData.oxidMass;
 		target.burnTime = objData.burnTime;
 		target.thrustRatio = objData.thrustRatio;
 		target.isHoldDown = objData.isHoldDown;
 		target.isIgnited = objData.isIgnited;
+		target.isPayloadSeparated = !!objData.isPayloadSeparated;
 
 		target.tankPresFuel = objData.tmTankPresFuel;
 		target.tankPresOxid = objData.tmTankPresOxid;
@@ -208,7 +265,14 @@ export class ObjectManager {
 			isGLimitNear: objData.isGLimitNear,
 			tankPresFuel: objData.tmTankPresFuel,
 			tankPresOxid: objData.tmTankPresOxid,
+			stageIndex: objData.tmStageIndex !== undefined ? objData.tmStageIndex : 0,
+			totalStages: objData.tmTotalStages !== undefined ? objData.tmTotalStages : 1,
+			isStgSepActive: !!objData.tmStgSepActive,
+			isFairingSeparated: !!objData.tmFairingSeparated,
+			isPayloadSeparated: !!objData.isPayloadSeparated
 		};
+		target.currentStageIndex = target.telemetry.stageIndex;
+		target.totalStages = target.telemetry.totalStages;
 		target.thrustAngle = objData.thrustAngle;
 	}
 

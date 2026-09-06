@@ -73,6 +73,10 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.THRUST_ANGLE] = obj.thrustAngle;
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_FUEL] = obj.tankPresFuel || 0;
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = obj.tankPresOxid || 0;
+				buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX] = obj.currentStageIndex !== undefined ? obj.currentStageIndex : 0;
+				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = obj.totalStages !== undefined ? obj.totalStages : 1;
+				buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] = (obj.stgSepLampTimer && obj.stgSepLampTimer > 0) ? 1 : 0;
+				buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] = (obj.fairing && obj.fairing.isSeparated) ? 1 : 0;
 			} else {
 				buffer[offset + BUFFER_INDEX.MASS] = obj.mass;
 				buffer[offset + BUFFER_INDEX.FUEL_MASS] = 0;
@@ -81,17 +85,27 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = 0;
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_FUEL] = 0;
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = 0;
+				buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX] = 0;
+				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = 1;
+				buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] = 0;
+				buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] = 0;
+				if (obj.type === OBJECT_TYPES.DEBRIS) {
+					buffer[offset + BUFFER_INDEX.TM_STATUS] = obj.debrisSubType || 0;
+				}
 			}
 			buffer[offset + BUFFER_INDEX.RADIUS] = obj.radius || 1;
 			
 			let flags = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0)
 				| (obj.isImpact ? 4 : 0) | (obj.inAtmosphere ? 8 : 0)
 				| (obj.isEscaping ? 16 : 0) | (obj.isHoldDown ? 32 : 0) | (obj.isIgnited ? 64 : 0);
-			if (obj.type === OBJECT_TYPES.ROCKET && obj.flightComputer) {
-				const tm = obj.flightComputer.getTelemetry();
-				if (tm.isAntiStallActive) flags |= 128;
-				if (tm.isQLimitNear) flags |= 256;
-				if (tm.isGLimitNear) flags |= 512;
+			if (obj.type === OBJECT_TYPES.ROCKET) {
+				if (obj.isPayloadSeparated) flags |= 2048;
+				if (obj.flightComputer) {
+					const tm = obj.flightComputer.getTelemetry();
+					if (tm.isAntiStallActive) flags |= 128;
+					if (tm.isQLimitNear) flags |= 256;
+					if (tm.isGLimitNear) flags |= 512;
+				}
 			}
 			buffer[offset + BUFFER_INDEX.FLAGS] = flags;
 			
@@ -143,6 +157,7 @@ export class WorkerBridge {
 			this._cache.isAntiStall = (flags & 128) !== 0;
 			this._cache.isQLimitNear = (flags & 256) !== 0;
 			this._cache.isGLimitNear = (flags & 512) !== 0;
+			this._cache.isPayloadSeparated = (flags & 2048) !== 0;
 
 			this._cache.debrisMass = buffer[offset + BUFFER_INDEX.DEBRIS_MASS];
 			this._cache.impactVx = buffer[offset + BUFFER_INDEX.IMPACT_VX];
@@ -174,6 +189,12 @@ export class WorkerBridge {
 				this._cache.thrustAngle = buffer[offset + BUFFER_INDEX.THRUST_ANGLE];
 				this._cache.tmTankPresFuel = buffer[offset + BUFFER_INDEX.TM_TANK_PRES_FUEL];
 				this._cache.tmTankPresOxid = buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID];
+				this._cache.tmStageIndex = buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX];
+				this._cache.tmTotalStages = buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES];
+				this._cache.tmStgSepActive = buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] > 0.5;
+				this._cache.tmFairingSeparated = buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] > 0.5;
+			} else if (this._cache.type === OBJECT_TYPES.DEBRIS) {
+				this._cache.debrisSubType = buffer[offset + BUFFER_INDEX.TM_STATUS];
 			}
 
 			callback(this._cache);

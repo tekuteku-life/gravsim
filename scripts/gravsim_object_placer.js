@@ -123,6 +123,9 @@ export class ObjectPlacer {
 			if (options.hostAltM !== undefined) { obj.hostAltM = options.hostAltM; }
 			if (options.isHoldDown !== undefined) { obj.isHoldDown = options.isHoldDown; }
 			if (options.isIgnited !== undefined) { obj.isIgnited = options.isIgnited; }
+			if (options.stages !== undefined) { obj.stages = options.stages; }
+			if (options.payload !== undefined) { obj.payload = options.payload; }
+			if (options.fairing !== undefined) { obj.fairing = options.fairing; }
 
 			this.universe.TelemetryPanel.targetId = obj.id;
 		} else {

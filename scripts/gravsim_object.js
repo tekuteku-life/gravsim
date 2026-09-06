@@ -270,13 +270,33 @@ export class Rocket extends GravSimObject {
 			flightTime: 0, // s
 		};
 
+		this.currentStageIndex = 0;
+		this.totalStages = 1;
+		this.stages = [];
+		this.payload = null;
+		this.fairing = null;
+
 		this.predictedTrajectory = null;
 		this.passedEventIds = new Set();
 		this.isDestroyed = false;
 		this.destroyedFlightTime = null;
 		this.actualFlightPath = [];
 	}
-	get mass() { return this.dryMass + this.fuelMass + this.oxidMass; }
+	get mass() {
+		if (this.stages && this.stages.length > 0) {
+			let total = (this.payload?.massT || 0);
+			if (this.fairing?.enabled && !this.telemetry?.isFairingSeparated) {
+				total += (this.fairing.massT || 0);
+			}
+			total += (this.dryMass + this.fuelMass + this.oxidMass);
+			for (let i = this.currentStageIndex + 1; i < this.stages.length; i++) {
+				const stg = this.stages[i];
+				total += (stg.dryMassT + stg.fuelMassT + stg.oxidMassT);
+			}
+			return total;
+		}
+		return this.dryMass + this.fuelMass + this.oxidMass;
+	}
 	set mass(val) {}
 
 	setCollided() {
