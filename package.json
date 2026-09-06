@@ -1,0 +1,24 @@
+{
+  "name": "gravsim",
+  "version": "1.0.0",
+  "description": "Gravitational and Multi-Stage Rocket Physics Simulator",
+  "type": "module",
+  "scripts": {
+    "test": "node testsuites/run_all.mjs",
+    "test:regressions": "node testsuites/run_all.mjs --regressions",
+    "test:unit": "node testsuites/run_all.mjs --unit",
+    "test:integration": "node testsuites/run_all.mjs --integration",
+    "test:system": "node testsuites/run_all.mjs --system",
+    "test:coverage": "node testsuites/run_all.mjs --coverage",
+    "test:verbose": "node testsuites/run_all.mjs --verbose"
+  },
+  "keywords": [
+    "physics",
+    "gravity",
+    "orbital-mechanics",
+    "rocket",
+    "multistage",
+    "simulation"
+  ],
+  "license": "MIT"
+}

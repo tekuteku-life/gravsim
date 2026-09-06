@@ -404,7 +404,7 @@ export class TelemetryPanel {
 	_resolveTarget() {
 		let target = this.universe.objects.find(o => o.id === this.targetId && o.type === OBJECT_TYPES.ROCKET);
 		if (!target) {
-			target = this.universe.camera.trackingTarget;
+			target = this.universe?.camera?.trackingTarget;
 			if (target && target.type === OBJECT_TYPES.ROCKET) {
 				this.targetId = target.id;
 				this.ui.targetSelect.value = target.id;

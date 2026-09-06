@@ -82,7 +82,7 @@ export class InfoPanel {
 		DOMUtils.setText(this.ui.camera, name);
 	}
 	updateObjectCount(counts) {
-		DOMUtils.setText(this.ui.count, counts.toString());
+		DOMUtils.setText(this.ui.count, (counts !== undefined && counts !== null) ? counts.toString() : '0');
 	}
 
 	updateFPS() {

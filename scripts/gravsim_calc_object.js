@@ -5,7 +5,8 @@ import {
 	PHYSICS, ROCHE_LIMIT, AERO_DYNAMIC,
 	DEFAULT_OBJECT_PARAMS, TANK_PRESSURE_SIM,
 	OBJECT_TYPES, SIMULATION,
-	MULTISTAGE_ROCKET, normalizeRocketConfig
+	MULTISTAGE_ROCKET, normalizeRocketConfig,
+	TRAJECTORY_PREDICTION
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
 import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
@@ -181,7 +182,9 @@ class GravSimCalcObject {
 		this._checkAerodynamicDestruction(q);
 
 		if (this.shattered) {
-			console.info(this.name + "(ID:" + this.id + ") was destructed by dynamic pressure");
+			if (this.id !== TRAJECTORY_PREDICTION.DUMMY_ROCKET_ID) {
+				console.info(this.name + "(ID:" + this.id + ") was destructed by dynamic pressure");
+			}
 			return;
 		}
 

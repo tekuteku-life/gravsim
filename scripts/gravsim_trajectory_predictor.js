@@ -36,6 +36,11 @@ export class TrajectoryPredictor {
 	}
 
 	_initWorker() {
+		if (typeof Worker === 'undefined') {
+			this._worker = null;
+			return;
+		}
+
 		try {
 			const workerUrl = new URL('./gravsim_calc_predictor.js', import.meta.url);
 			this._worker = new Worker(workerUrl, { type: 'module' });
