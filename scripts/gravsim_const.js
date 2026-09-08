@@ -1012,6 +1012,7 @@ export const MULTISTAGE_PRESETS = {
 	"FALCON9": {
 		id: "FALCON9",
 		name: "Falcon 9 Style (2-Stage)",
+		colorTheme: "classic",
 		description: "Two-stage orbital launch vehicle with liquid oxygen and kerosene propellants",
 		stages: [
 			{
@@ -1059,6 +1060,7 @@ export const MULTISTAGE_PRESETS = {
 	"H3": {
 		id: "H3",
 		name: "H3 Style (2-Stage)",
+		colorTheme: "orange",
 		description: "Two-stage heavy launch vehicle with cryogenic hydrogen and liquid oxygen",
 		stages: [
 			{
@@ -1106,6 +1108,7 @@ export const MULTISTAGE_PRESETS = {
 	"SSTO": {
 		id: "SSTO",
 		name: "Single Stage (SSTO)",
+		colorTheme: "blue",
 		description: "Single-stage-to-orbit rocket (Legacy baseline)",
 		stages: [
 			{
@@ -1146,6 +1149,7 @@ export function normalizeRocketConfig(config) {
 	if (config.stages && Array.isArray(config.stages) && config.stages.length > 0) {
 		return {
 			...config,
+			colorTheme: config.colorTheme || 'orange',
 			stages: config.stages.map((stg, idx) => ({
 				stageNumber: stg.stageNumber || (idx + 1),
 				name: stg.name || `Stage ${idx + 1}`,
@@ -1176,6 +1180,7 @@ export function normalizeRocketConfig(config) {
 
 	return {
 		...config,
+		colorTheme: config.colorTheme || 'orange',
 		stages: [
 			{
 				stageNumber: 1,

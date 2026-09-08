@@ -91,7 +91,8 @@ export class ObjectPlacer {
 				param.RADIUS || 1,
 				0,
 				param.BORDER_COLOR || null,
-				param.BORDER_WIDTH || 0
+				param.BORDER_WIDTH || 0,
+				options.colorTheme || 'orange'
 			);
 
 			if (options.ofRatio !== undefined) {

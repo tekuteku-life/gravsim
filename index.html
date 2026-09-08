@@ -385,6 +385,25 @@
 					<button type="button" class="rl-stage-tab-btn" data-stage="payload" style="flex: 1; padding: 5px 2px; font-size: 11px;">Payload</button>
 				</div>
 
+				<div class="panel-section-header" style="margin-top: 5px;">[ ROCKET CONFIGURATION ]</div>
+				<label>Preset:</label>
+				<div style="display: flex; gap: 5px;">
+					<select id="rl-preset-select" class="full-width">
+						<option value="FALCON9" selected>Falcon 9 Style (2-Stage)</option>
+						<option value="H3">H3 Style (2-Stage)</option>
+						<option value="SSTO">Single Stage (SSTO)</option>
+					</select>
+					<button type="button" id="rl-load-preset-btn" style="white-space: nowrap;">LOAD</button>
+				</div>
+
+				<!-- Color Theme -->
+				<label style="margin-top: 8px;">Color Theme:</label>
+				<select id="rl-color-theme" class="full-width">
+					<option value="orange" selected>Cryogenic Orange (H3 / SLS Style)</option>
+					<option value="classic">Classic White (Falcon 9 Style)</option>
+					<option value="blue">Deep Space Blue (Tech / Sci-Fi Style)</option>
+				</select>
+
 				<!-- Dynamic Stage Parameters Panel -->
 				<div id="rl-stage-config-panel">
 					<div id="rl-stage-title" style="color: #00ffcc; font-weight: bold; margin: 6px 0 4px 0; font-size: 12px;">-- STAGE 1: BOOSTER --</div>

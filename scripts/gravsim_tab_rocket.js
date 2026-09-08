@@ -33,6 +33,7 @@ export class RocketTab {
 			rlHostAlt: document.getElementById('rl-host-alt'),
 			rlHostAltVal: document.getElementById('rl-host-alt-val'),
 			rlPresetSelect: document.getElementById('rl-preset-select'),
+			rlColorTheme: document.getElementById('rl-color-theme'),
 			rlLoadPresetBtn: document.getElementById('rl-load-preset-btn'),
 			rlStageTabs: document.getElementById('rl-stage-tabs'),
 			rlStageConfigPanel: document.getElementById('rl-stage-config-panel'),
@@ -103,6 +104,12 @@ export class RocketTab {
 		});
 		this.ui.rlPresetSelect.addEventListener('change', (e) => {
 			this.loadPreset(e.target.value);
+		});
+
+		// Theme Color
+		this.ui.rlColorTheme.addEventListener('change', (e) => {
+			this.universe.RocketLauncher.colorTheme = e.target.value;
+			this._updateRocketStats();
 		});
 
 		// Initial stage tab rendering
@@ -483,6 +490,7 @@ export class RocketTab {
 		if (!preset) return;
 		const rl = this.universe.RocketLauncher;
 		rl.currentPresetId = presetKey;
+		rl.colorTheme = preset.colorTheme || 'orange';
 		rl.stages = JSON.parse(JSON.stringify(preset.stages));
 		rl.payload = JSON.parse(JSON.stringify(preset.payload || { massT: 0 }));
 		rl.fairing = JSON.parse(JSON.stringify(preset.fairing || { enabled: false, massT: 0, separationAltKm: 100 }));
@@ -788,6 +796,13 @@ export class RocketTab {
 			if (this.ui[sliderId]) { this.ui[sliderId].value = val; }
 			if (this.ui[valId]) { this.ui[valId].textContent = val; }
 		};
+
+		if (rlState.colorTheme) {
+			this.universe.RocketLauncher.colorTheme = rlState.colorTheme;
+			if (this.ui.rlColorTheme) {
+				this.ui.rlColorTheme.value = rlState.colorTheme;
+			}
+		}
 
 		if (rlState.hostAngleDeg !== undefined) {
 			let hAngle = Number(rlState.hostAngleDeg) || 0;

@@ -8,6 +8,7 @@ import {
 import { Trajectory } from './gravsim_trajectory.js';
 import { EffectTrail } from './gravsim_effect_trail.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
+import { RocketRenderer } from './gravsim_rocket_renderer.js';
 import { TrajectoryPredictor } from './gravsim_trajectory_predictor.js';
 
 /*******************************************************************
@@ -234,7 +235,7 @@ export class CelestialBody extends GravSimObject {
  * Rocket class
  *******************************************************************/
 export class Rocket extends GravSimObject {
-	constructor(id, name, x, y, vx, vy, dryMass, fuelMass, oxidMass, color, size, radius, generation, borderColor, borderWidth) {
+	constructor(id, name, x, y, vx, vy, dryMass, fuelMass, oxidMass, color, size, radius, generation, borderColor, borderWidth, colorTheme = 'orange') {
 		super(id, name, OBJECT_TYPES.ROCKET, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth);
 		this.dryMass = dryMass; // t
 		this.fuelMass = fuelMass; // t
@@ -249,7 +250,8 @@ export class Rocket extends GravSimObject {
 		this.thrustRatio = 0;
 		this.flightTime = 0;
 		this.autoControl = true;
-		
+		this.colorTheme = colorTheme || 'orange';
+
 		// Launch Sequencer States
 		this.hostId = null;
 		this.hostAngleRad = 0;
@@ -282,6 +284,7 @@ export class Rocket extends GravSimObject {
 		this.destroyedFlightTime = null;
 		this.actualFlightPath = [];
 	}
+
 	get mass() {
 		if (this.stages && this.stages.length > 0) {
 			let total = (this.payload?.massT || 0);
@@ -297,7 +300,33 @@ export class Rocket extends GravSimObject {
 		}
 		return this.dryMass + this.fuelMass + this.oxidMass;
 	}
+
 	set mass(val) {}
+
+	/**
+	 * Override _getDrawRadius for Rocket to prevent pixel collapsing
+	 * and maintain balanced visual scale across all zoom levels.
+	 */
+	_getDrawRadius(zoomScale) {
+		const isPayloadOnly = Boolean(
+			this.isPayloadSeparated ||
+			this.telemetry?.isPayloadSeparated ||
+			(this.stages && this.currentStageIndex >= this.totalStages)
+		);
+
+		// True physical radius in pixels
+		const effectiveRadiusM = isPayloadOnly ? (this.payload?.radius || 1.5) : this.radius;
+		const realRadiusPx = (effectiveRadiusM / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
+		const physicalScreenRadius = realRadiusPx * zoomScale;
+
+		// When zooming into spacecraft view, amplify payload visibility so panels are readable
+		let visualRadius = physicalScreenRadius;
+		if (isPayloadOnly) {
+			visualRadius = Math.max(physicalScreenRadius * 12.0, this.size);
+		}
+
+		return Math.max(this.size, visualRadius);
+	}
 
 	setCollided() {
 		super.setCollided();
@@ -375,57 +404,10 @@ export class Rocket extends GravSimObject {
 		}
 	}
 
-	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
-		if (this.isIgnited && this.burnTime > 0) {
-			this._drawFlame(ctx, x, y, screenRadius);
-		}
-	}
+	_drawEffects(ctx, x, y, screenRadius, zoomScale) {}
 
-	_drawFlame(ctx, x, y, screenRadius) {
-		const conf = RENDER.ROCKET;
-		const range = conf.FLAME_FLICKER_MAX - conf.FLAME_FLICKER_MIN;
-		const flicker = conf.FLAME_FLICKER_MIN + Math.random() * range;
-		const flameLen = screenRadius * conf.FLAME_LEN_MULT * flicker;
-		
-		ctx.save();
-		ctx.translate(x, y);
-		ctx.rotate(this.thrustAngle); // Pointing forward
-
-		ctx.fillStyle = conf.FLAME_OUTER_COLOR;
-		ctx.beginPath();
-		ctx.moveTo(-screenRadius, 0);
-		ctx.lineTo(-screenRadius * conf.FLAME_OUTER_W_MULT, screenRadius * conf.FLAME_OUTER_W_MULT);
-		ctx.lineTo(-screenRadius - flameLen, 0);
-		ctx.lineTo(-screenRadius * conf.FLAME_OUTER_W_MULT, -screenRadius * conf.FLAME_OUTER_W_MULT);
-		ctx.fill();
-
-		ctx.fillStyle = conf.FLAME_INNER_COLOR;
-		ctx.beginPath();
-		ctx.moveTo(-screenRadius, 0);
-		ctx.lineTo(-screenRadius * conf.FLAME_INNER_W_MULT, screenRadius * conf.FLAME_INNER_Y_MULT);
-		ctx.lineTo(-screenRadius - flameLen * conf.FLAME_INNER_H_MULT, 0);
-		ctx.lineTo(-screenRadius * conf.FLAME_INNER_W_MULT, -screenRadius * conf.FLAME_INNER_Y_MULT);
-		ctx.fill();
-		
-		ctx.restore();
-	}
-
-	_drawBody(ctx, x, y, screenRadius) {
-		const conf = RENDER.ROCKET;
-		ctx.fillStyle = this.color;
-		ctx.beginPath();
-		ctx.save();
-		ctx.translate(x, y);
-		ctx.rotate(this.thrustAngle);
-
-		if (this.isInternalPower) {
-			ctx.shadowColor = PAD_EFFECT.STRUCTURE.GLOW_COLOR;
-			ctx.shadowBlur = Math.max(10, screenRadius * PAD_EFFECT.STRUCTURE.GLOW_BLUR_MULT);
-		}
-
-		ctx.ellipse(0, 0, screenRadius * conf.BODY_LENGTH_MULT, screenRadius * conf.BODY_WIDTH_MULT, 0, 0, Math.PI * 2);
-		ctx.fill();
-		ctx.restore();
+	_drawBody(ctx, x, y, screenRadius, zoomScale = 1) {
+		RocketRenderer.draw(ctx, this, x, y, screenRadius, zoomScale);
 	}
 
 	_recordActualFlightPath(objects) {
@@ -442,9 +424,11 @@ export class Rocket extends GravSimObject {
 
 		const relX_px = this.x - host.x;
 		const relY_px = this.y - host.y;
+
 		if (!this.actualFlightPath) {
 			this.actualFlightPath = [];
 		}
+
 		const len = this.actualFlightPath.length;
 		if (len === 0) {
 			this.actualFlightPath.push({
@@ -466,10 +450,11 @@ export class Rocket extends GravSimObject {
 					relX: relX_px,
 					relY: relY_px
 				});
-				if (this.actualFlightPath.length > 6000) {
-					this.actualFlightPath = this.actualFlightPath.filter((_, idx) => idx % 2 === 0 || idx === len - 1);
-				}
 			}
+		}
+
+		if (this.actualFlightPath.length > 6000) {
+			this.actualFlightPath = this.actualFlightPath.filter((_, idx) => idx % 2 === 0 || idx === len - 1);
 		}
 	}
 
@@ -482,10 +467,10 @@ export class Rocket extends GravSimObject {
 			if (!this.predictedTrajectory.hostId && this.hostId !== null) {
 				this.predictedTrajectory.hostId = this.hostId;
 			}
+
 			TrajectoryPredictor.updateRocketFlightEvents(this, renderContext);
 
 			const flightTime = this.telemetry?.flightTime || this.flightTime || 0;
-
 			TrajectoryPredictor.renderTrajectory(renderContext.ctx, renderContext, this.predictedTrajectory, {
 				mode: 'flight',
 				passedEventIds: this.passedEventIds,
@@ -504,22 +489,21 @@ export class Rocket extends GravSimObject {
 			const basis = renderContext.basis;
 			const ctx = renderContext.ctx;
 			const zoomScale = renderContext.zoomScale;
-
 			const relX = this.getRelativeX(basis) * zoomScale;
 			const relY = this.getRelativeY(basis) * zoomScale;
-
 			const screenRadius = this._getDrawRadius(zoomScale);
+
 			renderContext.bodyScreenRadius = screenRadius;
 
-			this._drawBody(ctx, relX, relY, screenRadius);
+			this._drawBody(ctx, relX, relY, screenRadius, zoomScale);
 			this._drawEffects(ctx, relX, relY, screenRadius, zoomScale);
 		}
 
 		// 3. Draw default celestial trajectory
 		if (this.state === OBJECT_STATE.ACTIVE) {
 			this.trajectory.draw(renderContext);
+			this.effectTrail.draw(renderContext);
 		}
-		this.effectTrail.draw(renderContext);
 	}
 }
 

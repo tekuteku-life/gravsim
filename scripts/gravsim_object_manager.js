@@ -88,7 +88,8 @@ export class ObjectManager {
 			isIgnited: obj.isIgnited !== undefined ? obj.isIgnited : true,
 			stages: obj.stages,
 			payload: obj.payload,
-			fairing: obj.fairing
+			fairing: obj.fairing,
+			colorTheme: obj.colorTheme || 'orange'
 		};
 	}
 
@@ -239,7 +240,7 @@ export class ObjectManager {
 		target.isHoldDown = objData.isHoldDown;
 		target.isIgnited = objData.isIgnited;
 		target.isPayloadSeparated = !!objData.isPayloadSeparated;
-
+		target.radius = objData.radius;
 		target.tankPresFuel = objData.tmTankPresFuel;
 		target.tankPresOxid = objData.tmTankPresOxid;
 

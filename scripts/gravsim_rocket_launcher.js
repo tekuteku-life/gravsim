@@ -35,6 +35,7 @@ export class RocketLauncher {
 		// Multi-stage setup (default: Falcon 9 Style 2-stage)
 		const preset = MULTISTAGE_PRESETS.FALCON9;
 		this.currentPresetId = 'FALCON9';
+		this.colorTheme = preset.colorTheme || 'classic';
 		this.stages = JSON.parse(JSON.stringify(preset.stages));
 		this.payload = JSON.parse(JSON.stringify(preset.payload));
 		this.fairing = JSON.parse(JSON.stringify(preset.fairing));
@@ -511,7 +512,8 @@ export class RocketLauncher {
 			isIgnited: false,
 			stages: this.stages,
 			payload: this.payload,
-			fairing: this.fairing
+			fairing: this.fairing,
+			colorTheme: this.colorTheme
 		};
 
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
@@ -575,6 +577,7 @@ export class RocketLauncher {
 			maxGLimit: this.maxGLimit,
 			autoControl: this.autoControl,
 			currentPresetId: this.currentPresetId,
+			colorTheme: this.colorTheme,
 			stages: JSON.parse(JSON.stringify(this.stages || [])),
 			payload: JSON.parse(JSON.stringify(this.payload || {})),
 			fairing: JSON.parse(JSON.stringify(this.fairing || {}))
@@ -596,6 +599,7 @@ export class RocketLauncher {
 		if (state.maxGLimit !== undefined) this.maxGLimit = state.maxGLimit;
 		if (state.autoControl !== undefined) this.autoControl = state.autoControl;
 		if (state.currentPresetId !== undefined) this.currentPresetId = state.currentPresetId;
+		if (state.colorTheme !== undefined) this.colorTheme = state.colorTheme;
 		if (state.stages && Array.isArray(state.stages)) this.stages = JSON.parse(JSON.stringify(state.stages));
 		if (state.payload) this.payload = JSON.parse(JSON.stringify(state.payload));
 		if (state.fairing) this.fairing = JSON.parse(JSON.stringify(state.fairing));
