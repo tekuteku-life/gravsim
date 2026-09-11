@@ -171,6 +171,9 @@ class GravSimCalcObject {
 
 		// Determine Area and Cd
 		const aeroDynamicParam = this._determinDynamicParam(vRelY, vRelX, vRelSq, rho);
+		if (vRelSq === 0) {
+			return;
+		}
 
 		if (vRelSq === 0) { return; }
 		const vRel = Math.sqrt(vRelSq); // m/s
@@ -234,7 +237,8 @@ export class CalcRocket extends GravSimCalcObject {
 			thrustKN: thrustData?.thrustForce ? thrustData.thrustForce / 1000 : undefined,
 			burnTime: thrustData?.burnTime,
 			ofRatio: thrustData?.ofRatio,
-			radius: radius
+			radius: radius,
+			colorTheme: thrustData?.colorTheme
 		});
 
 		this.stages = normConfig.stages;
@@ -262,6 +266,8 @@ export class CalcRocket extends GravSimCalcObject {
 		this.hostId = thrustData?.hostId !== undefined ? thrustData.hostId : null;
 		this.hostAngleRad = thrustData?.hostAngleRad || 0; // rad
 		this.hostAltM = thrustData?.hostAltM || 0; // m
+		this.colorTheme = normConfig.colorTheme || 'orange';
+
 		this._thrustRatio = 0;
 		this._qAxialKpa = 0; // kPa
 		this._qLateralKpa = 0; // kPa
@@ -282,7 +288,7 @@ export class CalcRocket extends GravSimCalcObject {
 		});
 
 		// Pressure simulation parameters
-		this.tankPresFuel = 0; // kPa (Starts at 0 on rollout, then smoothly fills)
+		this.tankPresFuel = 0; // kPa
 		this.tankPresOxid = 0; // kPa
 		this.presState = 'ROLLOUT_FILL';
 		this.presTimer = 0; // s
@@ -349,16 +355,22 @@ export class CalcRocket extends GravSimCalcObject {
 		const stage = this.stages[this.currentStageIndex];
 		if (!stage) { return; }
 
-		// 1. Calculate jettison velocity & position (backward separation)
-		const sepAngle = this.thrustAngle + Math.PI;
+		// 1. Calculate jettison velocity & position
+		const sepAngle = this.thrustAngle + Math.PI; // Backward
 		const sepSpeedM = stage.jettisonSpeedM_S || MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S;
 		const sepVx = this.vx + Math.cos(sepAngle) * sepSpeedM;
 		const sepVy = this.vy + Math.sin(sepAngle) * sepSpeedM;
-		const sepOffsetDist = (stage.radius * 2.5) || 5.0;
-
+		
 		const isFinalStage = (this.currentStageIndex + 1 >= this.totalStages);
 
-		// 2. Queue spent booster debris
+		// Scale physical radius with rocket body to unify zoom magnification
+		const debrisRadius = isFinalStage
+			? (this.radius * MULTISTAGE_ROCKET.STAGE2_RADIUS_RATIO)
+			: (this.radius * MULTISTAGE_ROCKET.STAGE1_RADIUS_RATIO);
+
+		const sepOffsetDist = this.radius * 1.5 + 20.0;
+
+		// 2. Queue spent stage debris with parentRocketId to ignore self-collision
 		this._pendingDebris.push({
 			name: isFinalStage ? `${this.name} - Stage ${stage.stageNumber} Upper Stage` : `${this.name} - Stage ${stage.stageNumber} Booster`,
 			debrisSubType: isFinalStage ? 2 : 1,
@@ -367,11 +379,16 @@ export class CalcRocket extends GravSimCalcObject {
 			vx: sepVx,
 			vy: sepVy,
 			mass: stage.dryMassT,
-			radius: stage.radius,
-			color: '#d0d8e0'
+			radius: debrisRadius,
+			color: '#d0d8e0',
+			parentRocketId: this.id
 		});
 
-		// 3. Trigger STG-SEP annunciator lamp
+		// 3. Positive forward push impulse to upper craft
+		const forwardPush = MULTISTAGE_ROCKET.STAGE_SEP_FORWARD_PUSH_M_S;
+		this.vx += Math.cos(this.thrustAngle) * forwardPush;
+		this.vy += Math.sin(this.thrustAngle) * forwardPush;
+
 		this.stgSepLampTimer = MULTISTAGE_ROCKET.STG_SEP_LAMP_DURATION_SEC;
 
 		// 4. Advance to next stage or finish with payload separation
@@ -396,6 +413,9 @@ export class CalcRocket extends GravSimCalcObject {
 				this.radius = this.payload.radius;
 			}
 			this.isPayloadSeparated = true;
+			if (this.payload?.name) {
+				this.name = this.payload.name;
+			}
 			this.updateTotalMass();
 
 			this.stageState = 'ORBITAL_COAST';
@@ -407,6 +427,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 	separateFairing(curAltM) {
 		if (!this.fairing.enabled || this.fairing.isSeparated) { return; }
+
 		const sepAltM = (this.fairing.separationAltKm || MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM) * 1000;
 		if (curAltM >= sepAltM) {
 			this.fairing.isSeparated = true;
@@ -414,31 +435,43 @@ export class CalcRocket extends GravSimCalcObject {
 
 			const latAngle1 = this.thrustAngle + Math.PI / 2;
 			const latAngle2 = this.thrustAngle - Math.PI / 2;
-			const sepSpeed = 3.0; // m/s
+			const sepSpeedLat = MULTISTAGE_ROCKET.FAIRING_SEP_LATERAL_SPEED_M_S;
+			const sepSpeedBack = MULTISTAGE_ROCKET.FAIRING_SEP_BACKWARD_SPEED_M_S;
+
 			const halfMass = this.fairing.massT / 2;
-			const offset = (this.radius * 1.5) || 3.0;
+			const offset = this.radius * 1.2 + 15.0;
+			const fairingRadius = this.radius * MULTISTAGE_ROCKET.FAIRING_RADIUS_RATIO;
+
+			const vx1 = this.vx + Math.cos(latAngle1) * sepSpeedLat + Math.cos(this.thrustAngle) * sepSpeedBack;
+			const vy1 = this.vy + Math.sin(latAngle1) * sepSpeedLat + Math.sin(this.thrustAngle) * sepSpeedBack;
+
+			const vx2 = this.vx + Math.cos(latAngle2) * sepSpeedLat + Math.cos(this.thrustAngle) * sepSpeedBack;
+			const vy2 = this.vy + Math.sin(latAngle2) * sepSpeedLat + Math.sin(this.thrustAngle) * sepSpeedBack;
 
 			this._pendingDebris.push({
 				name: `${this.name} - Fairing Half A`,
 				debrisSubType: 3,
 				x: this.x + Math.cos(latAngle1) * offset,
 				y: this.y + Math.sin(latAngle1) * offset,
-				vx: this.vx + Math.cos(latAngle1) * sepSpeed,
-				vy: this.vy + Math.sin(latAngle1) * sepSpeed,
+				vx: vx1,
+				vy: vy1,
 				mass: halfMass,
-				radius: 1.0,
-				color: '#e0e0e0'
+				radius: fairingRadius,
+				color: '#e0e0e0',
+				parentRocketId: this.id
 			});
+
 			this._pendingDebris.push({
 				name: `${this.name} - Fairing Half B`,
 				debrisSubType: 3,
 				x: this.x + Math.cos(latAngle2) * offset,
 				y: this.y + Math.sin(latAngle2) * offset,
-				vx: this.vx + Math.cos(latAngle2) * sepSpeed,
-				vy: this.vy + Math.sin(latAngle2) * sepSpeed,
+				vx: vx2,
+				vy: vy2,
 				mass: halfMass,
-				radius: 1.0,
-				color: '#e0e0e0'
+				radius: fairingRadius,
+				color: '#e0e0e0',
+				parentRocketId: this.id
 			});
 		}
 	}
@@ -847,30 +880,6 @@ export class CalcRocket extends GravSimCalcObject {
 		this._currentQ = 0;
 		this._qAxialKpa = 0;
 		this._qLateralKpa = 0;
-
-		let velAngle;
-		if (this.dominantBody) {
-			this._lastDominantBody = this.dominantBody;
-		}
-		const refBody = this.dominantBody || this._lastDominantBody;
-
-		if (refBody) {
-			const dvx = this.vx - refBody.vx; // m/s
-			const dvy = this.vy - refBody.vy; // m/s
-			const vSq = dvx * dvx + dvy * dvy; // m^2/s^2
-
-			if (vSq < AERO_DYNAMIC.LOW_VELOCITY_SQ) {
-				velAngle = this.thrustAngle;
-			} else {
-				velAngle = Math.atan2(dvy, dvx);
-			}
-		} else {
-			velAngle = Math.atan2(this.vy, this.vx);
-		}
-
-		this._progradeAngle = velAngle;
-		const angleDiff = Math.abs(MathUtils.normalizeAngle(this.thrustAngle - velAngle)); // rad
-		this._aoaDeg = UnitConvertUtils.rad2deg(angleDiff);
 	}
 }
 
@@ -878,10 +887,11 @@ export class CalcRocket extends GravSimCalcObject {
  * Calculation Object Class for Debris
  *******************************************************************/
 export class CalcDebris extends GravSimCalcObject {
-	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass, debrisSubType = 0) {
+	constructor(id, name, x, y, vx, vy, ax, ay, radius, generation, mass, debrisSubType = 0, parentRocketId = null) {
 		super(id, name, OBJECT_TYPES.DEBRIS, x, y, vx, vy, ax, ay, radius, generation);
 		this.mass = mass; // t
 		this.invMass = mass > 0 ? 1.0 / mass : 0; // 1/t
 		this.debrisSubType = debrisSubType;
+		this.parentRocketId = parentRocketId;
 	}
 }

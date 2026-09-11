@@ -107,6 +107,7 @@ export class RocketTab {
 		});
 
 		// Theme Color
+		this.ui.rlColorTheme.value = this.universe.RocketLauncher.colorTheme;
 		this.ui.rlColorTheme.addEventListener('change', (e) => {
 			this.universe.RocketLauncher.colorTheme = e.target.value;
 			this._updateRocketStats();

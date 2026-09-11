@@ -64,7 +64,7 @@ export class PhysicsEngine {
 				data.ax || 0, data.ay || 0,
 				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
 				data.mass || SIMULATION.DEFAULT_OBJECT_MASS,
-				data.debrisSubType || 0
+				data.debrisSubType || 0, data.parentRocketId || null
 			);
 		} else {
 			newObj = new CalcCelestialBody(
@@ -209,7 +209,8 @@ export class PhysicsEngine {
 
 			// Define search range based on maximum possible movement and size
 			const max_v = Math.max(Math.abs(obj.vx), Math.abs(obj.vy)) * dt; // m
-			const searchRadius = obj.radius + max_v; // m
+			const isMassive = obj.mass >= SIMULATION.MIN_GRAVITY_CALC_MASS;
+			const searchRadius = obj.radius + max_v + (isMassive ? COLLISION_CONFIG.MASSIVE_SEARCH_MARGIN_M : 0); // m
 
 			// Zero-allocation query preparation
 			this._searchRange.x = obj.x;
@@ -221,9 +222,29 @@ export class PhysicsEngine {
 			const candidates = this.qtree.query(this._searchRange, this._queryResult);
 
 			for (const other of candidates) {
-				// Prevent duplicate checks and self-checking (using id comparison)
-				if (obj.id >= other.id) { continue; }
-				if (other.collided || other.shattered) { continue; }
+				if (other.collided || other.shattered || obj.id === other.id) {
+					continue;
+				}
+
+				const otherIsMassive = other.mass >= SIMULATION.MIN_GRAVITY_CALC_MASS;
+
+				// Duplicate check elimination:
+				// Between same categories (Massive-Massive or Tiny-Tiny), use ID comparison.
+				// Between Massive and Tiny, always perform check on Massive side where query reliably encloses Tiny.
+				if (isMassive === otherIsMassive) {
+					if (obj.id >= other.id) {
+						continue;
+					}
+				} else if (!isMassive && otherIsMassive) {
+					continue;
+				}
+
+				// Disable collision between rocket and its newly jettisoned stages / fairings
+				if ((obj.type === OBJECT_TYPES.ROCKET && other.parentRocketId === obj.id) ||
+				    (other.type === OBJECT_TYPES.ROCKET && obj.parentRocketId === other.id) ||
+				    (obj.parentRocketId && other.parentRocketId && obj.parentRocketId === other.parentRocketId)) {
+					continue;
+				}
 
 				if (obj.isColliding(other, dt)) {
 					// Winner is bigger one, loser is smaller one
@@ -261,19 +282,22 @@ export class PhysicsEngine {
 					if (winnerDensity <= ROCHE_LIMIT.UNBREAKABLE_DENSITY && !loser.isDebris) {
 						debrisRatio = massRatio * (energyRatio * COLLISION_CONFIG.DEBRIS_ENERGY_FACTOR);
 						debrisRatio = Math.max(0.0, Math.min(debrisRatio, COLLISION_CONFIG.MAX_DEBRIS_RATIO));
-					}
 
-					// Ignore tiny debris
-					if (debrisRatio < COLLISION_CONFIG.MIN_DEBRIS_RATIO) { debrisRatio = 0; }
+						// Ignore tiny debris
+						if (debrisRatio < COLLISION_CONFIG.MIN_DEBRIS_RATIO) {
+							debrisRatio = 0;
+						}
+					}
 
 					const debrisMass = loser.mass * debrisRatio; // t
 					const absorbedMass = loser.mass - debrisMass; // t
-					const oldWinnerMass = winner.mass; // t
 
+					const oldWinnerMass = winner.mass; // t
 					winner.mass += absorbedMass;
 					winner.radius = winner.radius * Math.cbrt(winner.mass / oldWinnerMass);
 					winner.vx = newVx;
 					winner.vy = newVy;
+
 					loser.collided = true;
 
 					if (debrisMass > 0 || !loser.isDebris) {
@@ -426,17 +450,18 @@ export class PhysicsEngine {
 
 		if (newDebris.length > 0) {
 			for (const deb of newDebris) {
-				const nextId = -Math.floor(Math.random() * 10000000) - 1;
+				const nextId = -Math.floor(Math.random() * DEBRIS.ID_RANDOM_RANGE) - 1;
 				this.addObject({
 					id: deb.id || nextId,
 					name: deb.name,
 					type: OBJECT_TYPES.DEBRIS,
 					debrisSubType: deb.debrisSubType || 0,
+					parentRocketId: deb.parentRocketId || null,
 					x: deb.x,
 					y: deb.y,
 					vx: deb.vx,
 					vy: deb.vy,
-					radius: deb.radius || 1.5,
+					radius: deb.radius || SIMULATION.DEFAULT_OBJECT_RADIUS,
 					mass: deb.mass,
 					generation: 1
 				});

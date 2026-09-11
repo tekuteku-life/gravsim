@@ -323,12 +323,12 @@ export class PadEffectRenderer {
 		const visualMultiplier = this._getVisualMultiplier(context);
 		const visualRadius = rPx * visualMultiplier;
 		const vec = this._getVectors();
-
+		const nozzleOffset = visualRadius * PAD_EFFECT.PHYSICS.NOZZLE_OFFSET_MULT;
 		for(let i = 0; i < conf.COUNT; i++) {
 			this.particles.push({
 				type: 'spark',
-				x: vec.B.x * visualRadius,
-				y: vec.B.y * visualRadius,
+				x: vec.B.x * nozzleOffset,
+				y: vec.B.y * nozzleOffset,
 				vx: context.m2pix((Math.random() - 0.5) * conf.V_RAND) * visualMultiplier,
 				vy: context.m2pix((Math.random() - 0.5) * conf.V_RAND) * visualMultiplier,
 				life: 1.0,

@@ -35,7 +35,7 @@ export class RocketLauncher {
 		// Multi-stage setup (default: Falcon 9 Style 2-stage)
 		const preset = MULTISTAGE_PRESETS.FALCON9;
 		this.currentPresetId = 'FALCON9';
-		this.colorTheme = preset.colorTheme || 'classic';
+		this.colorTheme = 'orange';
 		this.stages = JSON.parse(JSON.stringify(preset.stages));
 		this.payload = JSON.parse(JSON.stringify(preset.payload));
 		this.fairing = JSON.parse(JSON.stringify(preset.fairing));

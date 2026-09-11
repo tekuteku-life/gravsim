@@ -1,56 +1,9 @@
 
 // gravsim_rocket_renderer.js
 
-import { PAD_EFFECT } from './gravsim_const.js';
+import { PAD_EFFECT, ROCKET_VISUAL } from './gravsim_const.js';
 
-/*******************************************************************
- * RocketRenderer Class
- * Procedural multi-module rocket renderer with 3 selectable themes,
- * multi-stage separation states, and propellant-specific plumes.
- *******************************************************************/
 export class RocketRenderer {
-	static THEMES = {
-		orange: {
-			stg1Grad: ['#e67e3a', '#c85a1a', '#78320a'], // Cryogenic foam orange
-			stg2Grad: ['#ffffff', '#e2e6ea', '#8a94a0'], // Upper stage white
-			interstage: '#1e2227',
-			fairingGrad: ['#ffffff', '#e8ebed', '#8a94a0'],
-			fairingLine: 'rgba(0, 0, 0, 0.45)',
-			fins: '#994614',
-			nozzle: '#1c2024',
-			accentBand: '#ffffff'
-		},
-		classic: {
-			stg1Grad: ['#ffffff', '#e2e6ea', '#7d8792'], // Falcon 9 style white
-			stg2Grad: ['#ffffff', '#e2e6ea', '#7d8792'],
-			interstage: '#181b1f',
-			fairingGrad: ['#ffffff', '#e2e6ea', '#8a94a0'],
-			fairingLine: 'rgba(0, 0, 0, 0.45)',
-			fins: '#444b54',
-			nozzle: '#14171a',
-			accentBand: '#2b313a'
-		},
-		blue: {
-			stg1Grad: ['#28558a', '#17365d', '#0b1d33'], // Deep metallic blue
-			stg2Grad: ['#356aa0', '#1c4273', '#0e2440'],
-			interstage: '#bcc5d0',
-			fairingGrad: ['#20252d', '#13171e', '#090b0e'],
-			fairingLine: 'rgba(0, 255, 204, 0.65)',
-			fins: '#3a78bd',
-			nozzle: '#3d454e',
-			accentBand: '#00e5ff'
-		}
-	};
-
-	/**
-	 * Main entry point for drawing the rocket body and exhaust plume.
-	 * @param {CanvasRenderingContext2D} ctx
-	 * @param {Object} rocket
-	 * @param {number} x - Screen space center X (px)
-	 * @param {number} y - Screen space center Y (px)
-	 * @param {number} screenRadius - Visual radius in pixels (px)
-	 * @param {number} zoomScale
-	 */
 	static draw(ctx, rocket, x, y, screenRadius, zoomScale) {
 		ctx.save();
 		ctx.translate(x, y);
@@ -61,10 +14,9 @@ export class RocketRenderer {
 			ctx.shadowBlur = Math.max(8, screenRadius * PAD_EFFECT.STRUCTURE.GLOW_BLUR_MULT);
 		}
 
-		const theme = this.THEMES[rocket.colorTheme] || this.THEMES.orange;
+		const theme = ROCKET_VISUAL.THEMES[rocket.colorTheme] || ROCKET_VISUAL.THEMES.orange;
 
-		// When screen radius is small, draw clear recognizable icons without anti-aliasing artifacts
-		if (screenRadius < 5.0) {
+		if (screenRadius < ROCKET_VISUAL.LOD_RADIUS_THRESHOLD) {
 			this._drawLowDetail(ctx, rocket, screenRadius, theme);
 		} else {
 			this._drawHighDetail(ctx, rocket, screenRadius, zoomScale, theme);
@@ -84,15 +36,15 @@ export class RocketRenderer {
 
 		if (isPayloadOnly) {
 			// Draw high-visibility mini satellite icon even in low detail
-			const iconW = Math.max(6, R * 1.5);
-			const iconH = Math.max(4, R * 1.0);
+			const iconW = R * 1.5;
+			const iconH = R * 1.0;
 			ctx.fillStyle = '#d4af37';
 			ctx.fillRect(-iconW * 0.5, -iconH * 0.5, iconW, iconH);
 
 			// Blue solar paddles
 			ctx.fillStyle = '#0066cc';
-			ctx.fillRect(-iconW * 0.4, -iconH * 0.5 - 4, iconW * 0.8, 3.5);
-			ctx.fillRect(-iconW * 0.4, iconH * 0.5 + 0.5, iconW * 0.8, 3.5);
+			ctx.fillRect(-iconW * 0.4, -iconH * 0.5 - R * 0.6, iconW * 0.8, R * 0.5);
+			ctx.fillRect(-iconW * 0.4, iconH * 0.5 + R * 0.1, iconW * 0.8, R * 0.5);
 			return;
 		}
 
@@ -127,8 +79,18 @@ export class RocketRenderer {
 			(rocket.stages && curStgIdx >= totalStg)
 		);
 
+		const m = ROCKET_VISUAL.MODULES;
+		const r1 = R * m.STAGE1_RADIUS_RATIO;
+		const l1 = R * m.STAGE1_LENGTH_RATIO;
+		const r2 = R * m.STAGE2_RADIUS_RATIO;
+		const l2 = R * m.STAGE2_LENGTH_RATIO;
+		const lInter = R * m.INTERSTAGE_LENGTH_RATIO;
+		const lFairing = R * m.FAIRING_LENGTH_RATIO;
+		const lNozzle1 = R * m.NOZZLE1_LENGTH_RATIO;
+		const lNozzle2 = R * m.NOZZLE2_LENGTH_RATIO;
+
 		if (isPayloadOnly) {
-			this._drawPayloadSatellite(ctx, 0, 0, R * 1.5);
+			this._drawPayloadSatellite(ctx, 0, 0, r2);
 			return;
 		}
 
@@ -138,15 +100,6 @@ export class RocketRenderer {
 			!rocket.telemetry?.isFairingSeparated &&
 			!rocket.fairing?.isSeparated
 		);
-
-		const r1 = R * 0.7;
-		const l1 = R * 2.8;
-		const r2 = R * 0.65;
-		const l2 = R * 1.2;
-		const lInter = R * 0.35;
-		const lFairing = R * 1.1;
-		const lNozzle1 = R * 0.35;
-		const lNozzle2 = R * 0.32;
 
 		const baseX = hasStage1 ? R * 0.4 : -R * 0.6;
 		const stg2X = baseX;
@@ -159,7 +112,7 @@ export class RocketRenderer {
 		if (hasFairing) {
 			this._drawFairing(ctx, fairingX, r2, lFairing, theme);
 		} else {
-			this._drawPayloadSatellite(ctx, fairingX + lFairing * 0.35, 0, R * 0.8);
+			this._drawPayloadSatellite(ctx, fairingX + lFairing * 0.35, 0, r2);
 		}
 
 		this._drawStage2(ctx, stg2X, r2, l2, !hasStage1, nozzle2X, lNozzle2, theme);
@@ -265,8 +218,9 @@ export class RocketRenderer {
 		ctx.fill();
 
 		ctx.fillStyle = theme.fins;
-		const finBaseLen = length * 0.2;
-		const finSpan = radius * 0.65;
+		const m = ROCKET_VISUAL.MODULES;
+		const finBaseLen = length * m.FIN_BASE_RATIO;
+		const finSpan = radius * m.FIN_SPAN_RATIO;
 
 		ctx.beginPath();
 		ctx.moveTo(startX + finBaseLen, -radius);
@@ -287,8 +241,9 @@ export class RocketRenderer {
 		ctx.save();
 		ctx.translate(cx, cy);
 
-		const busW = Math.max(10, R * 0.9);
-		const busH = Math.max(8, R * 0.7);
+		const m = ROCKET_VISUAL.MODULES;
+		const busW = R * m.SATELLITE_BUS_W_RATIO;
+		const busH = R * m.SATELLITE_BUS_H_RATIO;
 
 		ctx.fillStyle = '#d4af37';
 		ctx.strokeStyle = '#ffee88';
@@ -296,24 +251,24 @@ export class RocketRenderer {
 		ctx.fillRect(-busW * 0.5, -busH * 0.5, busW, busH);
 		ctx.strokeRect(-busW * 0.5, -busH * 0.5, busW, busH);
 
-		const dishR = busH * 0.45;
+		const dishR = busH * m.SATELLITE_DISH_R_RATIO;
 		ctx.beginPath();
 		ctx.arc(busW * 0.65, 0, dishR, -Math.PI * 0.5, Math.PI * 0.5);
 		ctx.strokeStyle = '#ffffff';
-		ctx.lineWidth = 1.2;
+		ctx.lineWidth = 1.0;
 		ctx.stroke();
 
-		const panelW = busW * 0.85;
-		const panelH = busH * 1.1;
+		const panelW = busW * m.SATELLITE_PANEL_W_RATIO;
+		const panelH = busH * m.SATELLITE_PANEL_H_RATIO;
 		ctx.fillStyle = '#004488';
 		ctx.strokeStyle = '#00aaff';
 		ctx.lineWidth = 1;
 
-		ctx.fillRect(-panelW * 0.5, -busH * 0.5 - panelH - 2, panelW, panelH);
-		ctx.strokeRect(-panelW * 0.5, -busH * 0.5 - panelH - 2, panelW, panelH);
+		ctx.fillRect(-panelW * 0.5, -busH * 0.5 - panelH - 1, panelW, panelH);
+		ctx.strokeRect(-panelW * 0.5, -busH * 0.5 - panelH - 1, panelW, panelH);
 
-		ctx.fillRect(-panelW * 0.5, busH * 0.5 + 2, panelW, panelH);
-		ctx.strokeRect(-panelW * 0.5, busH * 0.5 + 2, panelW, panelH);
+		ctx.fillRect(-panelW * 0.5, busH * 0.5 + 1, panelW, panelH);
+		ctx.strokeRect(-panelW * 0.5, busH * 0.5 + 1, panelW, panelH);
 
 		ctx.restore();
 	}
@@ -323,12 +278,13 @@ export class RocketRenderer {
 		ctx.translate(x, y);
 
 		const timeSec = performance.now() * 0.001;
+		const cfg = ROCKET_VISUAL.PLUMES[fuelType] || ROCKET_VISUAL.PLUMES.liquid;
 
 		switch (fuelType) {
 			case 'hydro': {
-				const flicker = Math.sin(timeSec * 45) * 0.08;
-				const len = R * 9.0 * scale * throttle * (1.0 + flicker);
-				const w = R * 2.0 * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5);
+				const flicker = Math.sin(timeSec * cfg.flickerFreq) * cfg.noiseAmp;
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker);
+				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
 				grad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
@@ -347,9 +303,9 @@ export class RocketRenderer {
 
 				ctx.strokeStyle = 'rgba(200, 240, 255, 0.65)';
 				ctx.lineWidth = 1.2;
-				for (let i = 1; i <= 3; i++) {
-					const dx = -len * (0.16 * i);
-					const dw = (w * 0.32) / i;
+				for (let i = 1; i <= cfg.diamonds; i++) {
+					const dx = -len * (cfg.diamondInterval * i);
+					const dw = (w * cfg.diamondWidthRatio) / i;
 					ctx.beginPath();
 					ctx.moveTo(dx - 3, 0);
 					ctx.lineTo(dx, -dw);
@@ -362,9 +318,9 @@ export class RocketRenderer {
 			}
 
 			case 'solid': {
-				const flicker = (Math.random() - 0.5) * 0.18;
-				const len = R * 9.5 * scale * throttle * (1.0 + flicker);
-				const w = R * 1.6 * scale * Math.sqrt(throttle);
+				const flicker = (Math.random() - 0.5) * cfg.noiseAmp;
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker);
+				const w = R * cfg.widthMult * scale * Math.sqrt(throttle);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
 				grad.addColorStop(0, '#ffffff');
@@ -385,18 +341,18 @@ export class RocketRenderer {
 
 				ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
 				ctx.beginPath();
-				ctx.moveTo(0, -w * 0.28);
-				ctx.lineTo(-len * 0.55, 0);
-				ctx.lineTo(0, w * 0.28);
+				ctx.moveTo(0, -w * cfg.coreWidthRatio);
+				ctx.lineTo(-len * cfg.coreLenRatio, 0);
+				ctx.lineTo(0, w * cfg.coreWidthRatio);
 				ctx.closePath();
 				ctx.fill();
 				break;
 			}
 
 			case 'ion': {
-				const flicker = Math.sin(timeSec * 20) * 0.04;
-				const len = R * 4.0 * scale * throttle * (1.0 + flicker);
-				const w = R * 0.7 * scale;
+				const flicker = Math.sin(timeSec * cfg.flickerFreq) * cfg.noiseAmp;
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker);
+				const w = R * cfg.widthMult * scale;
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
 				grad.addColorStop(0, '#ffffff');
@@ -416,16 +372,16 @@ export class RocketRenderer {
 				ctx.lineWidth = 1;
 				ctx.beginPath();
 				ctx.moveTo(0, 0);
-				ctx.lineTo(-len * 0.8, 0);
+				ctx.lineTo(-len * cfg.beamLengthRatio, 0);
 				ctx.stroke();
 				break;
 			}
 
 			case 'liquid':
 			default: {
-				const flicker = Math.sin(timeSec * 35) * 0.12;
-				const len = R * 8.0 * scale * throttle * (1.0 + flicker);
-				const w = R * 1.8 * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5);
+				const flicker = Math.sin(timeSec * cfg.flickerFreq) * cfg.noiseAmp;
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker);
+				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
 				grad.addColorStop(0, '#ffffff');
@@ -442,14 +398,14 @@ export class RocketRenderer {
 				ctx.closePath();
 				ctx.fill();
 
-				const coreGrad = ctx.createLinearGradient(0, 0, -len * 0.4, 0);
+				const coreGrad = ctx.createLinearGradient(0, 0, -len * cfg.coreLenRatio, 0);
 				coreGrad.addColorStop(0, '#ffffff');
 				coreGrad.addColorStop(1, 'rgba(255, 230, 150, 0)');
 				ctx.fillStyle = coreGrad;
 				ctx.beginPath();
-				ctx.moveTo(0, -w * 0.28);
-				ctx.lineTo(-len * 0.4, 0);
-				ctx.lineTo(0, w * 0.28);
+				ctx.moveTo(0, -w * cfg.coreWidthRatio);
+				ctx.lineTo(-len * cfg.coreLenRatio, 0);
+				ctx.lineTo(0, w * cfg.coreWidthRatio);
 				ctx.closePath();
 				ctx.fill();
 				break;

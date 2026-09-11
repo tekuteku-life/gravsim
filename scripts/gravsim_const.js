@@ -24,6 +24,7 @@ export const SIMULATION = {
 	DEFAULT_OBJECT_MASS: 1, // t
 	DEFAULT_OBJECT_RADIUS: 1, // m
 	MAX_FRAME_ELAPSED_MS: 1000, // ms
+
 	// Adaptive sub-step configurations
 	SUB_STEPS: {
 		MIN: 20,
@@ -66,7 +67,8 @@ export const COLLISION_CONFIG = {
 	QUADTREE_MAX_OBJECTS: 4,
 	DEBRIS_ENERGY_FACTOR: 0.5,
 	MAX_DEBRIS_RATIO: 0.9,
-	MIN_DEBRIS_RATIO: 1e-4
+	MIN_DEBRIS_RATIO: 1e-4,
+	MASSIVE_SEARCH_MARGIN_M: 100000
 };
 
 // Aero Dynamics
@@ -95,7 +97,8 @@ export const DEBRIS = {
 	MASS_VAR_RANGE: 0.4,
 	IMPACT_FRAG_MASS_LOG_MULT: 1.5,
 	SPAWN_MARGIN_MIN_PX: 2,
-	IMPACT_SPAWN_JITTER_PX: 5
+	IMPACT_SPAWN_JITTER_PX: 5,
+	ID_RANDOM_RANGE: 10000000
 };
 
 // Drawing / Visualization
@@ -194,7 +197,9 @@ export const RENDER = {
 		FLAME_OUTER_W_MULT: 0.8,
 		FLAME_INNER_W_MULT: 0.9,
 		FLAME_INNER_H_MULT: 0.6,
-		FLAME_INNER_Y_MULT: 0.4
+		FLAME_INNER_Y_MULT: 0.4,
+		SMOKE_NOZZLE_OFFSET_STAGE1: 3.1,
+		SMOKE_NOZZLE_OFFSET_STAGE2: 1.0
 	},
 	DEBRIS_RENDER: {
 		MIN_VERTICES: 5,
@@ -202,6 +207,19 @@ export const RENDER = {
 		RAD_RATIO_MIN: 0.6,
 		RAD_RATIO_VAR: 0.6,
 		ROT_SPEED_VAR: 0.005
+	},
+	DEBRIS_HARDWARE: {
+		STAGE1_LEN_RATIO: 2.8,
+		STAGE1_WIDTH_RATIO: 0.7,
+		STAGE1_NOZZLE_RATIO: 0.35,
+		STAGE1_NOZZLE_WIDTH_RATIO: 0.95,
+		STAGE1_FIN_SPAN_RATIO: 0.65,
+		STAGE2_LEN_RATIO: 1.6,
+		STAGE2_WIDTH_RATIO: 0.65,
+		STAGE2_NOZZLE_RATIO: 0.35,
+		FAIRING_LEN_RATIO: 1.3,
+		FAIRING_WIDTH_RATIO: 0.65,
+		DEFAULT_ROTATION_SPEED: 0.0015
 	},
 	SLINGSHOT: {
 		GUIDE_RADIUS: 12,
@@ -267,6 +285,95 @@ export const RENDER = {
 	}
 };
 
+// Visual constants for procedural rocket rendering
+export const ROCKET_VISUAL = {
+	MIN_SCREEN_RADIUS: 5.5,
+	LOD_RADIUS_THRESHOLD: 4.0,
+	PAYLOAD_ZOOM_MAGNIFICATION: 1.0,
+	MODULES: {
+		STAGE1_RADIUS_RATIO: 0.7,
+		STAGE1_LENGTH_RATIO: 2.8,
+		STAGE2_RADIUS_RATIO: 0.65,
+		STAGE2_LENGTH_RATIO: 1.2,
+		INTERSTAGE_LENGTH_RATIO: 0.35,
+		FAIRING_LENGTH_RATIO: 1.1,
+		NOZZLE1_LENGTH_RATIO: 0.35,
+		NOZZLE2_LENGTH_RATIO: 0.32,
+		FIN_BASE_RATIO: 0.2,
+		FIN_SPAN_RATIO: 0.65,
+		SATELLITE_BUS_W_RATIO: 0.65,
+		SATELLITE_BUS_H_RATIO: 0.50,
+		SATELLITE_PANEL_W_RATIO: 0.75,
+		SATELLITE_PANEL_H_RATIO: 0.90,
+		SATELLITE_DISH_R_RATIO: 0.40
+	},
+	PLUMES: {
+		hydro: {
+			flickerFreq: 45,
+			noiseAmp: 0.08,
+			lenMult: 9.0,
+			widthMult: 2.0,
+			diamonds: 3,
+			diamondInterval: 0.16,
+			diamondWidthRatio: 0.32
+		},
+		solid: {
+			noiseAmp: 0.18,
+			lenMult: 9.5,
+			widthMult: 1.6,
+			coreLenRatio: 0.55,
+			coreWidthRatio: 0.28
+		},
+		ion: {
+			flickerFreq: 20,
+			noiseAmp: 0.04,
+			lenMult: 4.0,
+			widthMult: 0.7,
+			beamLengthRatio: 0.8
+		},
+		liquid: {
+			flickerFreq: 35,
+			noiseAmp: 0.12,
+			lenMult: 8.0,
+			widthMult: 1.8,
+			coreLenRatio: 0.4,
+			coreWidthRatio: 0.28
+		}
+	},
+	THEMES: {
+		orange: {
+			stg1Grad: ['#e67e3a', '#c85a1a', '#78320a'],
+			stg2Grad: ['#ffffff', '#e2e6ea', '#8a94a0'],
+			interstage: '#1e2227',
+			fairingGrad: ['#ffffff', '#e8ebed', '#8a94a0'],
+			fairingLine: 'rgba(0, 0, 0, 0.45)',
+			fins: '#994614',
+			nozzle: '#1c2024',
+			accentBand: '#ffffff'
+		},
+		classic: {
+			stg1Grad: ['#ffffff', '#e2e6ea', '#7d8792'],
+			stg2Grad: ['#ffffff', '#e2e6ea', '#7d8792'],
+			interstage: '#181b1f',
+			fairingGrad: ['#ffffff', '#e2e6ea', '#8a94a0'],
+			fairingLine: 'rgba(0, 0, 0, 0.45)',
+			fins: '#444b54',
+			nozzle: '#14171a',
+			accentBand: '#2b313a'
+		},
+		blue: {
+			stg1Grad: ['#28558a', '#17365d', '#0b1d33'],
+			stg2Grad: ['#356aa0', '#1c4273', '#0e2440'],
+			interstage: '#bcc5d0',
+			fairingGrad: ['#20252d', '#13171e', '#090b0e'],
+			fairingLine: 'rgba(0, 255, 204, 0.65)',
+			fins: '#3a78bd',
+			nozzle: '#3d454e',
+			accentBand: '#00e5ff'
+		}
+	}
+};
+
 // Trajectory Prediction & Simulation Constants
 export const TRAJECTORY_PREDICTION = {
 	MAX_SIM_TIME_SEC: 365.25 * 24 * 60 * 60, // 1 year (365.25 days)
@@ -275,7 +382,8 @@ export const TRAJECTORY_PREDICTION = {
 	DUMMY_ROCKET_ID: 999999,
 	DEFAULT_MAX_G: 4.0,
 	UPDATE_THROTTLE_MS: 150,
-	// Adaptive dt criteria (seconds) - Optimized for extreme accuracy in orbital and escape trajectories
+
+	// Adaptive dt criteria (seconds)
 	DT: {
 		POWERED_OR_ATM: 0.05,
 		POST_BURNOUT_COOL: 0.1,
@@ -287,6 +395,7 @@ export const TRAJECTORY_PREDICTION = {
 		DEEP_SPACE_MAX_CAP: 1800.0,
 		DYN_SCALE_ETA: 0.04
 	},
+
 	DIST_THRESHOLDS_M: {
 		CLOSE: 1000000,       // 1,000 km
 		MEDIUM: 10000000,     // 10,000 km
@@ -420,7 +529,7 @@ export const FLIGHT_COMPUTER_CONFIG = {
 
 // Communication buffer structure
 export const CALC_BUFFER_CONFIG = {
-	OBJ_ATTR_COUNT: 46
+	OBJ_ATTR_COUNT: 47
 };
 
 export const BUFFER_INDEX = {
@@ -434,7 +543,8 @@ export const BUFFER_INDEX = {
 	TM_AV: 32, TM_AH: 33, TM_CURRENT_G: 34, TM_FLIGHT_TIME: 35, THRUST_ANGLE: 36,
 	DOMINANT_BODY_ID: 37, DIST_TO_DOMINANT: 38, OXID_MASS: 39,
 	TM_TANK_PRES_FUEL: 40, TM_TANK_PRES_OXID: 41,
-	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, TM_STG_SEP_ACTIVE: 44, TM_FAIRING_SEPARATED: 45
+	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, TM_STG_SEP_ACTIVE: 44, TM_FAIRING_SEPARATED: 45,
+	DEBRIS_SUB_TYPE: 46
 };
 
 export const OBJECT_STATE = {
@@ -790,12 +900,7 @@ export const ROCKET_FUELS = {
 };
 
 export const OBJECT_TYPES = { CELESTIAL: 0, ROCKET: 1, DEBRIS: 2 };
-
-export const TRAIL_MODE = {
-	NORMAL: 0,
-	ATMOSPHERE: 1,
-	ESCAPE: 2
-};
+export const TRAIL_MODE = { NORMAL: 0, ATMOSPHERE: 1, ESCAPE: 2 };
 
 export const LAUNCH_SEQUENCES = {
 	LAUNCH_TO_COMPLETION_TIME: 10,
@@ -827,7 +932,7 @@ export const LAUNCH_SEQUENCES = {
 				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
 				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
 				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
-				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true }, // 3 = TELEMETRY.STATUS.MECO
+				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true },
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
 				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }
 			]
@@ -909,7 +1014,7 @@ export const LAUNCH_SEQUENCES = {
 				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
 				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
 				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
-				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true }, // 3 = TELEMETRY.STATUS.MECO
+				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true },
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
 				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }
 			]
@@ -1001,11 +1106,38 @@ export const ROCKET_LAUNCHER_CONFIG = {
 
 // Multi-stage rocket parameters and presets
 export const MULTISTAGE_ROCKET = {
-	DEFAULT_SEPARATION_DELAY_SEC: 1.5,
-	DEFAULT_IGNITION_DELAY_SEC: 2.5,
-	DEFAULT_JETTISON_SPEED_M_S: 1.5,
+	DEFAULT_SEPARATION_DELAY_SEC: 5.0,
+	DEFAULT_IGNITION_DELAY_SEC: 5.0,
+	DEFAULT_JETTISON_SPEED_M_S: 6.0,
 	FAIRING_DEFAULT_ALT_KM: 100,
 	STG_SEP_LAMP_DURATION_SEC: 3.5,
+	STAGE_SEP_FORWARD_PUSH_M_S: 1.5,
+	FAIRING_SEP_LATERAL_SPEED_M_S: 8.0,
+	FAIRING_SEP_BACKWARD_SPEED_M_S: -2.0,
+	STAGE1_RADIUS_RATIO: 0.85,
+	STAGE2_RADIUS_RATIO: 0.70,
+	FAIRING_RADIUS_RATIO: 0.75,
+	PAYLOAD_DEFAULT_RADIUS_M: 2.0,
+	DEBRIS_SPECS: {
+		1: {
+			name: 'Stage 1 Booster',
+			color: '#c85a1a',
+			size: 5.5,
+			rotationSpeedRand: 0.0015
+		},
+		2: {
+			name: 'Stage 2 Upper Stage',
+			color: '#e2e6ea',
+			size: 5.0,
+			rotationSpeedRand: 0.0015
+		},
+		3: {
+			name: 'Fairing Half',
+			color: '#e8ebed',
+			size: 4.5,
+			rotationSpeedRand: 0.0015
+		}
+	}
 };
 
 export const MULTISTAGE_PRESETS = {
@@ -1026,9 +1158,9 @@ export const MULTISTAGE_PRESETS = {
 				burnTime: 162.0,
 				ofRatio: 2.0,
 				radius: 2.5,
-				separationDelaySec: 1.5,
-				ignitionDelaySec: 2.5,
-				jettisonSpeedM_S: 1.5
+				separationDelaySec: 5.0,
+				ignitionDelaySec: 6.0,
+				jettisonSpeedM_S: 6.0
 			},
 			{
 				stageNumber: 2,
@@ -1041,15 +1173,15 @@ export const MULTISTAGE_PRESETS = {
 				burnTime: 390.0,
 				ofRatio: 2.0,
 				radius: 2.0,
-				separationDelaySec: 1.5,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 1.0
+				separationDelaySec: 5.0,
+				ignitionDelaySec: 6.0,
+				jettisonSpeedM_S: 5.0
 			}
 		],
 		payload: {
 			name: "Satellite Payload",
 			massT: 8.0,
-			radius: 1.5
+			radius: 2.0
 		},
 		fairing: {
 			enabled: true,
@@ -1074,9 +1206,9 @@ export const MULTISTAGE_PRESETS = {
 				burnTime: 290.0,
 				ofRatio: 6.0,
 				radius: 2.6,
-				separationDelaySec: 1.5,
-				ignitionDelaySec: 3.0,
-				jettisonSpeedM_S: 1.5
+				separationDelaySec: 5.0,
+				ignitionDelaySec: 5.0,
+				jettisonSpeedM_S: 6.0
 			},
 			{
 				stageNumber: 2,
@@ -1089,9 +1221,9 @@ export const MULTISTAGE_PRESETS = {
 				burnTime: 530.0,
 				ofRatio: 6.0,
 				radius: 2.6,
-				separationDelaySec: 1.5,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 1.0
+				separationDelaySec: 5.0,
+				ignitionDelaySec: 5.0,
+				jettisonSpeedM_S: 5.0
 			}
 		],
 		payload: {
@@ -1122,15 +1254,15 @@ export const MULTISTAGE_PRESETS = {
 				burnTime: 160.0,
 				ofRatio: 2.5,
 				radius: 2.5,
-				separationDelaySec: 2.0,
-				ignitionDelaySec: 3.0,
-				jettisonSpeedM_S: 1.5
+				separationDelaySec: 5.0,
+				ignitionDelaySec: 6.0,
+				jettisonSpeedM_S: 5.0
 			}
 		],
 		payload: {
 			name: "Payload",
 			massT: 0.0,
-			radius: 1.0
+			radius: 2.0
 		},
 		fairing: {
 			enabled: false,
@@ -1145,7 +1277,8 @@ export const MULTISTAGE_PRESETS = {
  * into a valid multi-stage configuration structure.
  */
 export function normalizeRocketConfig(config) {
-	if (!config) return null;
+	if (!config) { return null; }
+
 	if (config.stages && Array.isArray(config.stages) && config.stages.length > 0) {
 		return {
 			...config,
@@ -1243,7 +1376,7 @@ export const PAD_EFFECT = {
 	PHYSICS: {
 		FALL_V_MULT: 5,
 		DRAG_NORM_DT: 60,
-		NOZZLE_OFFSET_MULT: 2.0,
+		NOZZLE_OFFSET_MULT: 3.1,
 		SIDE_OFFSET_MULT: 1
 	},
 	EMITTER: {

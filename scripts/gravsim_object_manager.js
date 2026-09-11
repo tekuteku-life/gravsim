@@ -2,9 +2,8 @@
 // gravsim_object_manager.js
 
 import {
-	PHYSICS, SIMULATION, RENDER,
-	OBJECT_STATE, OBJECT_TYPES,
-	CALC_BUFFER_CONFIG, BUFFER_INDEX
+	SIMULATION, OBJECT_STATE, OBJECT_TYPES,
+	MULTISTAGE_ROCKET,
 } from './gravsim_const.js';
 import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
@@ -165,41 +164,33 @@ export class ObjectManager {
 				const vy = UnitConvertUtils.m2pix(objData.vy);
 				const massT = objData.mass;
 
-				let debrisName = 'Jettisoned Debris';
-				let debrisColor = '#c8d0d8';
-				let debrisSize = 3.5;
-				if (objData.debrisSubType === 1) {
-					debrisName = 'Stage 1 Booster';
-					debrisColor = '#d0d8e0';
-					debrisSize = 4.0;
-				} else if (objData.debrisSubType === 2) {
-					debrisName = 'Stage 2 Upper Stage';
-					debrisColor = '#d0d8e0';
-					debrisSize = 3.5;
-				} else if (objData.debrisSubType === 3) {
-					debrisName = 'Fairing Half';
-					debrisColor = '#e8e8e8';
-					debrisSize = 3.0;
-				}
+				const spec = MULTISTAGE_ROCKET.DEBRIS_SPECS[objData.debrisSubType] || {
+					name: 'Jettisoned Debris',
+					color: '#c8d0d8',
+					size: 5.0
+				};
+
+				const activeRocket = this.objects.find(o => o.type === OBJECT_TYPES.ROCKET);
+				const currentTheme = activeRocket?.colorTheme || 'orange';
 
 				const deb = new Debris(
 					objData.id,
-					debrisName,
+					spec.name,
 					x, y, vx, vy,
 					massT,
-					debrisColor,
-					debrisSize,
-					objData.radius || 1.5,
-					1,
-					'#00ffff',
-					0.5
+					spec.color,
+					spec.size,
+					objData.radius || MULTISTAGE_ROCKET.DEFAULT_STAGE_RADIUS_M,
+					objData.generation || 1,
+					'#00ffcc',
+					0,
+					objData.debrisSubType || 0,
+					currentTheme
 				);
+
 				this.addObject(deb, false);
 				this._applyBaseState(deb, objData);
 				deb.updateHistory(this.physicsSequence, this.objects);
-
-				const currentCount = this.objects.length;
-				EventBus.emit('object-list-changed', currentCount);
 			}
 		});
 
@@ -244,6 +235,14 @@ export class ObjectManager {
 		target.tankPresFuel = objData.tmTankPresFuel;
 		target.tankPresOxid = objData.tmTankPresOxid;
 
+		// Update name from 'Rocket' to payload name upon separation
+		if (target.isPayloadSeparated && target.payload?.name) {
+			if (target.name !== target.payload.name) {
+				target.name = target.payload.name;
+				EventBus.emit('object-list-changed', this.objects.length);
+			}
+		}
+
 		target.telemetry = {
 			status: objData.tmStatus,
 			qAxialKpa: objData.tmQAxial,
@@ -272,6 +271,7 @@ export class ObjectManager {
 			isFairingSeparated: !!objData.tmFairingSeparated,
 			isPayloadSeparated: !!objData.isPayloadSeparated
 		};
+
 		target.currentStageIndex = target.telemetry.stageIndex;
 		target.totalStages = target.telemetry.totalStages;
 		target.thrustAngle = objData.thrustAngle;

@@ -2,8 +2,8 @@
 // gravsim_object.js
 
 import {
-	PHYSICS, RENDER, OBJECT_STATE,
-	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE, PAD_EFFECT,
+	PHYSICS, RENDER, OBJECT_STATE, ROCKET_VISUAL,
+	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE, MULTISTAGE_ROCKET,
 } from './gravsim_const.js';
 import { Trajectory } from './gravsim_trajectory.js';
 import { EffectTrail } from './gravsim_effect_trail.js';
@@ -308,24 +308,12 @@ export class Rocket extends GravSimObject {
 	 * and maintain balanced visual scale across all zoom levels.
 	 */
 	_getDrawRadius(zoomScale) {
-		const isPayloadOnly = Boolean(
-			this.isPayloadSeparated ||
-			this.telemetry?.isPayloadSeparated ||
-			(this.stages && this.currentStageIndex >= this.totalStages)
-		);
-
-		// True physical radius in pixels
-		const effectiveRadiusM = isPayloadOnly ? (this.payload?.radius || 1.5) : this.radius;
-		const realRadiusPx = (effectiveRadiusM / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
+		const baseRadiusM = DEFAULT_OBJECT_PARAMS['Rocket']?.RADIUS || 63;
+		const realRadiusPx = (baseRadiusM / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 		const physicalScreenRadius = realRadiusPx * zoomScale;
+		const minSize = ROCKET_VISUAL.MIN_SCREEN_RADIUS || 5.5;
 
-		// When zooming into spacecraft view, amplify payload visibility so panels are readable
-		let visualRadius = physicalScreenRadius;
-		if (isPayloadOnly) {
-			visualRadius = Math.max(physicalScreenRadius * 12.0, this.size);
-		}
-
-		return Math.max(this.size, visualRadius);
+		return Math.max(minSize, physicalScreenRadius);
 	}
 
 	setCollided() {
@@ -380,12 +368,26 @@ export class Rocket extends GravSimObject {
 			}
 
 			// Offset to nozzle
-			const conf = RENDER.ROCKET;
-			const nozzleOffsetX = -Math.cos(this.thrustAngle) * UnitConvertUtils.m2pix(this.radius * conf.BODY_LENGTH_MULT);
-			const nozzleOffsetY = -Math.sin(this.thrustAngle) * UnitConvertUtils.m2pix(this.radius * conf.BODY_LENGTH_MULT);
+			const curStgIdx = this.telemetry?.stageIndex !== undefined ? this.telemetry.stageIndex : (this.currentStageIndex || 0);
+			const hasStage1 = (curStgIdx === 0);
+			const nozzleMult = hasStage1 ? RENDER.ROCKET.SMOKE_NOZZLE_OFFSET_STAGE1 : RENDER.ROCKET.SMOKE_NOZZLE_OFFSET_STAGE2;
+			let totalOffsetMult = nozzleMult;
 
-			let relX = (this.x + nozzleOffsetX) - refX;
-			let relY = (this.y + nozzleOffsetY) - refY;
+			if (isBurning) {
+				const curFuel = (this.stages && this.stages[curStgIdx]?.fuelType) || this.fuelType || 'liquid';
+				const cfg = ROCKET_VISUAL.PLUMES[curFuel] || ROCKET_VISUAL.PLUMES.liquid;
+				const scale = hasStage1 ? 1.0 : 0.65;
+				const throttle = this.thrustRatio || 1.0;
+				const flameLenMult = cfg.lenMult * scale * throttle;
+				totalOffsetMult += flameLenMult;
+			}
+
+			const offsetDistPx = UnitConvertUtils.m2pix(this.radius * totalOffsetMult);
+			const offsetX = -Math.cos(this.thrustAngle) * offsetDistPx;
+			const offsetY = -Math.sin(this.thrustAngle) * offsetDistPx;
+
+			let relX = (this.x + offsetX) - refX;
+			let relY = (this.y + offsetY) - refY;
 
 			// Follow rotation
 			if (mode === TRAIL_MODE.ATMOSPHERE && refAngle !== 0) {
@@ -511,15 +513,36 @@ export class Rocket extends GravSimObject {
  * Debris class
  *******************************************************************/
 export class Debris extends GravSimObject {
-	constructor(id, name, x, y, vx, vy, mass, color, size, radius, generation, borderColor, borderWidth) {
+	constructor(id, name, x, y, vx, vy, mass, color, size, radius, generation, borderColor, borderWidth, debrisSubType = 0, colorTheme = 'orange') {
 		super(id, name, OBJECT_TYPES.DEBRIS, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth);
 		this._mass = mass; // t
+		this.debrisSubType = debrisSubType; // 0: Rock, 1: Booster, 2: Upper Stage, 3: Fairing
+		this.colorTheme = colorTheme || 'orange';
 		this.polygonVertices = [];
 
-		this._generatePolygonVertices();
+		if (this.debrisSubType === 0) {
+			this._generatePolygonVertices();
+		} else {
+			const random = () => {
+				const x = Math.sin(this.id * 9.123) * 10000;
+				return x - Math.floor(x);
+			};
+			const spec = MULTISTAGE_ROCKET.DEBRIS_SPECS[this.debrisSubType];
+			const speedScale = spec?.rotationSpeedRand || RENDER.DEBRIS_HARDWARE.DEFAULT_ROTATION_SPEED;
+			this.rotationSpeed = (random() - 0.5) * speedScale;
+		}
 	}
+
 	get mass() { return this._mass; }
 	set mass(val) { this._mass = val; }
+
+	_getDrawRadius(zoomScale) {
+		const realRadiusPx = (this.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
+		const screenRadiusPx = realRadiusPx * zoomScale;
+
+		// Match exactly with base GravSimObject scaling
+		return Math.max(this.size, screenRadiusPx);
+	}
 
 	_generatePolygonVertices() {
 		const conf = RENDER.DEBRIS_RENDER;
@@ -529,7 +552,7 @@ export class Debris extends GravSimObject {
 			return x - Math.floor(x);
 		};
 
-		// Set random rotation speed (-0.0025 to 0.0025 rad/ms)
+		// Set random rotation speed
 		this.rotationSpeed = (random() - 0.5) * conf.ROT_SPEED_VAR;
 
 		const vertexCount = conf.MIN_VERTICES + Math.floor(random() * conf.VAR_VERTICES);
@@ -537,7 +560,6 @@ export class Debris extends GravSimObject {
 			const baseAngle = (i / vertexCount) * Math.PI * 2;
 			const angleOffset = (random() - 0.5) * 0.5;
 			const angle = baseAngle + angleOffset;
-
 			const distanceRatio = conf.RAD_RATIO_MIN + random() * conf.RAD_RATIO_VAR;
 
 			this.polygonVertices.push({
@@ -548,10 +570,113 @@ export class Debris extends GravSimObject {
 	}
 
 	_drawBody(ctx, x, y, screenRadius) {
+		if (this.debrisSubType > 0) {
+			ctx.save();
+			ctx.translate(x, y);
+
+			const angle = (Date.now() * this.rotationSpeed) % (Math.PI * 2);
+			ctx.rotate(angle);
+
+			const R = screenRadius;
+			const hw = RENDER.DEBRIS_HARDWARE;
+			const theme = ROCKET_VISUAL.THEMES[this.colorTheme] || ROCKET_VISUAL.THEMES.orange;
+
+			if (this.debrisSubType === 1) {
+				const len = R * hw.STAGE1_LEN_RATIO;
+				const w = R * hw.STAGE1_WIDTH_RATIO;
+
+				const grad = ctx.createLinearGradient(0, -w, 0, w);
+				grad.addColorStop(0, theme.stg1Grad[0]);
+				grad.addColorStop(0.5, theme.stg1Grad[1]);
+				grad.addColorStop(1, theme.stg1Grad[2]);
+				ctx.fillStyle = grad;
+				ctx.fillRect(-len * 0.5, -w, len, w * 2);
+
+				ctx.fillStyle = theme.nozzle;
+				ctx.beginPath();
+				ctx.moveTo(-len * 0.5, -w * 0.6);
+				ctx.lineTo(-len * 0.5 - R * hw.STAGE1_NOZZLE_RATIO, -w * hw.STAGE1_NOZZLE_WIDTH_RATIO);
+				ctx.lineTo(-len * 0.5 - R * hw.STAGE1_NOZZLE_RATIO, w * hw.STAGE1_NOZZLE_WIDTH_RATIO);
+				ctx.lineTo(-len * 0.5, w * 0.6);
+				ctx.closePath();
+				ctx.fill();
+
+				ctx.fillStyle = theme.fins;
+				const finSpan = w * hw.STAGE1_FIN_SPAN_RATIO;
+				ctx.beginPath();
+				ctx.moveTo(-len * 0.5 + R * 0.5, -w);
+				ctx.lineTo(-len * 0.5, -w - finSpan);
+				ctx.lineTo(-len * 0.5 + R * 0.1, -w);
+				ctx.closePath();
+				ctx.fill();
+
+				ctx.beginPath();
+				ctx.moveTo(-len * 0.5 + R * 0.5, w);
+				ctx.lineTo(-len * 0.5, w + finSpan);
+				ctx.lineTo(-len * 0.5 + R * 0.1, w);
+				ctx.closePath();
+				ctx.fill();
+
+				ctx.fillStyle = theme.interstage;
+				ctx.fillRect(len * 0.5 - R * 0.25, -w, R * 0.25, w * 2);
+
+			} else if (this.debrisSubType === 2) {
+				const len = R * hw.STAGE2_LEN_RATIO;
+				const w = R * hw.STAGE2_WIDTH_RATIO;
+
+				const grad = ctx.createLinearGradient(0, -w, 0, w);
+				grad.addColorStop(0, theme.stg2Grad[0]);
+				grad.addColorStop(0.5, theme.stg2Grad[1]);
+				grad.addColorStop(1, theme.stg2Grad[2]);
+				ctx.fillStyle = grad;
+				ctx.fillRect(-len * 0.5, -w, len, w * 2);
+
+				ctx.fillStyle = theme.nozzle;
+				ctx.beginPath();
+				ctx.moveTo(-len * 0.5, -w * 0.35);
+				ctx.lineTo(-len * 0.5 - R * hw.STAGE2_NOZZLE_RATIO, -w * 0.75);
+				ctx.lineTo(-len * 0.5 - R * hw.STAGE2_NOZZLE_RATIO, w * 0.75);
+				ctx.lineTo(-len * 0.5, w * 0.35);
+				ctx.closePath();
+				ctx.fill();
+
+			} else if (this.debrisSubType === 3) {
+				const len = R * hw.FAIRING_LEN_RATIO;
+				const w = R * hw.FAIRING_WIDTH_RATIO;
+
+				const grad = ctx.createLinearGradient(0, -w, 0, w);
+				grad.addColorStop(0, theme.fairingGrad[0]);
+				grad.addColorStop(0.5, theme.fairingGrad[1]);
+				grad.addColorStop(1, theme.fairingGrad[2]);
+				ctx.fillStyle = grad;
+				ctx.strokeStyle = '#a0a8b0';
+				ctx.lineWidth = 1;
+
+				ctx.beginPath();
+				ctx.moveTo(-len * 0.5, 0);
+				ctx.quadraticCurveTo(len * 0.2, -w * 1.1, len * 0.5, 0);
+				ctx.quadraticCurveTo(len * 0.2, -w * 0.75, -len * 0.5, 0);
+				ctx.closePath();
+				ctx.fill();
+				ctx.stroke();
+
+				ctx.fillStyle = '#33383f';
+				ctx.beginPath();
+				ctx.moveTo(-len * 0.45, 0);
+				ctx.quadraticCurveTo(len * 0.2, -w * 0.7, len * 0.45, 0);
+				ctx.lineTo(-len * 0.45, 0);
+				ctx.closePath();
+				ctx.fill();
+			}
+
+			ctx.restore();
+			return;
+		}
+
 		ctx.fillStyle = this.color;
 		ctx.beginPath();
 
-		if (this.polygonVertices) {
+		if (this.polygonVertices && this.polygonVertices.length > 0) {
 			ctx.save();
 			ctx.translate(x, y);
 
@@ -561,13 +686,14 @@ export class Debris extends GravSimObject {
 
 			const first = this.polygonVertices[0];
 			ctx.moveTo(first.x * screenRadius, first.y * screenRadius);
+
 			for (let i = 1; i < this.polygonVertices.length; i++) {
 				const pt = this.polygonVertices[i];
 				ctx.lineTo(pt.x * screenRadius, pt.y * screenRadius);
 			}
+
 			ctx.closePath();
 			ctx.fill();
-
 			ctx.restore();
 		} else {
 			ctx.arc(x, y, screenRadius, 0, Math.PI * 2);
