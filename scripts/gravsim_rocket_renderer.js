@@ -33,37 +33,38 @@ export class RocketRenderer {
 		);
 		const curStgIdx = rocket.telemetry?.stageIndex !== undefined ? rocket.telemetry.stageIndex : (rocket.currentStageIndex || 0);
 		const hasStage1 = !isPayloadOnly && (curStgIdx === 0);
+		const lod = ROCKET_VISUAL.LOW_DETAIL;
 
 		if (isPayloadOnly) {
 			// Draw high-visibility mini satellite icon even in low detail
-			const iconW = R * 1.5;
-			const iconH = R * 1.0;
-			ctx.fillStyle = '#d4af37';
+			const iconW = R * lod.SATELLITE_BUS_W_RATIO;
+			const iconH = R * lod.SATELLITE_BUS_H_RATIO;
+			ctx.fillStyle = lod.SATELLITE_BUS_COLOR;
 			ctx.fillRect(-iconW * 0.5, -iconH * 0.5, iconW, iconH);
 
 			// Blue solar paddles
-			ctx.fillStyle = '#0066cc';
-			ctx.fillRect(-iconW * 0.4, -iconH * 0.5 - R * 0.6, iconW * 0.8, R * 0.5);
-			ctx.fillRect(-iconW * 0.4, iconH * 0.5 + R * 0.1, iconW * 0.8, R * 0.5);
+			ctx.fillStyle = lod.SOLAR_PADDLE_COLOR;
+			ctx.fillRect(-iconW * lod.PADDLE_OFFSET_X_RATIO, -iconH * 0.5 - R * lod.PADDLE_OFFSET_Y_RATIO, iconW * lod.PADDLE_W_RATIO, R * lod.PADDLE_H_RATIO);
+			ctx.fillRect(-iconW * lod.PADDLE_OFFSET_X_RATIO, iconH * 0.5 + R * lod.PADDLE_GAP_RATIO, iconW * lod.PADDLE_W_RATIO, R * lod.PADDLE_H_RATIO);
 			return;
 		}
 
-		const len = hasStage1 ? R * 4.2 : R * 2.2;
-		const width = R * 0.9;
+		const len = hasStage1 ? R * lod.STAGE1_LEN_RATIO : R * lod.STAGE2_LEN_RATIO;
+		const width = R * lod.WIDTH_RATIO;
 
 		ctx.fillStyle = hasStage1 ? theme.stg1Grad[1] : theme.stg2Grad[0];
 		ctx.beginPath();
 		ctx.ellipse(0, 0, len * 0.5, width * 0.5, 0, 0, Math.PI * 2);
 		ctx.fill();
 
-		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > 0.01 || (rocket.telemetry?.twr > 0.01));
+		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
 		if (isFiring) {
-			const plumeLen = R * 2.8 * (rocket.thrustRatio || 1.0);
-			ctx.fillStyle = '#ffaa00';
+			const plumeLen = R * lod.PLUME_LEN_RATIO * (rocket.thrustRatio || 1.0);
+			ctx.fillStyle = lod.PLUME_COLOR;
 			ctx.beginPath();
-			ctx.moveTo(-len * 0.5, -width * 0.35);
+			ctx.moveTo(-len * 0.5, -width * lod.PLUME_WIDTH_RATIO);
 			ctx.lineTo(-len * 0.5 - plumeLen, 0);
-			ctx.lineTo(-len * 0.5, width * 0.35);
+			ctx.lineTo(-len * 0.5, width * lod.PLUME_WIDTH_RATIO);
 			ctx.closePath();
 			ctx.fill();
 		}
@@ -80,6 +81,7 @@ export class RocketRenderer {
 		);
 
 		const m = ROCKET_VISUAL.MODULES;
+		const align = ROCKET_VISUAL.ALIGNMENT;
 		const r1 = R * m.STAGE1_RADIUS_RATIO;
 		const l1 = R * m.STAGE1_LENGTH_RATIO;
 		const r2 = R * m.STAGE2_RADIUS_RATIO;
@@ -101,7 +103,7 @@ export class RocketRenderer {
 			!rocket.fairing?.isSeparated
 		);
 
-		const baseX = hasStage1 ? R * 0.4 : -R * 0.6;
+		const baseX = hasStage1 ? R * align.BASE_X_STAGE1_RATIO : R * align.BASE_X_UPPER_RATIO;
 		const stg2X = baseX;
 		const fairingX = stg2X + l2;
 		const interX = stg2X - lInter;
@@ -112,7 +114,7 @@ export class RocketRenderer {
 		if (hasFairing) {
 			this._drawFairing(ctx, fairingX, r2, lFairing, theme);
 		} else {
-			this._drawPayloadSatellite(ctx, fairingX + lFairing * 0.35, 0, r2);
+			this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r2);
 		}
 
 		this._drawStage2(ctx, stg2X, r2, l2, !hasStage1, nozzle2X, lNozzle2, theme);
@@ -124,20 +126,21 @@ export class RocketRenderer {
 			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
 		}
 
-		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > 0.01 || (rocket.telemetry?.twr > 0.01));
+		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
 		if (isFiring) {
 			const curFuel = (rocket.stages && rocket.stages[curStgIdx]?.fuelType) || rocket.fuelType || 'liquid';
 			const throttle = rocket.thrustRatio || 1.0;
 
 			if (hasStage1) {
-				this._drawPlume(ctx, nozzle1X, 0, 1.0, throttle, curFuel, R);
+				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
 			} else {
-				this._drawPlume(ctx, nozzle2X, 0, 0.65, throttle, curFuel, R);
+				this._drawPlume(ctx, nozzle2X, 0, align.UPPER_PLUME_SCALE, throttle, curFuel, R);
 			}
 		}
 	}
 
 	static _drawFairing(ctx, startX, radius, length, theme) {
+		const m = ROCKET_VISUAL.MODULES;
 		const grad = ctx.createLinearGradient(0, -radius, 0, radius);
 		grad.addColorStop(0, theme.fairingGrad[0]);
 		grad.addColorStop(0.4, theme.fairingGrad[1]);
@@ -146,8 +149,8 @@ export class RocketRenderer {
 		ctx.fillStyle = grad;
 		ctx.beginPath();
 		ctx.moveTo(startX, -radius);
-		ctx.quadraticCurveTo(startX + length * 0.7, -radius * 0.9, startX + length, 0);
-		ctx.quadraticCurveTo(startX + length * 0.7, radius * 0.9, startX, radius);
+		ctx.quadraticCurveTo(startX + length * m.FAIRING_CURVE_X_RATIO, -radius * m.FAIRING_CURVE_Y_RATIO, startX + length, 0);
+		ctx.quadraticCurveTo(startX + length * m.FAIRING_CURVE_X_RATIO, radius * m.FAIRING_CURVE_Y_RATIO, startX, radius);
 		ctx.closePath();
 		ctx.fill();
 
@@ -155,14 +158,15 @@ export class RocketRenderer {
 		ctx.lineWidth = 1;
 		ctx.beginPath();
 		ctx.moveTo(startX, 0);
-		ctx.lineTo(startX + length - 2, 0);
+		ctx.lineTo(startX + length - m.FAIRING_TIP_MARGIN, 0);
 		ctx.stroke();
 
 		ctx.fillStyle = theme.accentBand;
-		ctx.fillRect(startX, -radius, Math.max(1.5, radius * 0.15), radius * 2);
+		ctx.fillRect(startX, -radius, Math.max(m.FAIRING_BAND_MIN_W, radius * m.FAIRING_BAND_W_RATIO), radius * 2);
 	}
 
 	static _drawStage2(ctx, startX, radius, length, isExposedNozzle, nozzleX, nozzleLen, theme) {
+		const m = ROCKET_VISUAL.MODULES;
 		const grad = ctx.createLinearGradient(0, -radius, 0, radius);
 		grad.addColorStop(0, theme.stg2Grad[0]);
 		grad.addColorStop(0.4, theme.stg2Grad[1]);
@@ -171,32 +175,34 @@ export class RocketRenderer {
 		ctx.fillStyle = grad;
 		ctx.fillRect(startX, -radius, length, radius * 2);
 
-		ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+		ctx.strokeStyle = m.STAGE2_BORDER_COLOR;
 		ctx.lineWidth = 1;
 		ctx.strokeRect(startX, -radius, length, radius * 2);
 
 		if (isExposedNozzle) {
 			ctx.fillStyle = theme.nozzle;
 			ctx.beginPath();
-			ctx.moveTo(startX, -radius * 0.35);
-			ctx.lineTo(nozzleX, -radius * 0.75);
-			ctx.lineTo(nozzleX, radius * 0.75);
-			ctx.lineTo(startX, radius * 0.35);
+			ctx.moveTo(startX, -radius * m.STAGE2_NOZZLE_BASE_RATIO);
+			ctx.lineTo(nozzleX, -radius * m.STAGE2_NOZZLE_BELL_RATIO);
+			ctx.lineTo(nozzleX, radius * m.STAGE2_NOZZLE_BELL_RATIO);
+			ctx.lineTo(startX, radius * m.STAGE2_NOZZLE_BASE_RATIO);
 			ctx.closePath();
 			ctx.fill();
 		}
 	}
 
 	static _drawInterstage(ctx, startX, radius, length, theme) {
+		const m = ROCKET_VISUAL.MODULES;
 		ctx.fillStyle = theme.interstage;
 		ctx.fillRect(startX, -radius, length, radius * 2);
 
-		ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+		ctx.strokeStyle = m.INTERSTAGE_BORDER_COLOR;
 		ctx.lineWidth = 1;
 		ctx.strokeRect(startX, -radius, length, radius * 2);
 	}
 
 	static _drawStage1(ctx, startX, radius, length, nozzleX, nozzleLen, theme) {
+		const m = ROCKET_VISUAL.MODULES;
 		const grad = ctx.createLinearGradient(0, -radius, 0, radius);
 		grad.addColorStop(0, theme.stg1Grad[0]);
 		grad.addColorStop(0.4, theme.stg1Grad[1]);
@@ -206,33 +212,32 @@ export class RocketRenderer {
 		ctx.fillRect(startX, -radius, length, radius * 2);
 
 		ctx.fillStyle = theme.accentBand;
-		ctx.fillRect(startX + length - Math.max(2, length * 0.04), -radius, Math.max(2, length * 0.04), radius * 2);
+		ctx.fillRect(startX + length - Math.max(m.STAGE1_BAND_MIN_W, length * m.STAGE1_BAND_W_RATIO), -radius, Math.max(m.STAGE1_BAND_MIN_W, length * m.STAGE1_BAND_W_RATIO), radius * 2);
 
 		ctx.fillStyle = theme.nozzle;
 		ctx.beginPath();
-		ctx.moveTo(startX, -radius * 0.6);
-		ctx.lineTo(nozzleX, -radius * 0.95);
-		ctx.lineTo(nozzleX, radius * 0.95);
-		ctx.lineTo(startX, radius * 0.6);
+		ctx.moveTo(startX, -radius * m.STAGE1_NOZZLE_BASE_RATIO);
+		ctx.lineTo(nozzleX, -radius * m.STAGE1_NOZZLE_BELL_RATIO);
+		ctx.lineTo(nozzleX, radius * m.STAGE1_NOZZLE_BELL_RATIO);
+		ctx.lineTo(startX, radius * m.STAGE1_NOZZLE_BASE_RATIO);
 		ctx.closePath();
 		ctx.fill();
 
 		ctx.fillStyle = theme.fins;
-		const m = ROCKET_VISUAL.MODULES;
 		const finBaseLen = length * m.FIN_BASE_RATIO;
 		const finSpan = radius * m.FIN_SPAN_RATIO;
 
 		ctx.beginPath();
 		ctx.moveTo(startX + finBaseLen, -radius);
 		ctx.lineTo(startX, -radius - finSpan);
-		ctx.lineTo(startX + finBaseLen * 0.25, -radius);
+		ctx.lineTo(startX + finBaseLen * m.FIN_ROOT_RATIO, -radius);
 		ctx.closePath();
 		ctx.fill();
 
 		ctx.beginPath();
 		ctx.moveTo(startX + finBaseLen, radius);
 		ctx.lineTo(startX, radius + finSpan);
-		ctx.lineTo(startX + finBaseLen * 0.25, radius);
+		ctx.lineTo(startX + finBaseLen * m.FIN_ROOT_RATIO, radius);
 		ctx.closePath();
 		ctx.fill();
 	}
@@ -245,30 +250,30 @@ export class RocketRenderer {
 		const busW = R * m.SATELLITE_BUS_W_RATIO;
 		const busH = R * m.SATELLITE_BUS_H_RATIO;
 
-		ctx.fillStyle = '#d4af37';
-		ctx.strokeStyle = '#ffee88';
+		ctx.fillStyle = m.SATELLITE_BUS_FILL;
+		ctx.strokeStyle = m.SATELLITE_BUS_STROKE;
 		ctx.lineWidth = 1;
 		ctx.fillRect(-busW * 0.5, -busH * 0.5, busW, busH);
 		ctx.strokeRect(-busW * 0.5, -busH * 0.5, busW, busH);
 
 		const dishR = busH * m.SATELLITE_DISH_R_RATIO;
 		ctx.beginPath();
-		ctx.arc(busW * 0.65, 0, dishR, -Math.PI * 0.5, Math.PI * 0.5);
-		ctx.strokeStyle = '#ffffff';
+		ctx.arc(busW * m.SATELLITE_DISH_OFFSET_RATIO, 0, dishR, -Math.PI * 0.5, Math.PI * 0.5);
+		ctx.strokeStyle = m.SATELLITE_DISH_COLOR;
 		ctx.lineWidth = 1.0;
 		ctx.stroke();
 
 		const panelW = busW * m.SATELLITE_PANEL_W_RATIO;
 		const panelH = busH * m.SATELLITE_PANEL_H_RATIO;
-		ctx.fillStyle = '#004488';
-		ctx.strokeStyle = '#00aaff';
+		ctx.fillStyle = m.SATELLITE_PANEL_FILL;
+		ctx.strokeStyle = m.SATELLITE_PANEL_STROKE;
 		ctx.lineWidth = 1;
 
-		ctx.fillRect(-panelW * 0.5, -busH * 0.5 - panelH - 1, panelW, panelH);
-		ctx.strokeRect(-panelW * 0.5, -busH * 0.5 - panelH - 1, panelW, panelH);
+		ctx.fillRect(-panelW * 0.5, -busH * 0.5 - panelH - m.SATELLITE_PANEL_MARGIN, panelW, panelH);
+		ctx.strokeRect(-panelW * 0.5, -busH * 0.5 - panelH - m.SATELLITE_PANEL_MARGIN, panelW, panelH);
 
-		ctx.fillRect(-panelW * 0.5, busH * 0.5 + 1, panelW, panelH);
-		ctx.strokeRect(-panelW * 0.5, busH * 0.5 + 1, panelW, panelH);
+		ctx.fillRect(-panelW * 0.5, busH * 0.5 + m.SATELLITE_PANEL_MARGIN, panelW, panelH);
+		ctx.strokeRect(-panelW * 0.5, busH * 0.5 + m.SATELLITE_PANEL_MARGIN, panelW, panelH);
 
 		ctx.restore();
 	}
@@ -287,29 +292,28 @@ export class RocketRenderer {
 				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
-				grad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-				grad.addColorStop(0.15, 'rgba(120, 200, 255, 0.7)');
-				grad.addColorStop(0.5, 'rgba(150, 120, 255, 0.35)');
-				grad.addColorStop(0.85, 'rgba(200, 100, 255, 0.1)');
-				grad.addColorStop(1, 'rgba(150, 50, 255, 0)');
+				for (const [stop, color] of cfg.colors) {
+					grad.addColorStop(stop, color);
+				}
 
 				ctx.fillStyle = grad;
 				ctx.beginPath();
 				ctx.moveTo(0, -w * 0.5);
-				ctx.quadraticCurveTo(-len * 0.3, -w * 0.9, -len, 0);
-				ctx.quadraticCurveTo(-len * 0.3, w * 0.9, 0, w * 0.5);
+				ctx.quadraticCurveTo(-len * cfg.curveLenRatio, -w * cfg.curveWidthRatio, -len, 0);
+				ctx.quadraticCurveTo(-len * cfg.curveLenRatio, w * cfg.curveWidthRatio, 0, w * 0.5);
 				ctx.closePath();
 				ctx.fill();
 
-				ctx.strokeStyle = 'rgba(200, 240, 255, 0.65)';
+				ctx.strokeStyle = cfg.diamondStrokeColor;
 				ctx.lineWidth = 1.2;
 				for (let i = 1; i <= cfg.diamonds; i++) {
 					const dx = -len * (cfg.diamondInterval * i);
 					const dw = (w * cfg.diamondWidthRatio) / i;
+					const dLen = cfg.diamondLength;
 					ctx.beginPath();
-					ctx.moveTo(dx - 3, 0);
+					ctx.moveTo(dx - dLen, 0);
 					ctx.lineTo(dx, -dw);
-					ctx.lineTo(dx + 3, 0);
+					ctx.lineTo(dx + dLen, 0);
 					ctx.lineTo(dx, dw);
 					ctx.closePath();
 					ctx.stroke();
@@ -323,23 +327,21 @@ export class RocketRenderer {
 				const w = R * cfg.widthMult * scale * Math.sqrt(throttle);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
-				grad.addColorStop(0, '#ffffff');
-				grad.addColorStop(0.2, '#fff6bd');
-				grad.addColorStop(0.5, '#ffd15c');
-				grad.addColorStop(0.8, '#ff8c1a');
-				grad.addColorStop(1, 'rgba(180, 80, 0, 0)');
+				for (const [stop, color] of cfg.colors) {
+					grad.addColorStop(stop, color);
+				}
 
 				ctx.fillStyle = grad;
 				ctx.beginPath();
 				ctx.moveTo(0, -w * 0.5);
-				ctx.lineTo(-len * 0.6, -w * 0.35);
+				ctx.lineTo(-len * cfg.curveLenRatio, -w * cfg.curveWidthRatio);
 				ctx.lineTo(-len, 0);
-				ctx.lineTo(-len * 0.6, w * 0.35);
+				ctx.lineTo(-len * cfg.curveLenRatio, w * cfg.curveWidthRatio);
 				ctx.lineTo(0, w * 0.5);
 				ctx.closePath();
 				ctx.fill();
 
-				ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+				ctx.fillStyle = cfg.coreFill;
 				ctx.beginPath();
 				ctx.moveTo(0, -w * cfg.coreWidthRatio);
 				ctx.lineTo(-len * cfg.coreLenRatio, 0);
@@ -355,10 +357,9 @@ export class RocketRenderer {
 				const w = R * cfg.widthMult * scale;
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
-				grad.addColorStop(0, '#ffffff');
-				grad.addColorStop(0.25, '#00ffcc');
-				grad.addColorStop(0.65, 'rgba(0, 160, 255, 0.5)');
-				grad.addColorStop(1, 'rgba(0, 50, 200, 0)');
+				for (const [stop, color] of cfg.colors) {
+					grad.addColorStop(stop, color);
+				}
 
 				ctx.fillStyle = grad;
 				ctx.beginPath();
@@ -368,7 +369,7 @@ export class RocketRenderer {
 				ctx.closePath();
 				ctx.fill();
 
-				ctx.strokeStyle = '#88ffff';
+				ctx.strokeStyle = cfg.beamStrokeColor;
 				ctx.lineWidth = 1;
 				ctx.beginPath();
 				ctx.moveTo(0, 0);
@@ -384,23 +385,21 @@ export class RocketRenderer {
 				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
-				grad.addColorStop(0, '#ffffff');
-				grad.addColorStop(0.15, '#ffea77');
-				grad.addColorStop(0.45, '#ff6600');
-				grad.addColorStop(0.85, 'rgba(200, 30, 0, 0.4)');
-				grad.addColorStop(1, 'rgba(100, 10, 0, 0)');
+				for (const [stop, color] of cfg.colors) {
+					grad.addColorStop(stop, color);
+				}
 
 				ctx.fillStyle = grad;
 				ctx.beginPath();
 				ctx.moveTo(0, -w * 0.5);
-				ctx.quadraticCurveTo(-len * 0.35, -w * 0.75, -len, 0);
-				ctx.quadraticCurveTo(-len * 0.35, w * 0.75, 0, w * 0.5);
+				ctx.quadraticCurveTo(-len * cfg.curveLenRatio, -w * cfg.curveWidthRatio, -len, 0);
+				ctx.quadraticCurveTo(-len * cfg.curveLenRatio, w * cfg.curveWidthRatio, 0, w * 0.5);
 				ctx.closePath();
 				ctx.fill();
 
 				const coreGrad = ctx.createLinearGradient(0, 0, -len * cfg.coreLenRatio, 0);
-				coreGrad.addColorStop(0, '#ffffff');
-				coreGrad.addColorStop(1, 'rgba(255, 230, 150, 0)');
+				coreGrad.addColorStop(0, cfg.coreFillStart);
+				coreGrad.addColorStop(1, cfg.coreFillEnd);
 				ctx.fillStyle = coreGrad;
 				ctx.beginPath();
 				ctx.moveTo(0, -w * cfg.coreWidthRatio);

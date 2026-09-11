@@ -1,7 +1,7 @@
 
 // gravsim_utils.js
 
-import { RENDER, PHYSICS } from './gravsim_const.js';
+import { RENDER, PHYSICS, MULTISTAGE_ROCKET } from './gravsim_const.js';
 
 /*******************************************************************
  * DOM Utility class for Dirty Checking (Differential Update)
@@ -177,4 +177,70 @@ export class FormatUtils {
 		}
 		return Number(val).toFixed(fractionDigits).padStart(totalLength, ' ');
 	}
+}
+
+/**
+ * Normalizes any rocket config (legacy single-stage or new multi-stage)
+ * into a valid multi-stage configuration structure.
+ */
+export function normalizeRocketConfig(config) {
+	if (!config) {
+		return null;
+	}
+
+	if (config.stages && Array.isArray(config.stages) && config.stages.length > 0) {
+		return {
+			...config,
+			colorTheme: config.colorTheme || 'orange',
+			stages: config.stages.map((stg, idx) => ({
+				stageNumber: stg.stageNumber || (idx + 1),
+				name: stg.name || `Stage ${idx + 1}`,
+				fuelType: stg.fuelType || 'liquid',
+				thrustKN: stg.thrustKN !== undefined ? stg.thrustKN : 7600,
+				dryMassT: stg.dryMassT !== undefined ? stg.dryMassT : 7,
+				fuelMassT: stg.fuelMassT !== undefined ? stg.fuelMassT : 88,
+				oxidMassT: stg.oxidMassT !== undefined ? stg.oxidMassT : 220,
+				burnTime: stg.burnTime !== undefined ? stg.burnTime : 160,
+				ofRatio: stg.ofRatio !== undefined ? stg.ofRatio : 2.5,
+				radius: stg.radius !== undefined ? stg.radius : 2.5,
+				separationDelaySec: stg.separationDelaySec !== undefined ? stg.separationDelaySec : MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC,
+				ignitionDelaySec: stg.ignitionDelaySec !== undefined ? stg.ignitionDelaySec : MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC,
+				jettisonSpeedM_S: stg.jettisonSpeedM_S !== undefined ? stg.jettisonSpeedM_S : MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S,
+			})),
+			payload: config.payload || { name: 'Payload', massT: 0, radius: 1.0 },
+			fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }
+		};
+	}
+
+	// Convert legacy single-stage config to 1-stage multistage config
+	const dryMassT = config.dryMassT !== undefined ? config.dryMassT : (config.emptyMass !== undefined ? config.emptyMass : 7);
+	const fuelMassT = config.fuelMassT !== undefined ? config.fuelMassT : (config.fuelMass !== undefined ? config.fuelMass : 88);
+	const oxidMassT = config.oxidMassT !== undefined ? config.oxidMassT : (config.oxidMass !== undefined ? config.oxidMass : 220);
+	const thrustKN = config.thrustKN !== undefined ? config.thrustKN : (config.thrustForce ? config.thrustForce / 1000 : 7600);
+	const burnTime = config.burnTime !== undefined ? config.burnTime : (config.time !== undefined ? config.time : 160);
+	const ofRatio = config.ofRatio !== undefined ? config.ofRatio : 2.5;
+
+	return {
+		...config,
+		colorTheme: config.colorTheme || 'orange',
+		stages: [
+			{
+				stageNumber: 1,
+				name: 'Core Stage',
+				fuelType: config.fuelType || 'liquid',
+				thrustKN: thrustKN,
+				dryMassT: dryMassT,
+				fuelMassT: fuelMassT,
+				oxidMassT: oxidMassT,
+				burnTime: burnTime,
+				ofRatio: ofRatio,
+				radius: config.radius || 2.5,
+				separationDelaySec: MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC,
+				ignitionDelaySec: MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC,
+				jettisonSpeedM_S: MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S
+			}
+		],
+		payload: config.payload || { name: 'Payload', massT: 0, radius: 1.0 },
+		fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }
+	};
 }

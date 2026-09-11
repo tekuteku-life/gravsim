@@ -290,6 +290,30 @@ export const ROCKET_VISUAL = {
 	MIN_SCREEN_RADIUS: 5.5,
 	LOD_RADIUS_THRESHOLD: 4.0,
 	PAYLOAD_ZOOM_MAGNIFICATION: 1.0,
+	LOW_DETAIL: {
+		STAGE1_LEN_RATIO: 4.2,
+		STAGE2_LEN_RATIO: 2.2,
+		WIDTH_RATIO: 0.9,
+		PLUME_LEN_RATIO: 2.8,
+		PLUME_WIDTH_RATIO: 0.35,
+		PLUME_COLOR: '#ffaa00',
+		SATELLITE_BUS_W_RATIO: 1.5,
+		SATELLITE_BUS_H_RATIO: 1.0,
+		SATELLITE_BUS_COLOR: '#d4af37',
+		SOLAR_PADDLE_COLOR: '#0066cc',
+		PADDLE_OFFSET_X_RATIO: 0.4,
+		PADDLE_OFFSET_Y_RATIO: 0.6,
+		PADDLE_W_RATIO: 0.8,
+		PADDLE_H_RATIO: 0.5,
+		PADDLE_GAP_RATIO: 0.1
+	},
+	ALIGNMENT: {
+		BASE_X_STAGE1_RATIO: 0.4,
+		BASE_X_UPPER_RATIO: -0.6,
+		PAYLOAD_OFFSET_RATIO: 0.35,
+		UPPER_PLUME_SCALE: 0.65,
+		MAIN_PLUME_SCALE: 1.0
+	},
 	MODULES: {
 		STAGE1_RADIUS_RATIO: 0.7,
 		STAGE1_LENGTH_RATIO: 2.8,
@@ -301,43 +325,105 @@ export const ROCKET_VISUAL = {
 		NOZZLE2_LENGTH_RATIO: 0.32,
 		FIN_BASE_RATIO: 0.2,
 		FIN_SPAN_RATIO: 0.65,
+		FIN_ROOT_RATIO: 0.25,
+		FAIRING_CURVE_X_RATIO: 0.7,
+		FAIRING_CURVE_Y_RATIO: 0.9,
+		FAIRING_TIP_MARGIN: 2,
+		FAIRING_BAND_MIN_W: 1.5,
+		FAIRING_BAND_W_RATIO: 0.15,
+		STAGE2_BORDER_COLOR: 'rgba(0, 0, 0, 0.15)',
+		STAGE2_NOZZLE_BASE_RATIO: 0.35,
+		STAGE2_NOZZLE_BELL_RATIO: 0.75,
+		INTERSTAGE_BORDER_COLOR: 'rgba(255, 255, 255, 0.15)',
+		STAGE1_BAND_MIN_W: 2,
+		STAGE1_BAND_W_RATIO: 0.04,
+		STAGE1_NOZZLE_BASE_RATIO: 0.6,
+		STAGE1_NOZZLE_BELL_RATIO: 0.95,
 		SATELLITE_BUS_W_RATIO: 0.65,
 		SATELLITE_BUS_H_RATIO: 0.50,
 		SATELLITE_PANEL_W_RATIO: 0.75,
 		SATELLITE_PANEL_H_RATIO: 0.90,
-		SATELLITE_DISH_R_RATIO: 0.40
+		SATELLITE_DISH_R_RATIO: 0.40,
+		SATELLITE_DISH_OFFSET_RATIO: 0.65,
+		SATELLITE_DISH_COLOR: '#ffffff',
+		SATELLITE_BUS_FILL: '#d4af37',
+		SATELLITE_BUS_STROKE: '#ffee88',
+		SATELLITE_PANEL_FILL: '#004488',
+		SATELLITE_PANEL_STROKE: '#00aaff',
+		SATELLITE_PANEL_MARGIN: 1
 	},
 	PLUMES: {
+		THRUST_THRESHOLD: 0.01,
 		hydro: {
 			flickerFreq: 45,
 			noiseAmp: 0.08,
 			lenMult: 9.0,
 			widthMult: 2.0,
+			curveLenRatio: 0.3,
+			curveWidthRatio: 0.9,
 			diamonds: 3,
 			diamondInterval: 0.16,
-			diamondWidthRatio: 0.32
+			diamondWidthRatio: 0.32,
+			diamondLength: 3,
+			diamondStrokeColor: 'rgba(200, 240, 255, 0.65)',
+			colors: [
+				[0, 'rgba(255, 255, 255, 0.9)'],
+				[0.15, 'rgba(120, 200, 255, 0.7)'],
+				[0.5, 'rgba(150, 120, 255, 0.35)'],
+				[0.85, 'rgba(200, 100, 255, 0.1)'],
+				[1, 'rgba(150, 50, 255, 0)']
+			]
 		},
 		solid: {
+			flickerFreq: 0,
 			noiseAmp: 0.18,
 			lenMult: 9.5,
 			widthMult: 1.6,
+			curveLenRatio: 0.6,
+			curveWidthRatio: 0.35,
 			coreLenRatio: 0.55,
-			coreWidthRatio: 0.28
+			coreWidthRatio: 0.28,
+			coreFill: 'rgba(255, 255, 255, 0.95)',
+			colors: [
+				[0, '#ffffff'],
+				[0.2, '#fff6bd'],
+				[0.5, '#ffd15c'],
+				[0.8, '#ff8c1a'],
+				[1, 'rgba(180, 80, 0, 0)']
+			]
 		},
 		ion: {
 			flickerFreq: 20,
 			noiseAmp: 0.04,
 			lenMult: 4.0,
 			widthMult: 0.7,
-			beamLengthRatio: 0.8
+			beamLengthRatio: 0.8,
+			beamStrokeColor: '#88ffff',
+			colors: [
+				[0, '#ffffff'],
+				[0.25, '#00ffcc'],
+				[0.65, 'rgba(0, 160, 255, 0.5)'],
+				[1, 'rgba(0, 50, 200, 0)']
+			]
 		},
 		liquid: {
 			flickerFreq: 35,
 			noiseAmp: 0.12,
 			lenMult: 8.0,
 			widthMult: 1.8,
+			curveLenRatio: 0.35,
+			curveWidthRatio: 0.75,
 			coreLenRatio: 0.4,
-			coreWidthRatio: 0.28
+			coreWidthRatio: 0.28,
+			coreFillStart: '#ffffff',
+			coreFillEnd: 'rgba(255, 230, 150, 0)',
+			colors: [
+				[0, '#ffffff'],
+				[0.15, '#ffea77'],
+				[0.45, '#ff6600'],
+				[0.85, 'rgba(200, 30, 0, 0.4)'],
+				[1, 'rgba(100, 10, 0, 0)']
+			]
 		}
 	},
 	THEMES: {

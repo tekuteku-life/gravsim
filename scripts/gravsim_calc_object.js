@@ -5,11 +5,11 @@ import {
 	PHYSICS, ROCHE_LIMIT, AERO_DYNAMIC,
 	DEFAULT_OBJECT_PARAMS, TANK_PRESSURE_SIM,
 	OBJECT_TYPES, SIMULATION,
-	MULTISTAGE_ROCKET, normalizeRocketConfig,
+	MULTISTAGE_ROCKET,
 	TRAJECTORY_PREDICTION
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
-import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { MathUtils, UnitConvertUtils, normalizeRocketConfig } from './gravsim_utils.js';
 
 /*******************************************************************
  * Calculation Object Class for Base
