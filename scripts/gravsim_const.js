@@ -287,7 +287,7 @@ export const RENDER = {
 
 // Visual constants for procedural rocket rendering
 export const ROCKET_VISUAL = {
-	MIN_SCREEN_RADIUS: 5.5,
+	MIN_SCREEN_RADIUS: 3.5,
 	LOD_RADIUS_THRESHOLD: 4.0,
 	PAYLOAD_ZOOM_MAGNIFICATION: 1.0,
 	LOW_DETAIL: {
