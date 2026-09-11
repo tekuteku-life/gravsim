@@ -732,6 +732,18 @@ export class CalcRocket extends GravSimCalcObject {
 		let actualDt = 0; // s
 		let throttle = 1.0;
 
+		// Calculate true prograde angle (relative to dominant body if available, else world)
+		let progVx = this.vx;
+		let progVy = this.vy;
+		if (refBody) {
+			progVx -= refBody.vx;
+			progVy -= refBody.vy;
+		}
+		const trueProgradeAngle = (progVx * progVx + progVy * progVy > 1e-4) ? Math.atan2(progVy, progVx) : this.thrustAngle;
+		if (!this.inAtmosphere || this._progradeAngle === undefined) {
+			this._progradeAngle = trueProgradeAngle;
+		}
+
 		// Populate cached sensor object (Zero-allocation design) to prevent GC spike
 		this._sensorData.dt = dt;
 		this._sensorData.mass = this.mass;

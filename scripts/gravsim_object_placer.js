@@ -566,8 +566,18 @@ export class ObjectPlacer {
 
 	_calculateSlingshotVelocity(startScreenX, startScreenY, currentScreenX, currentScreenY) {
 		// Initial velocity vector opposite to dragging direction using screen pixels
-		const dxPx = startScreenX - currentScreenX;
-		const dyPx = startScreenY - currentScreenY;
+		let dxPx = startScreenX - currentScreenX;
+		let dyPx = startScreenY - currentScreenY;
+
+		const renderState = this.universe.camera.getRenderState();
+		if (renderState.rotation !== 0) {
+			const cosA = Math.cos(-renderState.rotation);
+			const sinA = Math.sin(-renderState.rotation);
+			const rDx = dxPx * cosA - dyPx * sinA;
+			const rDy = dxPx * sinA + dyPx * cosA;
+			dxPx = rDx;
+			dyPx = rDy;
+		}
 
 		// Calculate velocity directly from screen delta to prevent light-speed issue
 		const rawVx = dxPx * SIMULATION.SLINGSHOT_POWER;
@@ -619,15 +629,19 @@ export class ObjectPlacer {
 
 		const launchX = basis.x + this.startRelX;
 		const launchY = basis.y + this.startRelY;
-		
+
+		const launchVx = UnitConvertUtils.m2pix(v.vx) + basis.vx;
+		const launchVy = UnitConvertUtils.m2pix(v.vy) + basis.vy;
+		const launchAngle = Math.atan2(launchVy, launchVx);
+
 		this.placeObject(
 			name,
 			launchX, launchY,
-			UnitConvertUtils.m2pix(v.vx) + basis.vx,
-			UnitConvertUtils.m2pix(v.vy) + basis.vy,
-			{ angle: Math.atan2(v.vy, v.vx) }
+			launchVx,
+			launchVy,
+			{ angle: launchAngle }
 		);
-		
+
 		this.isSlingshotting = false;
 		this.startRelX = null;
 		this.startRelY = null;
