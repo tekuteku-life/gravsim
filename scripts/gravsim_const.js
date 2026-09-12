@@ -581,7 +581,6 @@ export const TELEMETRY = {
 		LAMP_TEST_DURATION_SEC: 1.0,
 		TOWER_CLEARANCE_ALT: 1000, // m
 		TOWER_CLEARANCE_TIME: 10, // s
-		FAIRING_SEP_ALT: 100000, // m (Karman line)
 		ORBITAL_VELOCITY_KM_S: 7.5 // km/s
 	}
 };

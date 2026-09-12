@@ -579,7 +579,6 @@ export class TelemetryPanel {
 		const gRatioTh = conf.G_LIM_RATIO || 0.85;
 		const twrAltTh = conf.TOWER_CLEARANCE_ALT || 1000;
 		const twrTimeTh = conf.TOWER_CLEARANCE_TIME || 10;
-		const fairingAltTh = conf.FAIRING_SEP_ALT || 100000;
 		const orbitVelKmS = conf.ORBITAL_VELOCITY_KM_S || 7.5;
 
 		const maxG = target.maxGLimit || 0;
