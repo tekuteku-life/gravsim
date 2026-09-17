@@ -574,6 +574,8 @@ export class TelemetryPanel {
 			return;
 		}
 
+		tm = tm || target?.telemetry || {};
+
 		const conf = TELEMETRY.ANNUNCIATOR || {};
 		const qLimitTh = conf.Q_LIM_TH || 75;
 		const gRatioTh = conf.G_LIM_RATIO || 0.85;
@@ -582,7 +584,9 @@ export class TelemetryPanel {
 		const orbitVelKmS = conf.ORBITAL_VELOCITY_KM_S || 7.5;
 
 		const maxG = target.maxGLimit || 0;
-		const totalVelKmS = Math.sqrt(tm.vV * tm.vV + tm.vH * tm.vH) / 1000;
+		const vV = tm.vV || 0;
+		const vH = tm.vH || 0;
+		const totalVelKmS = Math.sqrt(vV * vV + vH * vH) / 1000;
 
 		// 1. Q-LIM (Dynamic Pressure Limit approaching)
 		const isQLimit = Boolean(tm.isQLimitNear || tm.structRatio >= qLimitTh || tm.status === TELEMETRY.STATUS.MAX_Q);

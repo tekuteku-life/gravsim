@@ -253,7 +253,7 @@ test('ObjectManager - updateObjectParams synchronizes positions and spawns stage
 	const buffer = WorkerBridge.formatWorkerToMain(mockBufferObjs);
 	objMgr.updateObjectParams({
 		objectsData: buffer,
-		validLength: 2 * 46
+		validLength: buffer.length
 	});
 
 	// Rocket should have updated position
@@ -266,6 +266,65 @@ test('ObjectManager - updateObjectParams synchronizes positions and spawns stage
 	assert.ok(booster, 'Booster debris object must exist');
 	assert.equal(booster.name, 'Stage 1 Booster');
 	assert.equal(booster.mass, 25.0);
+
+	// Test getNextId
+	const nextId1 = objMgr.getNextId();
+	const nextId2 = objMgr.getNextId();
+	assert.equal(nextId2, nextId1 + 1);
+
+	// Test rocket:update-state EventBus
+	EventBus.emit('rocket:update-state', rocket.id, true, false);
+	assert.equal(rocket.isIgnited, true);
+	assert.equal(rocket.isHoldDown, false);
+
+	// Test payload separation renaming & fallback debris spec
+	rocket.payload = { name: 'Dragon Payload' };
+	const mockBufferObjs2 = [
+		{
+			id: 101,
+			type: OBJECT_TYPES.ROCKET,
+			x: 100, y: 200, vx: 10, vy: 20, ax: 0, ay: 0,
+			mass: 10.0, radius: 1.5,
+			isCollided: false, isShattered: false,
+			isPayloadSeparated: true,
+			payloadName: 'Dragon Payload'
+		},
+		{
+			id: 103,
+			type: OBJECT_TYPES.DEBRIS,
+			debrisSubType: 99, // unknown subtype triggers fallback spec
+			parentRocketId: 101,
+			x: 50, y: 100, vx: 5, vy: 10, ax: 0, ay: 0,
+			mass: 1.0, radius: 0.5,
+			isCollided: false, isShattered: false
+		}
+	];
+	const buffer2 = WorkerBridge.formatWorkerToMain(mockBufferObjs2);
+	objMgr.updateObjectParams({
+		objectsData: buffer2,
+		validLength: buffer2.length
+	});
+	assert.equal(rocket.name, 'Dragon Payload');
+	assert.ok(objMgr.objects.find(o => o.id === 103));
+
+	// Test shattering in worker
+	let shatteredEventFired = false;
+	EventBus.on('object:shattered', () => { shatteredEventFired = true; });
+	const shatterObjs = [
+		{
+			id: 101,
+			type: OBJECT_TYPES.ROCKET,
+			x: 100, y: 200, vx: 0, vy: 0, ax: 0, ay: 0,
+			mass: 10.0, radius: 1.5,
+			isCollided: false, isShattered: true
+		}
+	];
+	const buffer3 = WorkerBridge.formatWorkerToMain(shatterObjs);
+	objMgr.updateObjectParams({
+		objectsData: buffer3,
+		validLength: buffer3.length
+	});
+	assert.ok(shatteredEventFired, 'object:shattered event must be emitted');
 });
 
 test('ObjectPlacer - Orbital placement around Sun and host body', () => {

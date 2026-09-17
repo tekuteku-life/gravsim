@@ -259,6 +259,7 @@ export class Rocket extends GravSimObject {
 		this.isHoldDown = false;
 		this.isIgnited = true;
 		this.isInternalPower = false;
+		this.disableStaging = false;
 
 		this.telemetry = {
 			status: 0,

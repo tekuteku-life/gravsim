@@ -12,8 +12,13 @@ import { EventBus } from './gravsim_event_bus.js';
 
 export class ObjectManager {
 	constructor(renderer, workerManager) {
-		this.renderer = renderer;
-		this.workerManager = workerManager;
+		if (renderer && !workerManager && (renderer.calcWorkerManager || renderer.workerManager)) {
+			this.renderer = renderer.renderer || null;
+			this.workerManager = renderer.calcWorkerManager || renderer.workerManager;
+		} else {
+			this.renderer = renderer;
+			this.workerManager = workerManager;
+		}
 		this.objects = [];
 		this.physicsSequence = 0;
 
@@ -88,6 +93,7 @@ export class ObjectManager {
 			stages: obj.stages,
 			payload: obj.payload,
 			fairing: obj.fairing,
+			disableStaging: !!obj.disableStaging,
 			colorTheme: obj.colorTheme || 'orange'
 		};
 	}
@@ -129,7 +135,7 @@ export class ObjectManager {
 	updateObjectParams(data) {
 		this.physicsSequence++;
 
-		WorkerBridge.parseWorkerToMain(data.objectsData, data.validLength, (objData) => {
+		const applyOneObject = (objData) => {
 			const target = this.objects.find(t => t.id === objData.id);
 			if (target) {
 				this._applyBaseState(target, objData);
@@ -192,13 +198,20 @@ export class ObjectManager {
 				this._applyBaseState(deb, objData);
 				deb.updateHistory(this.physicsSequence, this.objects);
 			}
-		});
+		};
 
-		// Return the buffer to the worker using Transferable Objects
-		this.workerManager.postMessage(
-			{ cmd: 'returnBuffer', buffer: data.objectsData },
-			[data.objectsData]
-		);
+		if (data && data.objectsData) {
+			WorkerBridge.parseWorkerToMain(data.objectsData, data.validLength, applyOneObject);
+			if (this.workerManager) {
+				// Return the buffer to the worker using Transferable Objects
+				this.workerManager.postMessage(
+					{ cmd: 'returnBuffer', buffer: data.objectsData },
+					[data.objectsData]
+				);
+			}
+		} else if (data && data.id !== undefined) {
+			applyOneObject(data);
+		}
 	}
 
 	_applyBaseState(target, objData) {

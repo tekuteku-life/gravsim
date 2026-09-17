@@ -328,8 +328,27 @@ export class FlightComputer {
 		const progradeAngle = this.telemetryCache.progradeAngle;
 		const zenithAngle = MathUtils.normalizeAngle(this.telemetryCache.gravityAngle + Math.PI);
 
-		// Track prograde direction smoothly after thrust stops (coasting/orbital phase)
+		// After thrust stops (coasting/orbital phase)
 		if (sensor.burnTime <= 0) {
+			// If payload has separated, orient attitude towards the Sun for solar panel charging
+			if (sensor.isPayloadSeparated && sensor.sunX !== undefined && sensor.sunY !== undefined) {
+				const dx = sensor.sunX - sensor.x;
+				const dy = sensor.sunY - sensor.y;
+				if (dx * dx + dy * dy > 1.0) {
+					const sunAngle = Math.atan2(dy, dx);
+					const turnDiff = MathUtils.normalizeAngle(sunAngle - this.currentThrustAngle);
+					const sunTurnRate = FLIGHT_COMPUTER_CONFIG.SUN_POINTING_TURN_RATE_PER_SEC || 1.5;
+					const maxTurn = sunTurnRate * sensor.dt;
+
+					if (Math.abs(turnDiff) > maxTurn) {
+						return MathUtils.normalizeAngle(this.currentThrustAngle + Math.sign(turnDiff) * maxTurn);
+					} else {
+						return sunAngle;
+					}
+				}
+			}
+
+			// Otherwise track prograde direction smoothly (rocket coasting)
 			const turnDiff = MathUtils.normalizeAngle(progradeAngle - this.currentThrustAngle);
 			const coastTurnRate = FLIGHT_COMPUTER_CONFIG.COAST_TURN_RATE_PER_SEC || 1.5;
 			const maxTurn = coastTurnRate * sensor.dt;
@@ -408,6 +427,17 @@ export class FlightComputer {
 			return MathUtils.normalizeAngle(this.currentThrustAngle + Math.sign(turnDiff) * maxTurn);
 		} else {
 			return safeTargetAngle;
+		}
+	}
+
+	updateGuidance(dt, sensor, alt) {
+		if (sensor) {
+			sensor.dt = dt;
+			if (sensor.accel !== undefined && sensor.ax === undefined && sensor.ay === undefined) {
+				sensor.ax = sensor.accel;
+				sensor.ay = 0;
+			}
+			return this.update(sensor);
 		}
 	}
 

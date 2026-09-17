@@ -263,6 +263,7 @@ export class CalcRocket extends GravSimCalcObject {
 		this.flightProfile = thrustData?.flightProfile || [];
 		this.maxGLimit = thrustData?.maxGLimit || 0; // G
 		this.autoControl = thrustData?.autoControl !== undefined ? thrustData.autoControl : true;
+		this.disableStaging = thrustData?.disableStaging || false;
 		this.hostId = thrustData?.hostId !== undefined ? thrustData.hostId : null;
 		this.hostAngleRad = thrustData?.hostAngleRad || 0; // rad
 		this.hostAltM = thrustData?.hostAltM || 0; // m
@@ -352,6 +353,7 @@ export class CalcRocket extends GravSimCalcObject {
 	}
 
 	separateCurrentStage() {
+		if (this.disableStaging) { return; }
 		const stage = this.stages[this.currentStageIndex];
 		if (!stage) { return; }
 
@@ -426,7 +428,7 @@ export class CalcRocket extends GravSimCalcObject {
 	}
 
 	separateFairing(curAltM) {
-		if (!this.fairing.enabled || this.fairing.isSeparated) { return; }
+		if (this.disableStaging || !this.fairing.enabled || this.fairing.isSeparated) { return; }
 
 		const sepAltM = (this.fairing.separationAltKm || MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM) * 1000;
 		if (curAltM >= sepAltM) {
@@ -728,7 +730,7 @@ export class CalcRocket extends GravSimCalcObject {
 		this.tankPresOxid = Math.max(0, basePresO + totalNoiseO * noiseScale);
 	}
 
-	flightControl(dt, refBody, distToRefM) {
+	flightControl(dt, refBody, distToRefM, sunBody = null) {
 		let actualDt = 0; // s
 		let throttle = 1.0;
 
@@ -743,6 +745,9 @@ export class CalcRocket extends GravSimCalcObject {
 		if (!this.inAtmosphere || this._progradeAngle === undefined) {
 			this._progradeAngle = trueProgradeAngle;
 		}
+
+		// Fallback sun finding if sunBody not explicitly provided
+		const effectiveSun = sunBody || (refBody?.name === 'Sun' ? refBody : null);
 
 		// Populate cached sensor object (Zero-allocation design) to prevent GC spike
 		this._sensorData.dt = dt;
@@ -769,6 +774,9 @@ export class CalcRocket extends GravSimCalcObject {
 		this._sensorData.isIgnited = this.isIgnited;
 		this._sensorData.stageIndex = this.currentStageIndex !== undefined ? this.currentStageIndex : 0;
 		this._sensorData.stages = this.stages;
+		this._sensorData.isPayloadSeparated = this.isPayloadSeparated;
+		this._sensorData.sunX = effectiveSun ? effectiveSun.x : undefined;
+		this._sensorData.sunY = effectiveSun ? effectiveSun.y : undefined;
 
 		this.flightComputer.update(this._sensorData);
 
@@ -780,7 +788,7 @@ export class CalcRocket extends GravSimCalcObject {
 		}
 
 		// Check fairing separation
-		if (distToRefM && refBody) {
+		if (!this.disableStaging && distToRefM && refBody) {
 			const curAltM = distToRefM - refBody.radius;
 			this.separateFairing(curAltM);
 		}
@@ -792,28 +800,30 @@ export class CalcRocket extends GravSimCalcObject {
 		}
 
 		// Handle Staging State Machine
-		const curStage = this.stages[this.currentStageIndex];
-		if (this.stageState === 'PRE_LAUNCH') {
-			if (this.isIgnited && !this.isHoldDown) {
-				this.stageState = 'STG_BURNING';
-				this.stgTimer = 0;
-			}
-		} else if (this.stageState === 'STG_MECO') {
-			this.stgTimer += dt;
-			const sepDelay = curStage ? curStage.separationDelaySec : MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC;
-			if (this.stgTimer >= sepDelay) {
-				this.separateCurrentStage();
-			}
-		} else if (this.stageState === 'INTERSTAGE_COAST') {
-			this.stgTimer += dt;
-			const nextStage = this.stages[this.currentStageIndex];
-			const ignDelay = nextStage ? nextStage.ignitionDelaySec : MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC;
-			if (this.stgTimer >= ignDelay) {
-				this.isIgnited = true;
-				this.stageState = 'STG_BURNING';
-				this.stgTimer = 0;
-				this.presState = 'IGNITION_TRANSIENT';
-				this.presTimer = 0;
+		if (!this.disableStaging) {
+			const curStage = this.stages[this.currentStageIndex];
+			if (this.stageState === 'PRE_LAUNCH') {
+				if (this.isIgnited && !this.isHoldDown) {
+					this.stageState = 'STG_BURNING';
+					this.stgTimer = 0;
+				}
+			} else if (this.stageState === 'STG_MECO') {
+				this.stgTimer += dt;
+				const sepDelay = curStage ? curStage.separationDelaySec : MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC;
+				if (this.stgTimer >= sepDelay) {
+					this.separateCurrentStage();
+				}
+			} else if (this.stageState === 'INTERSTAGE_COAST') {
+				this.stgTimer += dt;
+				const nextStage = this.stages[this.currentStageIndex];
+				const ignDelay = nextStage ? nextStage.ignitionDelaySec : MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC;
+				if (this.stgTimer >= ignDelay) {
+					this.isIgnited = true;
+					this.stageState = 'STG_BURNING';
+					this.stgTimer = 0;
+					this.presState = 'IGNITION_TRANSIENT';
+					this.presTimer = 0;
+				}
 			}
 		}
 

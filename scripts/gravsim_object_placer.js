@@ -3,7 +3,7 @@
 
 import {
 	PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS,
-	DEPLOY_PROFILES, RENDER, EVENT_PRIORITY
+	DEPLOY_PROFILES, RENDER, EVENT_PRIORITY, MULTISTAGE_ROCKET
 } from './gravsim_const.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
 import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
@@ -127,6 +127,32 @@ export class ObjectPlacer {
 			if (options.stages !== undefined) { obj.stages = options.stages; }
 			if (options.payload !== undefined) { obj.payload = options.payload; }
 			if (options.fairing !== undefined) { obj.fairing = options.fairing; }
+
+			if (options.disableStaging !== undefined) {
+				obj.disableStaging = options.disableStaging;
+			}
+			if (options.isSlingshot) {
+				obj.disableStaging = true;
+			}
+
+			// For slingshot / non-staging rocket, ensure fairing is enabled and not separated
+			if (obj.disableStaging) {
+				if (!obj.fairing) {
+					obj.fairing = {
+						enabled: true,
+						massT: MULTISTAGE_ROCKET.FAIRING_DEFAULT_MASS_T || 1.7,
+						separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM || 100,
+						isSeparated: false
+					};
+				}
+				if (!obj.stages || obj.stages.length === 0) {
+					const rl = this.universe?.RocketLauncher;
+					if (rl && rl.stages && rl.stages.length > 0) {
+						obj.stages = JSON.parse(JSON.stringify(rl.stages));
+						obj.payload = rl.payload ? JSON.parse(JSON.stringify(rl.payload)) : { name: 'Payload', massT: 5.0, radius: 1.0 };
+					}
+				}
+			}
 
 			this.universe.TelemetryPanel.targetId = obj.id;
 		} else {
@@ -639,7 +665,11 @@ export class ObjectPlacer {
 			launchX, launchY,
 			launchVx,
 			launchVy,
-			{ angle: launchAngle }
+			{
+				angle: launchAngle,
+				isSlingshot: true,
+				disableStaging: true
+			}
 		);
 
 		this.isSlingshotting = false;

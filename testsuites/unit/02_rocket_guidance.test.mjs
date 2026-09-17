@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { setupMockDOM, createMockUniverse, createMockCelestialBody, createMockRocket, createMockElement, assertClose } from '../test_helpers.mjs';
+import { setupMockDOM, createMockUniverse, createMockCelestialBody, createMockRocket, createMockElement, createFalcon9Config, assertClose } from '../test_helpers.mjs';
 
 // Setup DOM and global mocks before imports
 setupMockDOM();
@@ -11,6 +11,7 @@ import { RocketLauncher } from '../../scripts/gravsim_rocket_launcher.js';
 import { TrajectoryPredictor } from '../../scripts/gravsim_trajectory_predictor.js';
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
 import { DebrisGenerator } from '../../scripts/gravsim_debris_generator.js';
+import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
 import { PHYSICS, TELEMETRY, MULTISTAGE_PRESETS, normalizeRocketConfig, OBJECT_TYPES, OBJECT_STATE } from '../../scripts/gravsim_const.js';
 
 test('FlightComputer - Initialization and default telemetry cache', () => {
@@ -1151,5 +1152,98 @@ test('RocketLauncher - drawTargetMarker blueprint render, rollout preview, and a
 	launcher.loadState(null);
 	launcher.loadState({ mode: 'free', stages: null, payload: null, fairing: null });
 });
+
+test('FlightComputer - Sun-pointing attitude orientation after payload separation', () => {
+	const fc = new FlightComputer({ maxGLimit: 3.5 });
+
+	// Sun at (1e11, 0)
+	const sunX = 1e11;
+	const sunY = 0;
+	const rocketX = 0;
+	const rocketY = 0;
+	const expectedAngleToSun = 0.0;
+
+	// 1. Before payload separation, coasting: tracks progradeAngle (Math.PI / 2)
+	const coastSensor = {
+		burnTime: 0,
+		isHoldDown: false,
+		isIgnited: false,
+		isPayloadSeparated: false,
+		dt: 1.0,
+		x: rocketX,
+		y: rocketY,
+		progradeAngle: Math.PI / 2,
+		gravityAngle: -Math.PI / 2,
+		qAxialKpa: 0,
+		qLateralKpa: 0,
+		aoaDeg: 0,
+		altM: 200000,
+		vV: 0,
+		vH: 7800,
+		mass: 50,
+		dryMass: 50,
+		fuelMass: 0,
+		thrustForce: 0,
+		thrustRatio: 0,
+		massLossRate: 0,
+		sunX,
+		sunY
+	};
+
+	fc.update(coastSensor);
+	assertClose(fc.currentThrustAngleRad, Math.PI / 2, 0.2);
+
+	// 2. After payload separation: smoothly rotates to face the Sun (0.0 rad)
+	const payloadSensor = {
+		...coastSensor,
+		isPayloadSeparated: true
+	};
+
+	for (let i = 0; i < 15; i++) {
+		fc.update(payloadSensor);
+	}
+
+	assertClose(fc.currentThrustAngleRad, expectedAngleToSun, 1e-3);
+});
+
+test('Slingshot Rocket - Preserves fairing and prevents stage separation', () => {
+	const engine = new PhysicsEngine();
+	const f9 = createFalcon9Config();
+
+	engine.addObject({
+		id: 1,
+		name: 'Earth',
+		type: OBJECT_TYPES.CELESTIAL,
+		x: 0, y: 0, vx: 0, vy: 0,
+		mass: 5.972e24, radius: 6371000
+	});
+
+	// Slingshot rocket with disableStaging: true
+	const slingshotRocket = engine.addObject({
+		id: 700,
+		name: 'Slingshot-F9',
+		type: OBJECT_TYPES.ROCKET,
+		x: 0, y: 6371000 + 150000, // 150 km altitude (above 100km separation threshold)
+		vx: 5000, vy: 0,
+		mass: f9.totalMassT, radius: 1.85,
+		fuelMass: 0, oxidMass: 0,
+		thrustForce: 0, burnTime: 0,
+		stages: f9.stages, payload: f9.payload, fairing: f9.fairing,
+		isHoldDown: false, isIgnited: false,
+		disableStaging: true
+	});
+
+	for (let i = 0; i < 20; i++) {
+		engine._calculateForces();
+		engine._updateFlightControl(0.1);
+	}
+
+	const debris = engine.objects.filter(o => o.type === OBJECT_TYPES.DEBRIS);
+	assert.equal(debris.length, 0, 'Slingshot rocket must never generate stage or fairing debris');
+	assert.equal(slingshotRocket.fairing.isSeparated, false, 'Fairing must remain attached');
+	assert.equal(slingshotRocket.currentStageIndex, 0, 'Stage index must remain 0');
+	assert.equal(slingshotRocket.isPayloadSeparated, false, 'Payload must not separate');
+});
+
 
 

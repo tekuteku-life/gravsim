@@ -26,7 +26,7 @@ export class RocketRenderer {
 	}
 
 	static _drawLowDetail(ctx, rocket, R, theme) {
-		const isPayloadOnly = Boolean(
+		const isPayloadOnly = !rocket.disableStaging && Boolean(
 			rocket.isPayloadSeparated ||
 			rocket.telemetry?.isPayloadSeparated ||
 			(rocket.stages && rocket.currentStageIndex >= rocket.totalStages)
@@ -74,7 +74,7 @@ export class RocketRenderer {
 		const curStgIdx = rocket.telemetry?.stageIndex !== undefined ? rocket.telemetry.stageIndex : (rocket.currentStageIndex || 0);
 		const totalStg = rocket.telemetry?.totalStages || rocket.stages?.length || 1;
 
-		const isPayloadOnly = Boolean(
+		const isPayloadOnly = !rocket.disableStaging && Boolean(
 			rocket.isPayloadSeparated ||
 			rocket.telemetry?.isPayloadSeparated ||
 			(rocket.stages && curStgIdx >= totalStg)
@@ -98,9 +98,10 @@ export class RocketRenderer {
 
 		const hasStage1 = (curStgIdx === 0);
 		const hasFairing = Boolean(
-			rocket.fairing?.enabled &&
+			rocket.disableStaging ||
+			(rocket.fairing?.enabled &&
 			!rocket.telemetry?.isFairingSeparated &&
-			!rocket.fairing?.isSeparated
+			!rocket.fairing?.isSeparated)
 		);
 
 		const baseX = hasStage1 ? R * align.BASE_X_STAGE1_RATIO : R * align.BASE_X_UPPER_RATIO;

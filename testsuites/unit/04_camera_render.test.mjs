@@ -9,6 +9,7 @@ import { Camera } from '../../scripts/gravsim_camera.js';
 import { Renderer } from '../../scripts/gravsim_renderer.js';
 import { OverlayRenderer } from '../../scripts/gravsim_overlay_renderer.js';
 import { PadEffectRenderer } from '../../scripts/gravsim_pad_effect.js';
+import { RocketRenderer } from '../../scripts/gravsim_rocket_renderer.js';
 import { VisualEffectManager } from '../../scripts/gravsim_visual_effect_manager.js';
 import { TrailLineRenderer, EffectRenderer } from '../../scripts/gravsim_trail_renderer.js';
 import { Trajectory } from '../../scripts/gravsim_trajectory.js';
@@ -558,3 +559,122 @@ test('EffectRenderer & SparkEffectRenderer & SmokeEffectRenderer - Complete visu
 
 	EffectRenderer.draw(effectTrail, rc);
 });
+
+test('RocketRenderer - Low detail and High detail rendering across flight phases and plume types', () => {
+	const mockCanvas = createMockElement('canvas');
+	const ctx = mockCanvas.getContext('2d');
+
+	// 1. Low detail - Standard rocket firing stage 1
+	const lowRocketStg1 = {
+		thrustAngle: 0.5,
+		isInternalPower: true,
+		colorTheme: 'orange',
+		currentStageIndex: 0,
+		totalStages: 2,
+		stages: [{ fuelType: 'liquid' }, { fuelType: 'liquid' }],
+		isIgnited: true,
+		burnTime: 10,
+		thrustRatio: 1.0,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, lowRocketStg1, 100, 100, 10, 1.0);
+
+	// 2. Low detail - Stage 2
+	const lowRocketStg2 = {
+		...lowRocketStg1,
+		currentStageIndex: 1,
+		telemetry: { stageIndex: 1 }
+	};
+	RocketRenderer.draw(ctx, lowRocketStg2, 100, 100, 12, 1.0);
+
+	// 3. Low detail - Payload only
+	const lowPayload = {
+		...lowRocketStg1,
+		isPayloadSeparated: true
+	};
+	RocketRenderer.draw(ctx, lowPayload, 100, 100, 8, 1.0);
+
+	// 4. High detail - Complete vehicle with fairing and Stage 1 active (liquid plume)
+	const highRocketF9 = {
+		thrustAngle: 0.0,
+		isInternalPower: false,
+		colorTheme: 'white',
+		currentStageIndex: 0,
+		totalStages: 2,
+		stages: [{ fuelType: 'liquid' }, { fuelType: 'liquid' }],
+		fairing: { enabled: true, isSeparated: false },
+		isIgnited: true,
+		burnTime: 50,
+		thrustRatio: 0.9,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, highRocketF9, 200, 200, 50, 1.0);
+
+	// 5. High detail - Fairing separated, Stage 2 active (hydro plume)
+	const highRocketHydro = {
+		thrustAngle: 1.2,
+		colorTheme: 'orange',
+		currentStageIndex: 1,
+		totalStages: 2,
+		stages: [{ fuelType: 'liquid' }, { fuelType: 'hydro' }],
+		fairing: { enabled: true, isSeparated: true },
+		telemetry: { isFairingSeparated: true, stageIndex: 1 },
+		isIgnited: true,
+		burnTime: 40,
+		thrustRatio: 1.0,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, highRocketHydro, 200, 200, 45, 1.0);
+
+	// 6. High detail - Solid booster plume
+	const highRocketSolid = {
+		thrustAngle: 0.8,
+		colorTheme: 'dark',
+		currentStageIndex: 0,
+		totalStages: 1,
+		stages: [{ fuelType: 'solid' }],
+		isIgnited: true,
+		burnTime: 20,
+		thrustRatio: 0.8,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, highRocketSolid, 200, 200, 60, 1.0);
+
+	// 7. High detail - Ion plume
+	const highRocketIon = {
+		thrustAngle: -0.5,
+		colorTheme: 'blue',
+		currentStageIndex: 0,
+		totalStages: 1,
+		stages: [{ fuelType: 'ion' }],
+		isIgnited: true,
+		burnTime: 100,
+		thrustRatio: 0.5,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, highRocketIon, 200, 200, 50, 1.0);
+
+	// 8. High detail - Payload satellite only
+	const highPayload = {
+		thrustAngle: 0.0,
+		isPayloadSeparated: true,
+		currentStageIndex: 2,
+		totalStages: 2,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, highPayload, 200, 200, 40, 1.0);
+
+	// 9. Slingshot rocket: disableStaging preserves fairing and complete stack
+	const slingshotRocket = {
+		thrustAngle: 0.3,
+		disableStaging: true,
+		isPayloadSeparated: true, // ignored due to disableStaging
+		currentStageIndex: 2,
+		totalStages: 2,
+		stages: [{ fuelType: 'liquid' }, { fuelType: 'liquid' }],
+		fairing: { enabled: false } // ignored due to disableStaging
+	};
+	RocketRenderer.draw(ctx, slingshotRocket, 200, 200, 50, 1.0);
+	RocketRenderer.draw(ctx, slingshotRocket, 200, 200, 10, 1.0);
+});
+

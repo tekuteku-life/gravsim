@@ -3,9 +3,7 @@
 // Inherits and reuses PhysicsEngine to ensure 100% consistent physics behavior without duplicate code.
 
 import {
-	PHYSICS, SIMULATION, OBJECT_TYPES,
-	DEFAULT_OBJECT_PARAMS, DEFAULT_FLIGHT_EVENTS,
-	ROCKET_FUELS, TRAJECTORY_PREDICTION
+	PHYSICS, DEFAULT_FLIGHT_EVENTS, TRAJECTORY_PREDICTION
 } from './gravsim_const.js';
 import { PhysicsEngine } from './gravsim_calc.js';
 import { CalcCelestialBody, CalcRocket } from './gravsim_calc_object.js';
@@ -102,7 +100,7 @@ export class PredictorPhysicsEngine extends PhysicsEngine {
 
 	_updateFlightControl(dt) {
 		if (this.rocket && !this.rocket.collided && !this.rocket.shattered) {
-			this.rocket.flightControl(dt, this.rocket.dominantBody, this.rocket.distToDominantM);
+			this.rocket.flightControl(dt, this.rocket.dominantBody, this.rocket.distToDominantM, this.sunBody);
 			if (this.rocket._pendingDebris) {
 				this.rocket._pendingDebris.length = 0;
 			}

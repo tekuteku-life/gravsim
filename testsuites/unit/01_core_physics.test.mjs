@@ -17,7 +17,7 @@ import { MathUtils, UnitConvertUtils, FormatUtils, DOMUtils } from '../../script
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
 import { WorkerProfiler } from '../../scripts/gravsim_profiler.js';
 import { runMultiBodySimulation } from '../../scripts/gravsim_calc_predictor.js';
-import { OBJECT_TYPES, PHYSICS } from '../../scripts/gravsim_const.js';
+import { OBJECT_TYPES, PHYSICS, CALC_BUFFER_CONFIG } from '../../scripts/gravsim_const.js';
 import { logDebug, assertClose, setupMockDOM, createMockElement } from '../test_helpers.mjs';
 
 describe('Unit 01: Core Physics, QuadTree, Buffer Interop & Utilities', () => {
@@ -261,7 +261,7 @@ describe('Unit 01: Core Physics, QuadTree, Buffer Interop & Utilities', () => {
 		const testObjs = [mockObj, mockRocket2, mockDebris1, mockDebris2, mockCelestial];
 		const packed = WorkerBridge.formatWorkerToMain(testObjs);
 		assert.ok(packed instanceof Float64Array);
-		assert.equal(packed.length, 46 * testObjs.length, 'Must contain exactly 46 Float64 attributes per object');
+		assert.equal(packed.length, CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT * testObjs.length, `Must contain exactly ${CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT} Float64 attributes per object`);
 
 		// 2. Unpack
 		const parsedList = [];
@@ -301,10 +301,10 @@ describe('Unit 01: Core Physics, QuadTree, Buffer Interop & Utilities', () => {
 		WorkerBridge.recycleBuffer(null); // null buffer branch
 		WorkerBridge.recycleBuffer({ byteLength: 0 }); // 0-length branch
 		const smallBuf = new ArrayBuffer(8);
-		WorkerBridge.recycleBuffer(smallBuf); // too small for 46*8
+		WorkerBridge.recycleBuffer(smallBuf); // too small for OBJ_ATTR_COUNT*8
 		WorkerBridge.recycleBuffer(packed.buffer); // large buffer added to pool
 		const reused = WorkerBridge.formatWorkerToMain([mockObj]);
-		assert.equal(reused.length, 46, 'Buffer pool must supply recycled array buffer');
+		assert.equal(reused.length, CALC_BUFFER_CONFIG.OBJ_ATTR_COUNT, 'Buffer pool must supply recycled array buffer');
 	});
 
 	it('should verify UnitConvertUtils, MathUtils, FormatUtils, and DOMUtils operations', () => {

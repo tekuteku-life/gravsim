@@ -53,23 +53,23 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.BURN_TIME] = obj.burnTime > 0 ? obj.burnTime : 0;
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = obj._thrustRatio || 0;
 
-				const tm = obj.flightComputer.getTelemetry();
-				buffer[offset + BUFFER_INDEX.TM_STATUS] = tm.status;
-				buffer[offset + BUFFER_INDEX.TM_Q_AXIAL] = tm.qAxialKpa;
-				buffer[offset + BUFFER_INDEX.TM_Q_LATERAL] = tm.qLateralKpa;
-				buffer[offset + BUFFER_INDEX.TM_STRUCT_RATIO] = tm.structRatio;
-				buffer[offset + BUFFER_INDEX.TM_AOA_DEG] = tm.aoaDeg;
-				buffer[offset + BUFFER_INDEX.TM_PROGRADE_ANGLE] = tm.progradeAngle;
-				buffer[offset + BUFFER_INDEX.TM_GRAVITY_ANGLE] = tm.gravityAngle;
-				buffer[offset + BUFFER_INDEX.TM_REM_DV] = tm.remDv;
-				buffer[offset + BUFFER_INDEX.TM_TWR] = tm.twr;
-				buffer[offset + BUFFER_INDEX.TM_ALT_M] = tm.altM;
-				buffer[offset + BUFFER_INDEX.TM_VV] = tm.vV;
-				buffer[offset + BUFFER_INDEX.TM_VH] = tm.vH;
-				buffer[offset + BUFFER_INDEX.TM_AV] = tm.aV;
-				buffer[offset + BUFFER_INDEX.TM_AH] = tm.aH;
-				buffer[offset + BUFFER_INDEX.TM_CURRENT_G] = tm.currentG;
-				buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME] = obj.flightComputer.flightTime;
+				const tm = obj.flightComputer?.getTelemetry?.() || {};
+				buffer[offset + BUFFER_INDEX.TM_STATUS] = tm.status || 0;
+				buffer[offset + BUFFER_INDEX.TM_Q_AXIAL] = tm.qAxialKpa || 0;
+				buffer[offset + BUFFER_INDEX.TM_Q_LATERAL] = tm.qLateralKpa || 0;
+				buffer[offset + BUFFER_INDEX.TM_STRUCT_RATIO] = tm.structRatio || 0;
+				buffer[offset + BUFFER_INDEX.TM_AOA_DEG] = tm.aoaDeg || 0;
+				buffer[offset + BUFFER_INDEX.TM_PROGRADE_ANGLE] = tm.progradeAngle || 0;
+				buffer[offset + BUFFER_INDEX.TM_GRAVITY_ANGLE] = tm.gravityAngle || 0;
+				buffer[offset + BUFFER_INDEX.TM_REM_DV] = tm.remDv || 0;
+				buffer[offset + BUFFER_INDEX.TM_TWR] = tm.twr || 0;
+				buffer[offset + BUFFER_INDEX.TM_ALT_M] = tm.altM || 0;
+				buffer[offset + BUFFER_INDEX.TM_VV] = tm.vV || 0;
+				buffer[offset + BUFFER_INDEX.TM_VH] = tm.vH || 0;
+				buffer[offset + BUFFER_INDEX.TM_AV] = tm.aV || 0;
+				buffer[offset + BUFFER_INDEX.TM_AH] = tm.aH || 0;
+				buffer[offset + BUFFER_INDEX.TM_CURRENT_G] = tm.currentG || 0;
+				buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME] = obj.flightComputer?.flightTime || 0;
 				buffer[offset + BUFFER_INDEX.THRUST_ANGLE] = obj.thrustAngle;
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_FUEL] = obj.tankPresFuel || 0;
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = obj.tankPresOxid || 0;
@@ -95,7 +95,7 @@ export class WorkerBridge {
 			}
 			buffer[offset + BUFFER_INDEX.RADIUS] = obj.radius || 1;
 			
-			let flags = (obj.collided ? 1 : 0) | (obj.shattered ? 2 : 0)
+			let flags = ((obj.collided || obj.isCollided) ? 1 : 0) | ((obj.shattered || obj.isShattered) ? 2 : 0)
 				| (obj.isImpact ? 4 : 0) | (obj.inAtmosphere ? 8 : 0)
 				| (obj.isEscaping ? 16 : 0) | (obj.isHoldDown ? 32 : 0) | (obj.isIgnited ? 64 : 0);
 			if (obj.type === OBJECT_TYPES.ROCKET) {

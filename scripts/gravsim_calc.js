@@ -53,7 +53,8 @@ export class PhysicsEngine {
 					isIgnited: data.isIgnited,
 					stages: data.stages,
 					payload: data.payload,
-					fairing: data.fairing
+					fairing: data.fairing,
+					disableStaging: data.disableStaging
 				}
 			);
 		} else if (data.type === OBJECT_TYPES.DEBRIS) {
@@ -129,6 +130,8 @@ export class PhysicsEngine {
 				this.atmBodies.push(obj);
 			}
 		}
+
+		this.sunBody = this.massiveBodies.find(b => b.name === 'Sun') || (this.massiveBodies.length > 0 ? this.massiveBodies[0] : null);
 	}
 
 	_updateHoldDownPositions(dt) {
@@ -439,7 +442,7 @@ export class PhysicsEngine {
 			if (obj.collided || obj.shattered) { continue; }
 
 			if (obj.type === OBJECT_TYPES.ROCKET) {
-				obj.flightControl(dt, obj.dominantBody, obj.distToDominantM);
+				obj.flightControl(dt, obj.dominantBody, obj.distToDominantM, this.sunBody);
 				if (obj._pendingDebris && obj._pendingDebris.length > 0) {
 					while (obj._pendingDebris.length > 0) {
 						newDebris.push(obj._pendingDebris.shift());
