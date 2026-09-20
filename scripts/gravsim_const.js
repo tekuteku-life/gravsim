@@ -499,6 +499,8 @@ export const ROCKET_VISUAL = {
 // Trajectory Prediction & Simulation Constants
 export const TRAJECTORY_PREDICTION = {
 	MAX_SIM_TIME_SEC: 365.25 * 24 * 60 * 60, // 1 year (365.25 days)
+	DEFAULT_DURATION_MONTHS: 1.0,
+	MIN_DURATION_MONTHS: 0.2,
 	MAX_POINTS: 3000,
 	MAX_STEPS: 100000,
 	DUMMY_ROCKET_ID: 999999,

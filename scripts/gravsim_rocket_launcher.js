@@ -64,8 +64,8 @@ export class RocketLauncher {
 		this.thrustKN = this.stages[0].thrustKN;
 		this.calculatedBurnTime = 0;
 		this.maxGLimit = 4.0;	// G
-		this.predictionDurationMonths = 6;
-		this.maxSimTimeSec = 6 * (365.25 / 12) * 86400; // 6 months in seconds
+		this.predictionDurationMonths = TRAJECTORY_PREDICTION.DEFAULT_DURATION_MONTHS;
+		this.maxSimTimeSec = this.predictionDurationMonths * (365.25 / 12) * 86400; // 1 month in seconds
 		this.autoControl = true; // Auto Flight Computer flag
 
 		this.rolloutedRocketId = null;

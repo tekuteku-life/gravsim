@@ -112,7 +112,7 @@ export class SystemTab {
 		// Format sim duration helper
 		const formatSimDuration = (months) => {
 			if (months < 12) {
-				const days = Math.round(months * 30.4375);
+				const days = Math.round(months * (365.25 / 12));
 				return `${months} mo (${days} d)`;
 			} else {
 				const yrs = (months / 12).toFixed(1);
@@ -121,7 +121,7 @@ export class SystemTab {
 		};
 
 		this.ui.predDuration.addEventListener('input', (e) => {
-			const months = parseInt(e.target.value, 10);
+			const months = parseFloat(e.target.value);
 			const sec = months * (365.25 / 12) * 86400;
 			this.universe.RocketLauncher.predictionDurationMonths = months;
 			this.universe.RocketLauncher.maxSimTimeSec = sec;

@@ -575,6 +575,22 @@ export class RocketTab {
 		this._updateRocketStats();
 	}
 
+	_getDefaultHostId() {
+		const celestials = this.universe.objects.filter(o => o.type === OBJECT_TYPES.CELESTIAL);
+		const earth = celestials.find(o => o.name === 'Earth' || o.name?.toLowerCase() === 'earth');
+		if (earth) {
+			return earth.id;
+		}
+		const nonSunCelestials = celestials.filter(o => o.id !== 0);
+		if (nonSunCelestials.length > 0) {
+			return nonSunCelestials[nonSunCelestials.length - 1].id;
+		}
+		if (celestials.length > 0) {
+			return celestials[celestials.length - 1].id;
+		}
+		return 0;
+	}
+
 	_updateRocketHostOptions() {
 		const currentHostId = this.universe.RocketLauncher.hostId;
 		this.ui.rlHostSelect.innerHTML = '';
@@ -586,7 +602,7 @@ export class RocketTab {
 			option.value = obj.id;
 			option.textContent = `${obj.name} (ID: ${obj.id})`;
 
-			if (obj.id === currentHostId || (currentHostId === null && this.universe.camera.trackingTarget && obj.id === this.universe.camera.trackingTarget.id)) {
+			if (obj.id === currentHostId || (currentHostId === null && obj.id === this._getDefaultHostId())) {
 				option.selected = true;
 				this.universe.RocketLauncher.hostId = obj.id;
 			}
@@ -731,13 +747,10 @@ export class RocketTab {
 		this.saveCameraTarget();
 
 		let targetHostId = this.universe.RocketLauncher.hostId;
-		if (targetHostId === null || targetHostId === 0) { 
-			const nonSunObjects = this.universe.objects.filter(o => o.id !== 0 && o.type === OBJECT_TYPES.CELESTIAL);
-			if (nonSunObjects.length > 0) {
-				targetHostId = Math.max(...nonSunObjects.map(o => o.id));
-			} else {
-				targetHostId = 0;
-			}
+		const hostStillExists = this.universe.objects.some(o => o.id === targetHostId && o.type === OBJECT_TYPES.CELESTIAL);
+
+		if (targetHostId === null || targetHostId === 0 || !hostStillExists) {
+			targetHostId = this._getDefaultHostId();
 			this.universe.RocketLauncher.hostId = targetHostId;
 		}
 		this._setupLaunchEnvironment(targetHostId);
