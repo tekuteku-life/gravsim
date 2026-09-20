@@ -1,0 +1,22 @@
+{
+	"id": "mars_transfer",
+	"name": "Trans-Mars Injection (TMI)",
+	"description": "Hyperbolic escape departure from Earth into a heliocentric transfer orbit reaching Mars orbit (1.52 AU)",
+	"targetOrbit": "Mars Transfer Orbit (1.52 AU)",
+	"predictionDurationMonths": 12.0,
+	"disableOrbitalCutoff": true,
+	"flightProfile": [
+		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
+		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 10 },
+		{ "type": "alt", "value": 15000, "thrust": 100, "angle": 25 },
+		{ "type": "alt", "value": 40000, "thrust": 100, "angle": 45 },
+		{ "type": "alt", "value": 80000, "thrust": 100, "angle": 65 },
+		{ "type": "alt", "value": 160000, "thrust": 100, "angle": 82 },
+		{ "type": "alt", "value": 250000, "thrust": 100, "angle": 90 },
+		{ "type": "alt", "value": 350000, "thrust": 100, "angle": 90 }
+	],
+	"rendering": {
+		"trajectoryColor": "#ff5533",
+		"orbitColor": "rgba(255, 85, 51, 0.4)"
+	}
+}

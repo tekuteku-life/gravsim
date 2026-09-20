@@ -50,7 +50,14 @@ export class RocketRenderer {
 		}
 
 		const len = hasStage1 ? R * lod.STAGE1_LEN_RATIO : R * lod.STAGE2_LEN_RATIO;
-		const width = R * lod.WIDTH_RATIO;
+		let width = R * lod.WIDTH_RATIO;
+
+		const boosterCount = hasStage1 ? (rocket.boosters?.count || rocket.rendering?.boosters?.count || 0) : 0;
+		if (boosterCount === 2) {
+			width *= 1.35;
+		} else if (boosterCount >= 4) {
+			width *= 1.65;
+		}
 
 		ctx.fillStyle = hasStage1 ? theme.stg1Grad[1] : theme.stg2Grad[0];
 		ctx.beginPath();
@@ -60,11 +67,12 @@ export class RocketRenderer {
 		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
 		if (isFiring) {
 			const plumeLen = R * lod.PLUME_LEN_RATIO * (rocket.thrustRatio || 1.0);
+			const plumeWidthMult = boosterCount >= 4 ? 1.5 : (boosterCount === 2 ? 1.25 : 1.0);
 			ctx.fillStyle = lod.PLUME_COLOR;
 			ctx.beginPath();
-			ctx.moveTo(-len * 0.5, -width * lod.PLUME_WIDTH_RATIO);
+			ctx.moveTo(-len * 0.5, -width * lod.PLUME_WIDTH_RATIO * plumeWidthMult);
 			ctx.lineTo(-len * 0.5 - plumeLen, 0);
-			ctx.lineTo(-len * 0.5, width * lod.PLUME_WIDTH_RATIO);
+			ctx.lineTo(-len * 0.5, width * lod.PLUME_WIDTH_RATIO * plumeWidthMult);
 			ctx.closePath();
 			ctx.fill();
 		}
@@ -125,6 +133,7 @@ export class RocketRenderer {
 			}
 
 			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
+			this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R);
 
 			if (isFiring) {
 				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
@@ -155,6 +164,7 @@ export class RocketRenderer {
 				this._drawStage2(ctx, stg2X, r2, l2, false, 0, 0, theme);
 				this._drawInterstage(ctx, inter1X, r1, lInter, theme);
 				this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
+				this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R);
 
 				if (isFiring) {
 					this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
@@ -222,6 +232,7 @@ export class RocketRenderer {
 		if (hasStage1) {
 			this._drawInterstage(ctx, interX, r1, lInter, theme);
 			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
+			this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R);
 		}
 
 		if (isFiring) {
@@ -572,5 +583,107 @@ export class RocketRenderer {
 		}
 
 		ctx.restore();
+	}
+
+	static _drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R) {
+		const boosters = rocket.boosters ||
+			rocket.rendering?.boosters ||
+			(rocket.stages && rocket.stages[0]?.boosters);
+		if (!boosters || !boosters.count || boosters.count <= 0) {
+			return;
+		}
+
+		const count = boosters.count;
+		const rB = R * (boosters.radiusRatio || 0.26);
+		const lB = R * (boosters.lengthRatio || 1.70);
+		const yOffset = r1 + rB * (boosters.offsetYRatio || 0.95);
+		const xAttachOffset = l1 * (boosters.attachOffsetXRatio || 0.12);
+		const xBase = stg1X + xAttachOffset;
+		const lNozzleB = R * (boosters.nozzleLengthRatio || 0.20);
+		const lNoseB = R * (boosters.noseConeLengthRatio || 0.35);
+		const casingColor = boosters.casingColor || '#f0f2f5';
+		const noseConeColor = boosters.noseConeColor || '#22262c';
+		const bandColor = boosters.bandColor || '#c85a1a';
+		const nozzleColor = boosters.nozzleColor || '#1c2024';
+		const plumeFuel = boosters.plumeFuel || 'solid';
+		const plumeScale = boosters.plumeScale || 0.55;
+
+		// Determine lateral Y positions for boosters
+		const yPositions = [];
+		if (count === 2) {
+			// Symmetrical top and bottom side boosters (H3-22 style)
+			yPositions.push(-yOffset, yOffset);
+		} else if (count === 4) {
+			// Clustered pairs on both lateral sides (H3-24 style)
+			const pairGap = rB * (boosters.pairSpacingRatio || 0.35);
+			yPositions.push(-yOffset - pairGap, -yOffset + pairGap, yOffset - pairGap, yOffset + pairGap);
+		} else {
+			for (let i = 0; i < count; i++) {
+				const sign = (i % 2 === 0) ? -1 : 1;
+				const tier = Math.floor(i / 2);
+				yPositions.push(sign * (yOffset + tier * rB * 0.7));
+			}
+		}
+
+		for (const yPos of yPositions) {
+			// 1. Booster Cylindrical Body (Casing)
+			const bodyGrad = ctx.createLinearGradient(0, yPos - rB, 0, yPos + rB);
+			bodyGrad.addColorStop(0, '#ffffff');
+			bodyGrad.addColorStop(0.35, casingColor);
+			bodyGrad.addColorStop(1, '#8c95a0');
+			ctx.fillStyle = bodyGrad;
+			ctx.fillRect(xBase, yPos - rB, lB, rB * 2);
+
+			// Center seam line
+			ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
+			ctx.lineWidth = 1;
+			ctx.beginPath();
+			ctx.moveTo(xBase, yPos);
+			ctx.lineTo(xBase + lB, yPos);
+			ctx.stroke();
+
+			// 2. Attachment Bands (Forward & Aft)
+			ctx.fillStyle = bandColor;
+			ctx.fillRect(xBase + lB * 0.82, yPos - rB, Math.max(1.5, rB * 0.3), rB * 2);
+			ctx.fillRect(xBase + lB * 0.15, yPos - rB, Math.max(1.5, rB * 0.3), rB * 2);
+
+			// 3. Nose Cone (Aerodynamic cone angled slightly inward toward core centerline)
+			const tipCantY = (yPos > 0 ? -1 : 1) * rB * 0.25;
+			const noseTipX = xBase + lB + lNoseB;
+			const noseTipY = yPos + tipCantY;
+
+			const noseGrad = ctx.createLinearGradient(xBase + lB, yPos - rB, noseTipX, yPos + rB);
+			noseGrad.addColorStop(0, casingColor);
+			noseGrad.addColorStop(0.5, noseConeColor);
+			noseGrad.addColorStop(1, '#111418');
+			ctx.fillStyle = noseGrad;
+
+			ctx.beginPath();
+			ctx.moveTo(xBase + lB, yPos - rB);
+			ctx.quadraticCurveTo(xBase + lB + lNoseB * 0.6, yPos - rB * 0.2 + tipCantY, noseTipX, noseTipY);
+			ctx.quadraticCurveTo(xBase + lB + lNoseB * 0.6, yPos + rB * 0.2 + tipCantY, xBase + lB, yPos + rB);
+			ctx.closePath();
+			ctx.fill();
+
+			// 4. Conical Nozzle
+			const nozzleGrad = ctx.createLinearGradient(xBase - lNozzleB, yPos - rB * 0.85, xBase, yPos + rB * 0.85);
+			nozzleGrad.addColorStop(0, nozzleColor);
+			nozzleGrad.addColorStop(0.5, '#353b43');
+			nozzleGrad.addColorStop(1, '#111418');
+			ctx.fillStyle = nozzleGrad;
+
+			ctx.beginPath();
+			ctx.moveTo(xBase, yPos - rB * 0.55);
+			ctx.lineTo(xBase - lNozzleB, yPos - rB * 0.85);
+			ctx.lineTo(xBase - lNozzleB, yPos + rB * 0.85);
+			ctx.lineTo(xBase, yPos + rB * 0.55);
+			ctx.closePath();
+			ctx.fill();
+
+			// 5. Solid Booster Exhaust Plume (when firing)
+			if (isFiring && throttle > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD) {
+				this._drawPlume(ctx, xBase - lNozzleB, yPos, plumeScale, throttle, plumeFuel, R);
+			}
+		}
 	}
 }

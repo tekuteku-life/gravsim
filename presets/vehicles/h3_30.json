@@ -1,0 +1,52 @@
+{
+	"id": "h3_30",
+	"name": "H3-30 (LE-9 x 3, No SRB)",
+	"description": "Two-stage cryogenic launch vehicle with 3x LE-9 main engines and no solid rocket boosters (H3-30S/L configuration)",
+	"lengthM": 63.0,
+	"colorTheme": "orange",
+	"stages": [
+		{
+			"stageNumber": 1,
+			"name": "1st Stage (LE-9 x 3 Core)",
+			"fuelType": "hydro",
+			"thrustKN": 4410,
+			"dryMassT": 25.0,
+			"fuelMassT": 34.0,
+			"oxidMassT": 206.0,
+			"burnTime": 240.0,
+			"ofRatio": 6.0,
+			"radius": 2.6,
+			"separationDelaySec": 3.0,
+			"ignitionDelaySec": 2.0,
+			"jettisonSpeedM_S": 18.0
+		},
+		{
+			"stageNumber": 2,
+			"name": "2nd Stage (LE-5B-3 Upper)",
+			"fuelType": "hydro",
+			"thrustKN": 150,
+			"dryMassT": 3.5,
+			"fuelMassT": 4.0,
+			"oxidMassT": 24.0,
+			"burnTime": 618.0,
+			"ofRatio": 6.0,
+			"radius": 2.6,
+			"separationDelaySec": 3.0,
+			"ignitionDelaySec": 2.0,
+			"jettisonSpeedM_S": 5.0
+		}
+	],
+	"defaultFairing": {
+		"enabled": true,
+		"massT": 2.0,
+		"separationAltKm": 115
+	},
+	"rendering": {
+		"colorTheme": "orange",
+		"lengthM": 63.0,
+		"boosters": {
+			"count": 0
+		}
+	}
+}
+

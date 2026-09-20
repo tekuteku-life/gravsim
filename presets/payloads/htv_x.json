@@ -1,0 +1,30 @@
+{
+	"id": "htv_x",
+	"name": "HTV-X Space Station Cargo Transfer",
+	"description": "Uncrewed space station resupply vehicle with autonomous orbital maneuvering RCS thrusters for ISS rendezvous",
+	"massT": 6.0,
+	"radius": 2.2,
+	"recommendedMissionId": "iss_rendezvous",
+	"fairing": {
+		"enabled": true,
+		"massT": 2.2,
+		"separationAltKm": 120
+	},
+	"propulsion": {
+		"enabled": true,
+		"name": "HTV-X Orbital Maneuvering RCS",
+		"fuelType": "liquid",
+		"thrustKN": 20.0,
+		"dryMassT": 4.5,
+		"fuelMassT": 0.5,
+		"oxidMassT": 1.0,
+		"burnTime": 220.0,
+		"ofRatio": 2.0
+	},
+	"rendering": {
+		"busColor": "#c8d0d8",
+		"solarPanels": { "count": 2, "color": "#004488" },
+		"dockingPort": true
+	}
+}
+

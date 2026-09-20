@@ -1,0 +1,31 @@
+{
+	"id": "mmx",
+	"name": "Martian Moons eXploration (MMX)",
+	"description": "Mars and Martian moon Phobos/Deimos exploration probe with high-efficiency deep space propulsion for interplanetary injection and orbital maneuvers",
+	"massT": 4.0,
+	"radius": 2.0,
+	"recommendedMissionId": "mars_transfer",
+	"fairing": {
+		"enabled": true,
+		"massT": 2.0,
+		"separationAltKm": 125
+	},
+	"propulsion": {
+		"enabled": true,
+		"name": "MMX Interplanetary Propulsion System",
+		"fuelType": "liquid",
+		"thrustKN": 8.0,
+		"dryMassT": 1.8,
+		"fuelMassT": 0.8,
+		"oxidMassT": 1.4,
+		"burnTime": 850.0,
+		"ofRatio": 1.75
+	},
+	"rendering": {
+		"busColor": "#b8972e",
+		"solarPanels": { "count": 2, "color": "#0066cc", "spanRatio": 1.2 },
+		"dish": { "count": 1, "color": "#ffffff", "radiusRatio": 0.45 },
+		"propulsionModule": true
+	}
+}
+

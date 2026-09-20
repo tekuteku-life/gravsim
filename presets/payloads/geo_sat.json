@@ -1,0 +1,30 @@
+{
+	"id": "geo_sat",
+	"name": "Geostationary Telecommunications Satellite",
+	"description": "High-capacity telecommunications satellite equipped with a bi-propellant liquid apogee engine for GTO-to-GEO insertion",
+	"massT": 4.5,
+	"radius": 2.0,
+	"recommendedMissionId": "gto_insertion",
+	"fairing": {
+		"enabled": true,
+		"massT": 1.8,
+		"separationAltKm": 115
+	},
+	"propulsion": {
+		"enabled": true,
+		"name": "Liquid Apogee Engine (LAE)",
+		"fuelType": "liquid",
+		"thrustKN": 4.0,
+		"dryMassT": 2.2,
+		"fuelMassT": 0.8,
+		"oxidMassT": 1.5,
+		"burnTime": 1800.0,
+		"ofRatio": 1.875
+	},
+	"rendering": {
+		"busColor": "#d4af37",
+		"solarPanels": { "count": 2, "color": "#0077dd", "spanRatio": 1.4 },
+		"dish": { "count": 2, "color": "#ffffff", "radiusRatio": 0.35 }
+	}
+}
+

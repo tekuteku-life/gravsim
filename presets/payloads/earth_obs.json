@@ -1,0 +1,22 @@
+{
+	"id": "earth_obs",
+	"name": "Earth Observation Satellite (ALOS-4)",
+	"description": "Earth observation satellite for high-resolution SAR and optical environmental monitoring (Passive LEO payload)",
+	"massT": 3.0,
+	"radius": 1.8,
+	"recommendedMissionId": "leo_250km",
+	"fairing": {
+		"enabled": true,
+		"massT": 1.5,
+		"separationAltKm": 110
+	},
+	"propulsion": {
+		"enabled": false
+	},
+	"rendering": {
+		"busColor": "#d4af37",
+		"solarPanels": { "count": 2, "color": "#0066cc" },
+		"antenna": { "type": "sar_radar", "color": "#e0e0e0" }
+	}
+}
+

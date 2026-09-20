@@ -4,10 +4,12 @@
 import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, MULTISTAGE_PRESETS, MULTISTAGE_ROCKET } from './gravsim_const.js';
 import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
+import { presetManager } from './gravsim_preset_manager.js';
 
 export class RocketTab {
 	constructor(universe) {
 		this.universe = universe;
+		this.presetManager = universe?.presetManager || presetManager;
 		this.previousTimeScaleVal = null;
 		this.previousZoomScaleVal = null;
 		this.previousCameraTarget = null;
@@ -32,6 +34,10 @@ export class RocketTab {
 			rlHostAngleVal: document.getElementById('rl-host-angle-val'),
 			rlHostAlt: document.getElementById('rl-host-alt'),
 			rlHostAltVal: document.getElementById('rl-host-alt-val'),
+			rlVehicleSelect: document.getElementById('rl-vehicle-select'),
+			rlPayloadSelect: document.getElementById('rl-payload-select'),
+			rlMissionSelect: document.getElementById('rl-mission-select'),
+			rlApplyConfigBtn: document.getElementById('rl-apply-config-btn'),
 			rlPresetSelect: document.getElementById('rl-preset-select'),
 			rlColorTheme: document.getElementById('rl-color-theme'),
 			rlLoadPresetBtn: document.getElementById('rl-load-preset-btn'),
@@ -98,13 +104,52 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		// Preset Load
-		this.ui.rlLoadPresetBtn.addEventListener('click', () => {
-			this.loadPreset(this.ui.rlPresetSelect.value);
-		});
-		this.ui.rlPresetSelect.addEventListener('change', (e) => {
-			this.loadPreset(e.target.value);
-		});
+		// Preset Load & Orthogonal 3-Way Selection
+		this._initPresetSelectors();
+
+		if (this.ui.rlPayloadSelect) {
+			this.ui.rlPayloadSelect.addEventListener('change', (e) => {
+				const pId = e.target.value;
+				const recMission = this.presetManager.getRecommendedMissionForPayload(pId);
+				if (this.ui.rlMissionSelect && recMission) {
+					this.ui.rlMissionSelect.value = recMission;
+				}
+				this.applyOrthogonalConfig({ payloadId: pId, missionId: recMission });
+			});
+		}
+
+		if (this.ui.rlMissionSelect) {
+			this.ui.rlMissionSelect.addEventListener('change', (e) => {
+				this.applyOrthogonalConfig({ missionId: e.target.value });
+			});
+		}
+
+		if (this.ui.rlVehicleSelect) {
+			this.ui.rlVehicleSelect.addEventListener('change', (e) => {
+				this.applyOrthogonalConfig({ vehicleId: e.target.value });
+			});
+		}
+
+		if (this.ui.rlApplyConfigBtn) {
+			this.ui.rlApplyConfigBtn.addEventListener('click', () => {
+				this.applyOrthogonalConfig({
+					vehicleId: this.ui.rlVehicleSelect?.value,
+					payloadId: this.ui.rlPayloadSelect?.value,
+					missionId: this.ui.rlMissionSelect?.value
+				});
+			});
+		}
+
+		if (this.ui.rlLoadPresetBtn) {
+			this.ui.rlLoadPresetBtn.addEventListener('click', () => {
+				this.loadPreset(this.ui.rlPresetSelect.value);
+			});
+		}
+		if (this.ui.rlPresetSelect) {
+			this.ui.rlPresetSelect.addEventListener('change', (e) => {
+				this.loadPreset(e.target.value);
+			});
+		}
 
 		// Theme Color
 		this.ui.rlColorTheme.value = this.universe.RocketLauncher.colorTheme;
@@ -549,6 +594,70 @@ export class RocketTab {
 		}
 	}
 
+	_initPresetSelectors() {
+		if (this.ui.rlVehicleSelect) {
+			const vehicles = this.presetManager.getVehicles();
+			this.ui.rlVehicleSelect.innerHTML = '';
+			vehicles.forEach(v => {
+				const opt = document.createElement('option');
+				opt.value = v.id;
+				opt.textContent = v.name;
+				this.ui.rlVehicleSelect.appendChild(opt);
+			});
+			if (vehicles.length > 0) {
+				this.ui.rlVehicleSelect.value = vehicles[0].id;
+			}
+		}
+
+		if (this.ui.rlPayloadSelect) {
+			const payloads = this.presetManager.getPayloads();
+			this.ui.rlPayloadSelect.innerHTML = '';
+			payloads.forEach(p => {
+				const opt = document.createElement('option');
+				opt.value = p.id;
+				opt.textContent = p.name;
+				this.ui.rlPayloadSelect.appendChild(opt);
+			});
+			if (payloads.length > 0) {
+				this.ui.rlPayloadSelect.value = payloads[0].id;
+			}
+		}
+
+		if (this.ui.rlMissionSelect) {
+			const missions = this.presetManager.getMissions();
+			this.ui.rlMissionSelect.innerHTML = '';
+			missions.forEach(m => {
+				const opt = document.createElement('option');
+				opt.value = m.id;
+				opt.textContent = `${m.name} [${m.targetOrbit || ''}]`;
+				this.ui.rlMissionSelect.appendChild(opt);
+			});
+			if (missions.length > 0) {
+				this.ui.rlMissionSelect.value = missions[0].id;
+			}
+		}
+	}
+
+	applyOrthogonalConfig({ vehicleId, payloadId, missionId } = {}) {
+		const rl = this.universe.RocketLauncher;
+		this.presetManager.applyToLauncher(rl, { vehicleId, payloadId, missionId });
+
+		if (this.ui.rlColorTheme) {
+			this.ui.rlColorTheme.value = rl.colorTheme || 'classic';
+		}
+		if (vehicleId && this.ui.rlPresetSelect) {
+			const legacyKey = vehicleId.toUpperCase();
+			if (this.ui.rlPresetSelect.querySelector(`option[value="${legacyKey}"]`)) {
+				this.ui.rlPresetSelect.value = legacyKey;
+			}
+		}
+		this._syncStageZero();
+		this._renderStageTabs();
+		this.selectTab(this.currentTab || 0);
+		this._renderProfileTable();
+		this._updateRocketStats();
+	}
+
 	loadPreset(presetKey) {
 		const preset = MULTISTAGE_PRESETS[presetKey];
 		if (!preset) return;
@@ -567,6 +676,12 @@ export class RocketTab {
 		if (preset.flightProfile) {
 			rl.flightProfile = JSON.parse(JSON.stringify(preset.flightProfile));
 			this._renderProfileTable();
+		}
+		if (this.ui.rlVehicleSelect) {
+			const vId = String(presetKey).toLowerCase();
+			if (this.ui.rlVehicleSelect.querySelector(`option[value="${vId}"]`)) {
+				this.ui.rlVehicleSelect.value = vId;
+			}
 		}
 		this._syncStageZero();
 		this.currentTab = 0;

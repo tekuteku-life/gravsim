@@ -132,6 +132,8 @@ export class ObjectPlacer {
 			if (options.stages !== undefined) { obj.stages = options.stages; }
 			if (options.payload !== undefined) { obj.payload = options.payload; }
 			if (options.fairing !== undefined) { obj.fairing = options.fairing; }
+			if (options.boosters !== undefined) { obj.boosters = options.boosters; }
+			if (options.rendering !== undefined) { obj.rendering = options.rendering; }
 
 			if (options.disableStaging !== undefined) {
 				obj.disableStaging = options.disableStaging;

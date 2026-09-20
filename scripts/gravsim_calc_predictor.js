@@ -428,7 +428,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 					detectedEventsMap.set(eventId, makeEvent(eventId, eventName, 'staging', curAltM));
 				}
 			}
-		} else if (lastStageState === 'STG_MECO' && rocket.stageState === 'ORBITAL_COAST') {
+		} else if (lastStageState === 'STG_MECO' && (rocket.stageState === 'ORBITAL_COAST' || rocket.stageState === 'STG_COAST') && rocket.isPayloadSeparated) {
 			// Final stage separation and payload separation
 			const sepStageNum = rocket.totalStages;
 			const stgEventId = `stg_sep_${sepStageNum}`;
@@ -441,7 +441,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			}
 		}
 
-		// (c) Second / Upper Engine Start (SES)
+		// (c) Second / Upper Engine Start (SES) or Reignition / Payload Start
 		if (lastStageState === 'INTERSTAGE_COAST' && rocket.stageState === 'STG_BURNING') {
 			const stgNum = rocket.currentStageIndex + 1;
 			if (!recordedStageSes.has(stgNum)) {
@@ -451,6 +451,26 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 				if (!detectedEventsMap.has(eventId)) {
 					detectedEventsMap.set(eventId, makeEvent(eventId, eventName, 'ignition', curAltM));
 				}
+			}
+		} else if (lastStageState === 'STG_COAST' && rocket.stageState === 'STG_BURNING') {
+			if (rocket.isPayloadSeparated) {
+				const eventId = 'payload_start';
+				if (!detectedEventsMap.has(eventId)) {
+					detectedEventsMap.set(eventId, makeEvent(eventId, 'PAYLOAD START', 'ignition', curAltM));
+				}
+			} else {
+				const eventId = `reignition_${rocket.currentStageIndex + 1}`;
+				if (!detectedEventsMap.has(eventId)) {
+					detectedEventsMap.set(eventId, makeEvent(eventId, 'REIGNITION', 'ignition', curAltM));
+				}
+			}
+		}
+
+		// (c2) Payload Cutoff
+		if (lastStageState === 'STG_BURNING' && rocket.isPayloadSeparated && (rocket.stageState === 'ORBITAL_COAST' || rocket.burnTime <= 0)) {
+			const eventId = 'payload_cutoff';
+			if (!detectedEventsMap.has(eventId)) {
+				detectedEventsMap.set(eventId, makeEvent(eventId, 'PAYLOAD CUTOFF', 'meco', curAltM));
 			}
 		}
 

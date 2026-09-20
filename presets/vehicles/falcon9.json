@@ -1,0 +1,52 @@
+{
+	"id": "falcon9",
+	"name": "Falcon 9 Style (2-Stage)",
+	"description": "Two-stage orbital launch vehicle with liquid oxygen and kerosene propellants",
+	"lengthM": 70.0,
+	"colorTheme": "classic",
+	"stages": [
+		{
+			"stageNumber": 1,
+			"name": "1st Stage (Booster)",
+			"fuelType": "liquid",
+			"thrustKN": 7600,
+			"dryMassT": 25.0,
+			"fuelMassT": 140.0,
+			"oxidMassT": 280.0,
+			"burnTime": 162.0,
+			"ofRatio": 2.0,
+			"radius": 2.5,
+			"separationDelaySec": 3.0,
+			"ignitionDelaySec": 2.0,
+			"jettisonSpeedM_S": 18.0
+		},
+		{
+			"stageNumber": 2,
+			"name": "2nd Stage (Upper)",
+			"fuelType": "liquid",
+			"thrustKN": 980,
+			"dryMassT": 4.5,
+			"fuelMassT": 32.0,
+			"oxidMassT": 64.0,
+			"burnTime": 390.0,
+			"ofRatio": 2.0,
+			"radius": 2.0,
+			"separationDelaySec": 3.0,
+			"ignitionDelaySec": 2.0,
+			"jettisonSpeedM_S": 5.0
+		}
+	],
+	"defaultFairing": {
+		"enabled": true,
+		"massT": 1.7,
+		"separationAltKm": 110
+	},
+	"rendering": {
+		"colorTheme": "classic",
+		"lengthM": 70.0,
+		"boosters": {
+			"count": 0
+		}
+	}
+}
+

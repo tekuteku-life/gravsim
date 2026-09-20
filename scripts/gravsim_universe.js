@@ -21,6 +21,7 @@ import { AudioManager } from './gravsim_audio_manager.js';
 import { SoundSequencer } from './gravsim_sound_sequencer.js';
 import { DestructionManager } from './gravsim_destruction_manager.js';
 import { VisualEffectManager } from './gravsim_visual_effect_manager.js';
+import { PresetManager } from './gravsim_preset_manager.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 const GRAVSIM_CALC_JS_FILE = `./scripts/gravsim_calc.js?v=${Date.now()}`;
@@ -69,10 +70,11 @@ class CalcWorkerManager {
  * Universe Class
  *******************************************************************/
 export class Universe {
-	constructor(_canvas) {
+	constructor(_canvas, options = {}) {
 		this.canvas = _canvas;
 		this.isPaused = false;
 		this.trailLengthAU = 3.0; // AU
+		this.presetManager = options.presetManager || (typeof window !== 'undefined' && window.presetManager) || new PresetManager();
 
 		// Initialize Modules
 		this.camera = new Camera();

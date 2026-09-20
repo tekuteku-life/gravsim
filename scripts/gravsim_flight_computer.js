@@ -17,6 +17,7 @@ export class FlightComputer {
 		this.flightTime = 0;
 		this.flightProfile = config.flightProfile || [];
 		this.hostAngleRad = config.hostAngleRad || 0;
+		this.disableOrbitalCutoff = !!config.disableOrbitalCutoff;
 
 		// Optimization: Retain result output locally to prevent returning objects on hot path
 		this.currentThrottle = 1.0;
@@ -128,7 +129,11 @@ export class FlightComputer {
 		const angleA = stepA.angle;
 		const angleB = stepB.angle;
 
-		this._profileState.throttle = throttleA + (throttleB - throttleA) * progress;
+		if (stepA.thrust === 0 && stepB.thrust > 0) {
+			this._profileState.throttle = 0;
+		} else {
+			this._profileState.throttle = throttleA + (throttleB - throttleA) * progress;
+		}
 		this._profileState.relAngleDeg = angleA + (angleB - angleA) * progress;
 	}
 

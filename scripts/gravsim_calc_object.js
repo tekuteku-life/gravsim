@@ -338,7 +338,11 @@ export class CalcRocket extends GravSimCalcObject {
 
 	updateTotalMass() {
 		if (this.isPayloadSeparated) {
-			this.mass = (this.payload?.massT || 0);
+			if (this.hasPayloadPropulsion) {
+				this.mass = (this.dryMass || 0) + (this.fuelMass || 0) + (this.oxidMass || 0);
+			} else {
+				this.mass = (this.payload?.massT || 0);
+			}
 			this.invMass = this.mass > 0 ? 1.0 / this.mass : 0;
 			this.invMassKg = this.mass > 0 ? 1.0 / (this.mass * 1000) : 0;
 			return this.mass;
@@ -448,25 +452,54 @@ export class CalcRocket extends GravSimCalcObject {
 		} else {
 			// Final stage jettisoned: The remaining craft is the payload
 			this.currentStageIndex = this.totalStages;
-			this.dryMass = 0;
-			this.fuelMass = 0;
-			this.oxidMass = 0;
-			this.burnTime = 0;
-			this.thrustForce = 0;
-			this.massLossRate = 0;
+			this.isPayloadSeparated = true;
 			if (this.payload?.radius) {
 				this.radius = this.payload.radius;
 			}
-			this.isPayloadSeparated = true;
 			if (this.payload?.name) {
 				this.name = this.payload.name;
 			}
-			this.updateTotalMass();
 
-			this.stageState = 'ORBITAL_COAST';
-			this.isIgnited = false;
-			this.presState = 'POST_MECO_VENT';
-			this.presTimer = 0;
+			if (this.payload?.propulsion?.enabled) {
+				this.hasPayloadPropulsion = true;
+				const prop = this.payload.propulsion;
+				this.dryMass = prop.dryMassT || 0;
+				this.fuelMass = prop.fuelMassT || 0;
+				this.oxidMass = prop.oxidMassT || 0;
+				this.thrustForce = ((prop.thrustKN ?? prop.thrustKn ?? 0)) * 1000; // N
+				this.ofRatio = prop.ofRatio || 0;
+				const totalPropT = this.fuelMass + this.oxidMass;
+				const totalPropKg = totalPropT * 1000;
+				if (prop.burnTime && prop.burnTime > 0) {
+					this.burnTime = prop.burnTime;
+				} else if (this.thrustForce > 0 && totalPropKg > 0) {
+					const isp = prop.isp || 300;
+					this.burnTime = (totalPropKg * isp * PHYSICS.G0) / this.thrustForce;
+				} else {
+					this.burnTime = 0;
+				}
+				this.massLossRate = this.burnTime > 0 ? (totalPropT / this.burnTime) : 0;
+				this.updateTotalMass();
+
+				this.stageState = 'STG_COAST';
+				this.isIgnited = false;
+				this.presState = 'POST_MECO_HOLD';
+				this.presTimer = 0;
+			} else {
+				this.hasPayloadPropulsion = false;
+				this.dryMass = 0;
+				this.fuelMass = 0;
+				this.oxidMass = 0;
+				this.burnTime = 0;
+				this.thrustForce = 0;
+				this.massLossRate = 0;
+				this.updateTotalMass();
+
+				this.stageState = 'ORBITAL_COAST';
+				this.isIgnited = false;
+				this.presState = 'POST_MECO_VENT';
+				this.presTimer = 0;
+			}
 		}
 	}
 
@@ -851,8 +884,22 @@ export class CalcRocket extends GravSimCalcObject {
 		if (this.autoControl && !this.disableStaging) {
 			const isFinalStage = (this.currentStageIndex + 1 >= this.totalStages);
 
+			let hasPendingProfileBurns = false;
+			if (this.flightComputer && Array.isArray(this.flightComputer.flightProfile)) {
+				const curTime = this.flightComputer.flightTime || 0;
+				const curAlt = this.flightComputer.telemetryCache?.altM || 0;
+				hasPendingProfileBurns = this.flightComputer.flightProfile.some(step => {
+					if (step.thrust > 0) {
+						if (step.type === 'time' && step.value > curTime) return true;
+						if (step.type === 'alt' && step.value > curAlt) return true;
+						if (step.type === 'apogee') return true;
+					}
+					return false;
+				});
+			}
+
 			// 1. Autonomous orbital insertion cutoff outside dense atmosphere
-			if (isFinalStage && (this.totalStages === 1 || this.currentStageIndex >= 1) && this.stageState === 'STG_BURNING' && refBody && distToRefM > 0) {
+			if (!this.isPayloadSeparated && isFinalStage && (this.totalStages === 1 || this.currentStageIndex >= 1) && this.stageState === 'STG_BURNING' && refBody && distToRefM > 0) {
 				const curAltM = distToRefM - refBody.radius;
 				if (curAltM >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MIN_ALT_M) {
 					const GM = PHYSICS.G * refBody.mass;
@@ -871,7 +918,7 @@ export class CalcRocket extends GravSimCalcObject {
 						const peKm = (a * (1 - ecc) - refBody.radius) / 1000;
 
 						// Cutoff when safe perigee is reached or circularized near apogee
-						if (peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MAX_ECC && peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM)) {
+						if (!this.flightComputer?.disableOrbitalCutoff && (peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MAX_ECC && peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM))) {
 							this.burnTime = 0;
 							this.fuelMass = 0;
 							this.oxidMass = 0;
@@ -890,7 +937,7 @@ export class CalcRocket extends GravSimCalcObject {
 			// 2. Commanded Coast (throttle <= 0 while burning) vs Re-ignition (throttle > 0 while coasting)
 			if (this.stageState === 'STG_BURNING' && throttle <= 0 && (this.flightComputer?.flightTime || 0) > MULTISTAGE_ROCKET.COMMANDED_CUTOFF_MIN_FLIGHT_TIME_SEC && this.burnTime > 0) {
 				let orbitComplete = false;
-				if (isFinalStage && refBody && distToRefM > 0) {
+				if (!this.isPayloadSeparated && isFinalStage && refBody && distToRefM > 0) {
 					const GM = PHYSICS.G * refBody.mass;
 					const dvx = this.vx - refBody.vx;
 					const dvy = this.vy - refBody.vy;
@@ -909,7 +956,7 @@ export class CalcRocket extends GravSimCalcObject {
 					}
 				}
 
-				if (orbitComplete) {
+				if (orbitComplete && !hasPendingProfileBurns) {
 					this.burnTime = 0;
 					this.stageState = 'STG_MECO';
 					this.stgTimer = 0;
@@ -1012,8 +1059,14 @@ export class CalcRocket extends GravSimCalcObject {
 				this.updateTotalMass();
 
 				if (this.stageState === 'STG_BURNING') {
-					this.stageState = 'STG_MECO';
-					this.stgTimer = 0;
+					if (this.isPayloadSeparated) {
+						this.stageState = 'ORBITAL_COAST';
+						this.isIgnited = false;
+						this.thrustForce = 0;
+					} else {
+						this.stageState = 'STG_MECO';
+						this.stgTimer = 0;
+					}
 				}
 			}
 		}

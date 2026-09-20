@@ -1,0 +1,22 @@
+{
+	"id": "lunar_insertion",
+	"name": "Trans-Lunar Injection & Orbit (TLI)",
+	"description": "Earth parking orbit insertion, coasting phase, and high-energy upper stage restart burn injecting into a lunar transfer orbit",
+	"targetOrbit": "Lunar Transfer Orbit (384,400 km)",
+	"predictionDurationMonths": 1.0,
+	"disableOrbitalCutoff": true,
+	"flightProfile": [
+		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
+		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 10 },
+		{ "type": "alt", "value": 15000, "thrust": 100, "angle": 25 },
+		{ "type": "alt", "value": 40000, "thrust": 100, "angle": 45 },
+		{ "type": "alt", "value": 80000, "thrust": 100, "angle": 65 },
+		{ "type": "alt", "value": 150000, "thrust": 100, "angle": 80 },
+		{ "type": "alt", "value": 220000, "thrust": 100, "angle": 88 },
+		{ "type": "alt", "value": 280000, "thrust": 100, "angle": 90 }
+	],
+	"rendering": {
+		"trajectoryColor": "#e0e0e0",
+		"orbitColor": "rgba(224, 224, 224, 0.4)"
+	}
+}

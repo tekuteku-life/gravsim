@@ -1,0 +1,22 @@
+{
+	"id": "jupiter_transfer",
+	"name": "Jupiter Transfer Orbit (JTO)",
+	"description": "High-energy interplanetary transfer trajectory reaching Jupiter's orbital distance (5.2 AU) for deep space exploration",
+	"targetOrbit": "Jupiter Transfer Orbit (5.2 AU)",
+	"predictionDurationMonths": 36.0,
+	"disableOrbitalCutoff": true,
+	"flightProfile": [
+		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
+		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 10 },
+		{ "type": "alt", "value": 15000, "thrust": 100, "angle": 26 },
+		{ "type": "alt", "value": 40000, "thrust": 100, "angle": 48 },
+		{ "type": "alt", "value": 85000, "thrust": 100, "angle": 68 },
+		{ "type": "alt", "value": 170000, "thrust": 100, "angle": 84 },
+		{ "type": "alt", "value": 280000, "thrust": 100, "angle": 90 },
+		{ "type": "alt", "value": 400000, "thrust": 100, "angle": 90 }
+	],
+	"rendering": {
+		"trajectoryColor": "#ffaa55",
+		"orbitColor": "rgba(255, 170, 85, 0.4)"
+	}
+}

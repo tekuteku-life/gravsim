@@ -1,0 +1,30 @@
+{
+	"id": "lunar_orbiter",
+	"name": "Lunar Polar Science Orbiter",
+	"description": "Scientific lunar exploration spacecraft featuring a dedicated lunar orbit insertion (LOI) retro-propulsion engine",
+	"massT": 2.8,
+	"radius": 1.6,
+	"recommendedMissionId": "lunar_insertion",
+	"fairing": {
+		"enabled": true,
+		"massT": 1.4,
+		"separationAltKm": 115
+	},
+	"propulsion": {
+		"enabled": true,
+		"name": "Lunar Orbit Insertion Engine (LOI)",
+		"fuelType": "liquid",
+		"thrustKN": 5.0,
+		"dryMassT": 1.3,
+		"fuelMassT": 0.5,
+		"oxidMassT": 1.0,
+		"burnTime": 950.0,
+		"ofRatio": 2.0
+	},
+	"rendering": {
+		"busColor": "#c0c0c0",
+		"solarPanels": { "count": 2, "color": "#0055aa", "spanRatio": 0.9 },
+		"dish": { "count": 1, "color": "#ffffff", "radiusRatio": 0.40 }
+	}
+}
+

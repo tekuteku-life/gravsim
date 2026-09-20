@@ -280,6 +280,8 @@ export class Rocket extends GravSimObject {
 		this.stages = [];
 		this.payload = null;
 		this.fairing = null;
+		this.boosters = null;
+		this.rendering = null;
 
 		this.predictedTrajectory = null;
 		this.passedEventIds = new Set();

@@ -1,0 +1,22 @@
+{
+	"id": "gto_insertion",
+	"name": "Geostationary Transfer Orbit (GTO)",
+	"description": "High-energy elliptical transfer orbit with 250 km perigee and 35,786 km apogee for geostationary payloads",
+	"targetOrbit": "GTO (250 km x 35,786 km)",
+	"predictionDurationMonths": 0.5,
+	"flightProfile": [
+		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
+		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 12 },
+		{ "type": "alt", "value": 15000, "thrust": 100, "angle": 28 },
+		{ "type": "alt", "value": 45000, "thrust": 100, "angle": 50 },
+		{ "type": "alt", "value": 90000, "thrust": 100, "angle": 70 },
+		{ "type": "alt", "value": 160000, "thrust": 100, "angle": 84 },
+		{ "type": "alt", "value": 240000, "thrust": 100, "angle": 90 },
+		{ "type": "alt", "value": 300000, "thrust": 100, "angle": 90 }
+	],
+	"rendering": {
+		"trajectoryColor": "#ffaa00",
+		"orbitColor": "rgba(255, 170, 0, 0.4)"
+	}
+}
+

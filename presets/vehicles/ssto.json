@@ -1,0 +1,47 @@
+{
+	"id": "ssto",
+	"name": "Single Stage (SSTO)",
+	"description": "Single-stage-to-orbit reusable launch vehicle concept",
+	"lengthM": 50.0,
+	"colorTheme": "blue",
+	"stages": [
+		{
+			"stageNumber": 1,
+			"name": "Core Stage",
+			"fuelType": "liquid",
+			"thrustKN": 7600,
+			"dryMassT": 7.0,
+			"fuelMassT": 88.0,
+			"oxidMassT": 220.0,
+			"burnTime": 160.0,
+			"ofRatio": 2.5,
+			"radius": 2.5,
+			"separationDelaySec": 5.0,
+			"ignitionDelaySec": 6.0,
+			"jettisonSpeedM_S": 5.0
+		}
+	],
+	"defaultFairing": {
+		"enabled": true,
+		"massT": 1.0,
+		"separationAltKm": 110
+	},
+	"rendering": {
+		"colorTheme": "blue",
+		"lengthM": 50.0,
+		"boosters": {
+			"count": 0
+		}
+	},
+	"flightProfile": [
+		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
+		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 15 },
+		{ "type": "alt", "value": 12000, "thrust": 100, "angle": 35 },
+		{ "type": "alt", "value": 30000, "thrust": 100, "angle": 55 },
+		{ "type": "alt", "value": 60000, "thrust": 100, "angle": 72 },
+		{ "type": "alt", "value": 100000, "thrust": 100, "angle": 85 },
+		{ "type": "alt", "value": 150000, "thrust": 100, "angle": 90 },
+		{ "type": "alt", "value": 200000, "thrust": 100, "angle": 90 }
+	]
+}
+

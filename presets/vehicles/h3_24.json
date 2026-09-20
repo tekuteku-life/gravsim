@@ -1,0 +1,66 @@
+{
+	"id": "h3_24",
+	"name": "H3-24L (Heavy: SRB-3 x 4 + LE-9 x 2)",
+	"description": "Heavy-lift cryogenic launch vehicle with 2x LE-9 main engines and 4x SRB-3 solid rocket boosters for high-energy missions",
+	"lengthM": 65.0,
+	"colorTheme": "orange",
+	"stages": [
+		{
+			"stageNumber": 1,
+			"name": "1st Stage (4x SRB-3 + 2x LE-9 Heavy)",
+			"fuelType": "hydro",
+			"thrustKN": 11500,
+			"dryMassT": 65.0,
+			"fuelMassT": 50.0,
+			"oxidMassT": 300.0,
+			"burnTime": 175.0,
+			"ofRatio": 6.0,
+			"radius": 2.7,
+			"separationDelaySec": 3.0,
+			"ignitionDelaySec": 2.0,
+			"jettisonSpeedM_S": 18.0
+		},
+		{
+			"stageNumber": 2,
+			"name": "2nd Stage (LE-5B-3 Upper)",
+			"fuelType": "hydro",
+			"thrustKN": 160,
+			"dryMassT": 3.8,
+			"fuelMassT": 5.0,
+			"oxidMassT": 30.0,
+			"burnTime": 720.0,
+			"ofRatio": 6.0,
+			"radius": 2.6,
+			"separationDelaySec": 3.0,
+			"ignitionDelaySec": 2.0,
+			"jettisonSpeedM_S": 5.0
+		}
+	],
+	"defaultFairing": {
+		"enabled": true,
+		"massT": 2.5,
+		"separationAltKm": 120
+	},
+	"rendering": {
+		"colorTheme": "orange",
+		"lengthM": 65.0,
+		"boosters": {
+			"count": 4,
+			"name": "SRB-3",
+			"radiusRatio": 0.26,
+			"lengthRatio": 1.70,
+			"offsetYRatio": 0.95,
+			"pairSpacingRatio": 0.35,
+			"attachOffsetXRatio": 0.12,
+			"casingColor": "#f0f2f5",
+			"noseConeColor": "#22262c",
+			"bandColor": "#c85a1a",
+			"nozzleColor": "#1c2024",
+			"nozzleLengthRatio": 0.20,
+			"noseConeLengthRatio": 0.35,
+			"plumeScale": 0.55,
+			"plumeFuel": "solid"
+		}
+	}
+}
+

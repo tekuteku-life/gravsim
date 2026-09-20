@@ -3,6 +3,8 @@
  * Provides shared assertion helpers, debug logging, and mock DOM / Canvas / Audio environment.
  */
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 export const isVerbose = () => {
 	return process.env.DEBUG === '1' || process.env.VERBOSE === '1' || process.argv.includes('--verbose');
@@ -157,7 +159,13 @@ export const createMockElement = (tag = 'div') => {
 			}
 		},
 		dispatchEvent: (event) => {
-			if (event && !event.target) event.target = element;
+			if (event) {
+				try {
+					if (!event.target) event.target = element;
+				} catch (_) {
+					Object.defineProperty(event, 'target', { value: element, configurable: true });
+				}
+			}
 			const handlers = eventListeners.get(event?.type || '') || [];
 			for (const h of handlers) h(event);
 			return true;
@@ -327,6 +335,23 @@ export const setupMockDOM = () => {
 
 	globalThis.fetch = async (url) => {
 		const urlStr = String(url);
+		if (urlStr.includes('presets/')) {
+			try {
+				const cleanPath = urlStr.replace(/^https?:\/\/[^\/]+\//, '').replace(/^\.\//, '');
+				const filePath = path.resolve(process.cwd(), cleanPath);
+				if (fs.existsSync(filePath)) {
+					const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+					return {
+						ok: true,
+						status: 200,
+						json: async () => data,
+						text: async () => JSON.stringify(data)
+					};
+				}
+			} catch (e) {
+				// fallback
+			}
+		}
 		if (urlStr.endsWith('manifest.json')) {
 			return {
 				ok: true,

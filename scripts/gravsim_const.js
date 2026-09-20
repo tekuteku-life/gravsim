@@ -1,6 +1,8 @@
 
 // gravsim_const.js
 
+import { presetManager } from './gravsim_preset_manager.js';
+
 // Physics unit / constant
 export const PHYSICS = {
 	METERS_PER_AU: 149597870700,
@@ -1282,244 +1284,31 @@ export const MULTISTAGE_ROCKET = {
 	}
 };
 
-export const MULTISTAGE_PRESETS = {
-	"FALCON9": {
-		id: "FALCON9",
-		name: "Falcon 9 Style (2-Stage)",
-		lengthM: 70.0,
-		colorTheme: "classic",
-		description: "Two-stage orbital launch vehicle with liquid oxygen and kerosene propellants",
-		stages: [
-			{
-				stageNumber: 1,
-				name: "1st Stage (Booster)",
-				fuelType: "liquid",
-				thrustKN: 7600,
-				dryMassT: 25.0,
-				fuelMassT: 140.0,
-				oxidMassT: 280.0,
-				burnTime: 162.0,
-				ofRatio: 2.0,
-				radius: 2.5,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 18.0
-			},
-			{
-				stageNumber: 2,
-				name: "2nd Stage (Upper)",
-				fuelType: "liquid",
-				thrustKN: 980,
-				dryMassT: 4.5,
-				fuelMassT: 32.0,
-				oxidMassT: 64.0,
-				burnTime: 390.0,
-				ofRatio: 2.0,
-				radius: 2.0,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 5.0
-			}
-		],
-		payload: {
-			name: "Satellite Payload",
-			massT: 8.0,
-			radius: 2.0
-		},
-		fairing: {
-			enabled: true,
-			massT: 1.7,
-			separationAltKm: 110
-		},
-		flightProfile: [
-			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-			{ type: 'alt', value: 2000, thrust: 100, angle: 10 },
-			{ type: 'alt', value: 15000, thrust: 100, angle: 25 },
-			{ type: 'alt', value: 40000, thrust: 100, angle: 45 },
-			{ type: 'alt', value: 80000, thrust: 100, angle: 65 },
-			{ type: 'alt', value: 150000, thrust: 100, angle: 78 },
-			{ type: 'alt', value: 220000, thrust: 100, angle: 86 },
-			{ type: 'alt', value: 280000, thrust: 100, angle: 90 }
-		]
+// Legacy presets delegated dynamically to PresetManager via Proxy
+export const MULTISTAGE_PRESETS = new Proxy({}, {
+	get(target, prop) {
+		if (typeof prop === 'symbol' || prop === 'inspect' || prop === 'prototype') {
+			return target[prop];
+		}
+		const presets = presetManager.getLegacyPresets();
+		return presets[prop] || presetManager.getLegacyPreset(prop);
 	},
-	"H3": {
-		id: "H3",
-		name: "H3 Style (2-Stage)",
-		lengthM: 63.0,
-		colorTheme: "orange",
-		description: "Two-stage cryogenic launch vehicle with LE-9 and LE-5B-3 engines",
-		stages: [
-			{
-				stageNumber: 1,
-				name: "1st Stage (LE-9 x3 / Boosted)",
-				fuelType: "hydro",
-				thrustKN: 4500,
-				dryMassT: 25.0,
-				fuelMassT: 34.0,
-				oxidMassT: 206.0,
-				burnTime: 235.0,
-				ofRatio: 6.0,
-				radius: 2.6,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 18.0
-			},
-			{
-				stageNumber: 2,
-				name: "2nd Stage (LE-5B-3)",
-				fuelType: "hydro",
-				thrustKN: 200,
-				dryMassT: 3.5,
-				fuelMassT: 4.0,
-				oxidMassT: 24.0,
-				burnTime: 618.0,
-				ofRatio: 6.0,
-				radius: 2.6,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 5.0
-			}
-		],
-		payload: {
-			name: "HTV-X Cargo",
-			massT: 4.0,
-			radius: 2.0
-		},
-		fairing: {
-			enabled: true,
-			massT: 2.0,
-			separationAltKm: 115
-		},
-		flightProfile: [
-			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-			{ type: 'alt', value: 2000, thrust: 100, angle: 10 },
-			{ type: 'alt', value: 15000, thrust: 100, angle: 25 },
-			{ type: 'alt', value: 40000, thrust: 100, angle: 45 },
-			{ type: 'alt', value: 75000, thrust: 100, angle: 65 },
-			{ type: 'alt', value: 120000, thrust: 100, angle: 80 },
-			{ type: 'alt', value: 180000, thrust: 100, angle: 88 },
-			{ type: 'alt', value: 240000, thrust: 100, angle: 90 }
-		]
+	has(target, prop) {
+		const presets = presetManager.getLegacyPresets();
+		return prop in presets;
 	},
-	"SSTO": {
-		id: "SSTO",
-		name: "Single Stage (SSTO)",
-		lengthM: 50.0,
-		colorTheme: "blue",
-		description: "Single-stage-to-orbit rocket (Legacy baseline)",
-		stages: [
-			{
-				stageNumber: 1,
-				name: "Core Stage",
-				fuelType: "liquid",
-				thrustKN: 7600,
-				dryMassT: 7.0,
-				fuelMassT: 88.0,
-				oxidMassT: 220.0,
-				burnTime: 160.0,
-				ofRatio: 2.5,
-				radius: 2.5,
-				separationDelaySec: 5.0,
-				ignitionDelaySec: 6.0,
-				jettisonSpeedM_S: 5.0
-			}
-		],
-		payload: {
-			name: "Orbital Capsule",
-			massT: 2.0,
-			radius: 1.8
-		},
-		fairing: {
-			enabled: true,
-			massT: 1.0,
-			separationAltKm: 110
-		},
-		flightProfile: [
-			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-			{ type: 'alt', value: 2000, thrust: 100, angle: 15 },
-			{ type: 'alt', value: 12000, thrust: 100, angle: 35 },
-			{ type: 'alt', value: 30000, thrust: 100, angle: 55 },
-			{ type: 'alt', value: 60000, thrust: 100, angle: 72 },
-			{ type: 'alt', value: 100000, thrust: 100, angle: 85 },
-			{ type: 'alt', value: 150000, thrust: 100, angle: 90 },
-			{ type: 'alt', value: 200000, thrust: 100, angle: 90 }
-		]
+	ownKeys() {
+		return Object.keys(presetManager.getLegacyPresets());
 	},
-	"EPSILON": {
-		id: "EPSILON",
-		name: "Epsilon Style (3-Stage Solid)",
-		lengthM: 26.0,
-		colorTheme: "epsilon",
-		description: "Three-stage all-solid propellant launch vehicle with autonomous checkout",
-		stages: [
-			{
-				stageNumber: 1,
-				name: "1st Stage (SRB-A3)",
-				fuelType: "solid",
-				thrustKN: 1800,
-				dryMassT: 8.7,
-				fuelMassT: 66.3,
-				oxidMassT: 0.0,
-				burnTime: 104.0,
-				ofRatio: 0.0,
-				radius: 1.3,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 15.0
-			},
-			{
-				stageNumber: 2,
-				name: "2nd Stage (M-35)",
-				fuelType: "solid",
-				thrustKN: 340,
-				dryMassT: 2.2,
-				fuelMassT: 15.0,
-				oxidMassT: 0.0,
-				burnTime: 127.0,
-				ofRatio: 0.0,
-				radius: 1.25,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 8.0
-			},
-			{
-				stageNumber: 3,
-				name: "3rd Stage (KM-V2c)",
-				fuelType: "solid",
-				thrustKN: 85,
-				dryMassT: 0.8,
-				fuelMassT: 2.5,
-				oxidMassT: 0.0,
-				burnTime: 85.0,
-				ofRatio: 0.0,
-				radius: 0.8,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 5.0
-			}
-		],
-		payload: {
-			name: "ASNARO-2",
-			massT: 0.6,
-			radius: 1.2
-		},
-		fairing: {
-			enabled: true,
-			massT: 0.8,
-			separationAltKm: 115
-		},
-		flightProfile: [
-			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-			{ type: 'alt', value: 2000, thrust: 100, angle: 12 },
-			{ type: 'alt', value: 12000, thrust: 100, angle: 28 },
-			{ type: 'alt', value: 35000, thrust: 100, angle: 48 },
-			{ type: 'alt', value: 70000, thrust: 100, angle: 68 },
-			{ type: 'alt', value: 120000, thrust: 100, angle: 82 },
-			{ type: 'alt', value: 180000, thrust: 100, angle: 88 },
-			{ type: 'alt', value: 240000, thrust: 100, angle: 90 }
-		]
+	getOwnPropertyDescriptor(target, prop) {
+		const val = presetManager.getLegacyPreset(prop);
+		if (val !== null && val !== undefined) {
+			return { configurable: true, enumerable: true, writable: false, value: val };
+		}
+		return undefined;
 	}
-};
+});
+
 
 /**
  * Normalizes any rocket config (legacy single-stage or new multi-stage)

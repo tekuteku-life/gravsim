@@ -903,7 +903,66 @@ test('RocketRenderer - Low detail and High detail rendering across flight phases
 	RocketRenderer._drawPayloadSatellite(ctx, 0, 0, 20, false);
 	RocketRenderer._drawPayloadSatellite(ctx, 0, 0, 20, true);
 
-	// 17. Rocket._getDrawRadius across 1-stage, 2-stage, and 3-stage configs
+	// 17. Boosters: H3-22 (2 SRBs) and H3-24L (4 SRBs) high & low detail, firing & non-firing
+	const h3_22Rocket = {
+		thrustAngle: 0.0,
+		colorTheme: 'orange',
+		currentStageIndex: 0,
+		totalStages: 2,
+		stages: [{ fuelType: 'hydro' }, { fuelType: 'hydro' }],
+		boosters: {
+			count: 2,
+			name: 'SRB-3',
+			radiusRatio: 0.26,
+			lengthRatio: 1.70,
+			offsetYRatio: 0.95,
+			plumeFuel: 'solid',
+			plumeScale: 0.55
+		},
+		isIgnited: true,
+		burnTime: 100,
+		thrustRatio: 1.0,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, h3_22Rocket, 200, 200, 50, 1.0); // high detail firing
+	RocketRenderer.draw(ctx, h3_22Rocket, 200, 200, 10, 1.0); // low detail firing
+	h3_22Rocket.isIgnited = false;
+	h3_22Rocket.thrustRatio = 0;
+	RocketRenderer.draw(ctx, h3_22Rocket, 200, 200, 50, 1.0); // high detail non-firing
+	RocketRenderer.draw(ctx, h3_22Rocket, 200, 200, 10, 1.0); // low detail non-firing
+
+	const h3_24Rocket = {
+		thrustAngle: 0.5,
+		colorTheme: 'orange',
+		currentStageIndex: 0,
+		totalStages: 2,
+		stages: [{ fuelType: 'hydro' }, { fuelType: 'hydro' }],
+		boosters: {
+			count: 4,
+			name: 'SRB-3',
+			radiusRatio: 0.26,
+			lengthRatio: 1.70,
+			offsetYRatio: 0.95,
+			pairSpacingRatio: 0.35,
+			plumeFuel: 'solid',
+			plumeScale: 0.55
+		},
+		isIgnited: true,
+		burnTime: 100,
+		thrustRatio: 0.9,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, h3_24Rocket, 200, 200, 60, 1.0); // high detail firing with 4 boosters
+	RocketRenderer.draw(ctx, h3_24Rocket, 200, 200, 12, 1.0); // low detail firing with 4 boosters
+	h3_24Rocket.isIgnited = false;
+	RocketRenderer.draw(ctx, h3_24Rocket, 200, 200, 60, 1.0); // high detail non-firing with 4 boosters
+
+	// Direct _drawBoosters test for edge cases (N boosters > 4, empty boosters, null boosters)
+	RocketRenderer._drawBoosters(ctx, {}, 0, 10, 50, -5, 5, ROCKET_VISUAL.THEMES.orange, false, 0, 20);
+	RocketRenderer._drawBoosters(ctx, { boosters: { count: 0 } }, 0, 10, 50, -5, 5, ROCKET_VISUAL.THEMES.orange, false, 0, 20);
+	RocketRenderer._drawBoosters(ctx, { boosters: { count: 6 } }, 0, 10, 50, -5, 5, ROCKET_VISUAL.THEMES.orange, true, 1.0, 20);
+
+	// 18. Rocket._getDrawRadius across 1-stage, 2-stage, and 3-stage configs
 	const rkt1 = new Rocket(501, 'SSTO', 0, 0, 0, 0, 10, 50, 100, '#fff', 5, 25, 0, null, 0);
 	rkt1.stages = [{ stageNumber: 1 }];
 	rkt1.bottomOffsetM = 25.0;
@@ -1687,14 +1746,32 @@ test('RocketLauncher - Preview, staging math, and rollout lifecycle deep branche
 		hostAltitudeM: 20,
 		thrustKN: 8000,
 		maxGLimit: 3.5,
-		autoControl: false
+		autoControl: false,
+		boosters: { count: 2 },
+		rendering: { colorTheme: 'orange' }
 	});
 	assert.equal(launcher.hostAngleDeg, 45);
 	assert.equal(launcher.thrustKN, 8000);
 	assert.equal(launcher.autoControl, false);
+	assert.equal(launcher.boosters.count, 2);
 
 	// 7. requestPreviewUpdate immediate (delayMs <= 0)
 	launcher.requestPreviewUpdate(0);
+
+	// 8. Edge cases: getBaseRadiusM with rocketLengthM, transform without host, abort when null
+	launcher.currentPresetId = 'CUSTOM_UNKNOWN';
+	launcher.stages[0].rocketLengthM = 55;
+	assert.equal(launcher.getBaseRadiusM(), 55);
+	delete launcher.stages[0].rocketLengthM;
+	assert.ok(launcher.getBaseRadiusM() > 0);
+
+	launcher.hostId = 99999; // non-existent host
+	const fallbackTransform = launcher._calculateTransform();
+	assert.ok(fallbackTransform);
+	assert.ok(typeof fallbackTransform.x === 'number');
+
+	launcher.rolloutedRocketId = null;
+	launcher.abortRollout(); // gracefully handles null
 });
 
 

@@ -7,10 +7,23 @@
 	<meta http-equiv="Pragma" content="no-cache">
 	<meta http-equiv="Expires" content="0">
 	<title>gravsim</title>
+	<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚀</text></svg>">
 	<link rel="stylesheet" href="style.css">
 	<script src="./scripts/gravsim.js" type="module"></script>
 </head>
 <body>
+	<!-- Fullscreen Bootstrap Loader -->
+	<div id="bootstrap-loader">
+		<div class="bootstrap-loader-content">
+			<div class="bootstrap-loader-logo">GRAVSIM</div>
+			<div class="bootstrap-loader-sub">ORBITAL DYNAMICS &amp; LAUNCH VEHICLE SIMULATOR</div>
+			<div class="bootstrap-progress-container">
+				<div id="bootstrap-progress-bar" class="bootstrap-progress-bar"></div>
+			</div>
+			<div id="bootstrap-status-text" class="bootstrap-status-text">INITIALIZING SUBSYSTEMS...</div>
+		</div>
+	</div>
+
 	<!-- Loading Overlay -->
 	<div id="audio-loading-overlay" style="display: none;">
 		<div class="spinner"></div>
@@ -374,12 +387,36 @@
 					<button type="button" class="rl-stage-tab-btn" data-stage="payload" style="flex: 1; padding: 5px 2px; font-size: 11px;">Payload</button>
 				</div>
 
-				<div class="panel-section-header" style="margin-top: 5px;">[ ROCKET CONFIGURATION ]</div>
-				<label>Preset:</label>
-				<div style="display: flex; gap: 5px;">
+				<div class="panel-section-header" style="margin-top: 5px;">[ VEHICLE &amp; MISSION CONFIGURATION ]</div>
+				
+				<div class="preset-selector-group">
+					<div class="preset-selector-row">
+						<label class="preset-selector-label" for="rl-payload-select">Payload (Spacecraft):</label>
+						<select id="rl-payload-select" class="full-width"></select>
+					</div>
+
+					<div class="preset-selector-row">
+						<label class="preset-selector-label" for="rl-mission-select">Mission (Flight Plan):</label>
+						<select id="rl-mission-select" class="full-width"></select>
+					</div>
+
+					<div class="preset-selector-row">
+						<label class="preset-selector-label" for="rl-vehicle-select">Launch Vehicle:</label>
+						<div style="display: flex; gap: 5px;">
+							<select id="rl-vehicle-select" class="full-width"></select>
+							<button type="button" id="rl-apply-config-btn" style="white-space: nowrap;">APPLY</button>
+						</div>
+					</div>
+				</div>
+
+				<!-- Hidden / Legacy Preset Select for backward compatibility -->
+				<div style="display: none;">
 					<select id="rl-preset-select" class="full-width">
 						<option value="FALCON9" selected>Falcon 9 Style (2-Stage)</option>
 						<option value="H3">H3 Style (2-Stage)</option>
+						<option value="H3_30">H3-30 (3x LE-9, No SRB)</option>
+						<option value="H3_22">H3-22 (2x SRB-3 + 2x LE-9)</option>
+						<option value="H3_24">H3-24L (4x SRB-3 + 2x LE-9 Heavy)</option>
 						<option value="EPSILON">Epsilon Style (3-Stage Solid)</option>
 						<option value="SSTO">Single Stage (SSTO)</option>
 					</select>

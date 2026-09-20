@@ -32,20 +32,28 @@ export class RocketLauncher {
 		this.hostAngleDeg = 0;
 		this.hostAltitudeM = 10; // (m)
 
-		// Multi-stage setup (default: Falcon 9 Style 2-stage)
-		const preset = MULTISTAGE_PRESETS.FALCON9;
-		this.currentPresetId = 'FALCON9';
-		this.colorTheme = preset.colorTheme || 'classic';
-		this.stages = JSON.parse(JSON.stringify(preset.stages));
-		this.payload = JSON.parse(JSON.stringify(preset.payload));
-		this.fairing = JSON.parse(JSON.stringify(preset.fairing));
+		// Multi-stage setup (default: Falcon 9, or H3-30 fallback, or first available preset)
+		let preset = MULTISTAGE_PRESETS.FALCON9;
+		if (!preset || !preset.stages || !preset.stages.length) {
+			preset = MULTISTAGE_PRESETS.H3_30 || MULTISTAGE_PRESETS.H3 || Object.values(MULTISTAGE_PRESETS).find(p => p?.stages?.length) || null;
+		}
+		this.currentPresetId = preset?.id || 'H3_30';
+		this.colorTheme = preset?.colorTheme || 'classic';
+		this.stages = preset?.stages ? JSON.parse(JSON.stringify(preset.stages)) : [
+			{ stageNumber: 1, fuelType: 'hydro', thrustKN: 4410, dryMassT: 25.0, fuelMassT: 34.0, oxidMassT: 206.0, burnTime: 240.0 }
+		];
+		this.payload = preset?.payload ? JSON.parse(JSON.stringify(preset.payload)) : { name: 'Payload', massT: 5.0 };
+		this.fairing = preset?.fairing ? JSON.parse(JSON.stringify(preset.fairing)) : { enabled: true, massT: 2.0, separationAltKm: 115 };
+		this.boosters = preset?.boosters || preset?.rendering?.boosters || null;
+		this.rendering = preset?.rendering || null;
 
 		// Rocket parameters (synced with active/booster stage for launcher UI)
-		this.dryMassT = this.stages[0].dryMassT;
-		this.fuelMassT = this.stages[0].fuelMassT;
-		this.oxidMassT = this.stages[0].oxidMassT;
-		this.fuelType = this.stages[0].fuelType;
-		this.thrustKN = this.stages[0].thrustKN;
+		const stg0 = this.stages[0] || {};
+		this.dryMassT = stg0.dryMassT ?? 25.0;
+		this.fuelMassT = stg0.fuelMassT ?? 34.0;
+		this.oxidMassT = stg0.oxidMassT ?? 206.0;
+		this.fuelType = stg0.fuelType ?? 'hydro';
+		this.thrustKN = stg0.thrustKN ?? 4410;
 
 		// Default Flight Profile (from Preset)
 		this.flightProfile = preset.flightProfile
@@ -570,7 +578,9 @@ export class RocketLauncher {
 			stages: this.stages,
 			payload: this.payload,
 			fairing: this.fairing,
-			colorTheme: this.colorTheme
+			colorTheme: this.colorTheme,
+			boosters: this.boosters,
+			rendering: this.rendering
 		};
 
 		const newRocket = this.universe.ObjectPlacer.placeObject(massName, t.x, t.y, t.vx, t.vy, optParams);
@@ -635,6 +645,8 @@ export class RocketLauncher {
 			autoControl: this.autoControl,
 			currentPresetId: this.currentPresetId,
 			colorTheme: this.colorTheme,
+			boosters: this.boosters ? JSON.parse(JSON.stringify(this.boosters)) : null,
+			rendering: this.rendering ? JSON.parse(JSON.stringify(this.rendering)) : null,
 			stages: JSON.parse(JSON.stringify(this.stages || [])),
 			payload: JSON.parse(JSON.stringify(this.payload || {})),
 			fairing: JSON.parse(JSON.stringify(this.fairing || {}))
@@ -657,6 +669,8 @@ export class RocketLauncher {
 		if (state.autoControl !== undefined) this.autoControl = state.autoControl;
 		if (state.currentPresetId !== undefined) this.currentPresetId = state.currentPresetId;
 		if (state.colorTheme !== undefined) this.colorTheme = state.colorTheme;
+		if (state.boosters !== undefined) this.boosters = state.boosters;
+		if (state.rendering !== undefined) this.rendering = state.rendering;
 		if (state.stages && Array.isArray(state.stages)) this.stages = JSON.parse(JSON.stringify(state.stages));
 		if (state.payload) this.payload = JSON.parse(JSON.stringify(state.payload));
 		if (state.fairing) this.fairing = JSON.parse(JSON.stringify(state.fairing));
