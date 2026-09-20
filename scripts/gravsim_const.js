@@ -219,7 +219,10 @@ export const RENDER = {
 		STAGE2_NOZZLE_RATIO: 0.35,
 		FAIRING_LEN_RATIO: 1.3,
 		FAIRING_WIDTH_RATIO: 0.65,
-		DEFAULT_ROTATION_SPEED: 0.0015
+		DEFAULT_ROTATION_SPEED: 0.0015,
+		LOD_RADIUS_THRESHOLD: 3.5,
+		LOD_LEN_RATIO: 2.0,
+		LOD_WIDTH_RATIO: 0.7
 	},
 	SLINGSHOT: {
 		GUIDE_RADIUS: 12,
@@ -310,8 +313,13 @@ export const ROCKET_VISUAL = {
 	ALIGNMENT: {
 		BASE_X_STAGE1_RATIO: 0.4,
 		BASE_X_UPPER_RATIO: -0.6,
+		BASE_X_SINGLE_STAGE_RATIO: -1.5,
+		BASE_X_3STG_STAGE1_RATIO: -3.1,
+		BASE_X_3STG_STAGE2_RATIO: -1.6,
+		BASE_X_3STG_STAGE3_RATIO: -0.9,
 		PAYLOAD_OFFSET_RATIO: 0.35,
 		UPPER_PLUME_SCALE: 0.65,
+		STAGE3_PLUME_SCALE: 0.50,
 		MAIN_PLUME_SCALE: 1.0
 	},
 	MODULES: {
@@ -319,10 +327,14 @@ export const ROCKET_VISUAL = {
 		STAGE1_LENGTH_RATIO: 2.8,
 		STAGE2_RADIUS_RATIO: 0.65,
 		STAGE2_LENGTH_RATIO: 1.2,
+		STAGE3_RADIUS_RATIO: 0.55,
+		STAGE3_LENGTH_RATIO: 0.9,
 		INTERSTAGE_LENGTH_RATIO: 0.35,
+		INTERSTAGE2_LENGTH_RATIO: 0.25,
 		FAIRING_LENGTH_RATIO: 1.1,
 		NOZZLE1_LENGTH_RATIO: 0.35,
 		NOZZLE2_LENGTH_RATIO: 0.32,
+		NOZZLE3_LENGTH_RATIO: 0.28,
 		FIN_BASE_RATIO: 0.2,
 		FIN_SPAN_RATIO: 0.65,
 		FIN_ROOT_RATIO: 0.25,
@@ -334,23 +346,27 @@ export const ROCKET_VISUAL = {
 		STAGE2_BORDER_COLOR: 'rgba(0, 0, 0, 0.15)',
 		STAGE2_NOZZLE_BASE_RATIO: 0.35,
 		STAGE2_NOZZLE_BELL_RATIO: 0.75,
+		STAGE3_NOZZLE_BASE_RATIO: 0.30,
+		STAGE3_NOZZLE_BELL_RATIO: 0.70,
 		INTERSTAGE_BORDER_COLOR: 'rgba(255, 255, 255, 0.15)',
 		STAGE1_BAND_MIN_W: 2,
 		STAGE1_BAND_W_RATIO: 0.04,
 		STAGE1_NOZZLE_BASE_RATIO: 0.6,
 		STAGE1_NOZZLE_BELL_RATIO: 0.95,
-		SATELLITE_BUS_W_RATIO: 0.65,
-		SATELLITE_BUS_H_RATIO: 0.50,
-		SATELLITE_PANEL_W_RATIO: 0.75,
-		SATELLITE_PANEL_H_RATIO: 0.90,
-		SATELLITE_DISH_R_RATIO: 0.40,
+		SATELLITE_BUS_W_RATIO: 1.40,
+		SATELLITE_BUS_H_RATIO: 1.70,
+		SATELLITE_PANEL_W_RATIO: 0.80,
+		SATELLITE_PANEL_H_RATIO: 0.85,
+		SATELLITE_PANEL_FOLDED_H_RATIO: 0.12,
+		SATELLITE_PANEL_BOOM_W_RATIO: 0.15,
+		SATELLITE_DISH_R_RATIO: 0.35,
 		SATELLITE_DISH_OFFSET_RATIO: 0.65,
 		SATELLITE_DISH_COLOR: '#ffffff',
 		SATELLITE_BUS_FILL: '#d4af37',
 		SATELLITE_BUS_STROKE: '#ffee88',
 		SATELLITE_PANEL_FILL: '#004488',
 		SATELLITE_PANEL_STROKE: '#00aaff',
-		SATELLITE_PANEL_MARGIN: 1
+		SATELLITE_PANEL_MARGIN: 2
 	},
 	PLUMES: {
 		THRUST_THRESHOLD: 0.01,
@@ -456,6 +472,17 @@ export const ROCKET_VISUAL = {
 			fins: '#3a78bd',
 			nozzle: '#3d454e',
 			accentBand: '#00e5ff'
+		},
+		epsilon: {
+			stg1Grad: ['#ffffff', '#f0f3f6', '#b0b8c2'],
+			stg2Grad: ['#ffffff', '#f0f3f6', '#b0b8c2'],
+			stg3Grad: ['#ffffff', '#f0f3f6', '#b0b8c2'],
+			interstage: '#1a1c20',
+			fairingGrad: ['#ffffff', '#f2f4f7', '#a8b0ba'],
+			fairingLine: 'rgba(215, 25, 32, 0.85)',
+			fins: '#d71920',
+			nozzle: '#1c2024',
+			accentBand: '#d71920'
 		}
 	}
 };
@@ -609,7 +636,15 @@ export const FLIGHT_COMPUTER_CONFIG = {
 	MAX_Q_PEAK_DROP_RATIO: 0.05,
 	MAX_Q_CONFIRM_DELAY_SEC: 0.5,
 	MAX_Q_KEEP_DURATION_SEC: 3.0,
-	DEFAULT_ISP: 320
+	DEFAULT_ISP: 320,
+	APOGEE_MIN_ALT_M: 100000,
+	ORBITAL_CUTOFF_MIN_ALT_M: 140000,
+	ORBITAL_CUTOFF_SAFE_PE_KM: 180.0,
+	ORBITAL_CUTOFF_MAX_ECC: 0.03,
+	ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM: 140.0,
+	COMMANDED_CUTOFF_MIN_FLIGHT_TIME_SEC: 15.0,
+	SUN_POINTING_TURN_RATE_PER_SEC: 1.5,
+	MIN_SUN_DIST_SQ: 1.0
 };
 
 // Communication buffer structure
@@ -1143,9 +1178,9 @@ export const DEFAULT_FLIGHT_EVENTS = [
 		id: 'fairing',
 		name: 'FAIRING',
 		type: 'alt',
-		value: 100000,
+		value: 110000,
 		enabled: false,
-		description: 'Payload fairing separation (Karman line)'
+		description: 'Payload fairing separation (Karman line / 110km)'
 	},
 	{
 		id: 'meco',
@@ -1191,10 +1226,17 @@ export const ROCKET_LAUNCHER_CONFIG = {
 
 // Multi-stage rocket parameters and presets
 export const MULTISTAGE_ROCKET = {
-	DEFAULT_SEPARATION_DELAY_SEC: 5.0,
-	DEFAULT_IGNITION_DELAY_SEC: 5.0,
-	DEFAULT_JETTISON_SPEED_M_S: 6.0,
-	FAIRING_DEFAULT_ALT_KM: 100,
+	DEFAULT_SEPARATION_DELAY_SEC: 3.0,
+	DEFAULT_IGNITION_DELAY_SEC: 2.0,
+	DEFAULT_JETTISON_SPEED_M_S: 18.0,
+	STAGE2_DEORBIT_DELTA_V_M_S: 180.0,
+	STAGE2_DEORBIT_BURN_ENABLED: true,
+	ORBITAL_CUTOFF_MIN_ALT_M: 140000,
+	ORBITAL_CUTOFF_SAFE_PE_KM: 180.0,
+	ORBITAL_CUTOFF_MAX_ECC: 0.03,
+	ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM: 140.0,
+	COMMANDED_CUTOFF_MIN_FLIGHT_TIME_SEC: 15.0,
+	FAIRING_DEFAULT_ALT_KM: 110,
 	STG_SEP_LAMP_DURATION_SEC: 3.5,
 	STAGE_SEP_FORWARD_PUSH_M_S: 1.5,
 	FAIRING_SEP_LATERAL_SPEED_M_S: 8.0,
@@ -1207,19 +1249,19 @@ export const MULTISTAGE_ROCKET = {
 		1: {
 			name: 'Stage 1 Booster',
 			color: '#c85a1a',
-			size: 5.5,
+			size: 1.8,
 			rotationSpeedRand: 0.0015
 		},
 		2: {
 			name: 'Stage 2 Upper Stage',
 			color: '#e2e6ea',
-			size: 5.0,
+			size: 1.4,
 			rotationSpeedRand: 0.0015
 		},
 		3: {
 			name: 'Fairing Half',
 			color: '#e8ebed',
-			size: 4.5,
+			size: 1.0,
 			rotationSpeedRand: 0.0015
 		}
 	}
@@ -1243,9 +1285,9 @@ export const MULTISTAGE_PRESETS = {
 				burnTime: 162.0,
 				ofRatio: 2.0,
 				radius: 2.5,
-				separationDelaySec: 5.0,
-				ignitionDelaySec: 6.0,
-				jettisonSpeedM_S: 6.0
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 18.0
 			},
 			{
 				stageNumber: 2,
@@ -1258,8 +1300,8 @@ export const MULTISTAGE_PRESETS = {
 				burnTime: 390.0,
 				ofRatio: 2.0,
 				radius: 2.0,
-				separationDelaySec: 5.0,
-				ignitionDelaySec: 6.0,
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
 				jettisonSpeedM_S: 5.0
 			}
 		],
@@ -1271,43 +1313,53 @@ export const MULTISTAGE_PRESETS = {
 		fairing: {
 			enabled: true,
 			massT: 1.7,
-			separationAltKm: 100
-		}
+			separationAltKm: 110
+		},
+		flightProfile: [
+			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+			{ type: 'alt', value: 2000, thrust: 100, angle: 10 },
+			{ type: 'alt', value: 15000, thrust: 100, angle: 25 },
+			{ type: 'alt', value: 40000, thrust: 100, angle: 45 },
+			{ type: 'alt', value: 80000, thrust: 100, angle: 65 },
+			{ type: 'alt', value: 150000, thrust: 100, angle: 78 },
+			{ type: 'alt', value: 220000, thrust: 100, angle: 86 },
+			{ type: 'alt', value: 280000, thrust: 100, angle: 90 }
+		]
 	},
 	"H3": {
 		id: "H3",
 		name: "H3 Style (2-Stage)",
 		colorTheme: "orange",
-		description: "Two-stage heavy launch vehicle with cryogenic hydrogen and liquid oxygen",
+		description: "Two-stage cryogenic launch vehicle with LE-9 and LE-5B-3 engines",
 		stages: [
 			{
 				stageNumber: 1,
-				name: "1st Stage (LE-9 x2)",
+				name: "1st Stage (LE-9 x3 / Boosted)",
 				fuelType: "hydro",
-				thrustKN: 2940,
+				thrustKN: 4500,
 				dryMassT: 25.0,
 				fuelMassT: 34.0,
 				oxidMassT: 206.0,
-				burnTime: 290.0,
+				burnTime: 235.0,
 				ofRatio: 6.0,
 				radius: 2.6,
-				separationDelaySec: 5.0,
-				ignitionDelaySec: 5.0,
-				jettisonSpeedM_S: 6.0
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 18.0
 			},
 			{
 				stageNumber: 2,
 				name: "2nd Stage (LE-5B-3)",
 				fuelType: "hydro",
-				thrustKN: 137,
+				thrustKN: 200,
 				dryMassT: 3.5,
 				fuelMassT: 4.0,
 				oxidMassT: 24.0,
-				burnTime: 530.0,
+				burnTime: 618.0,
 				ofRatio: 6.0,
 				radius: 2.6,
-				separationDelaySec: 5.0,
-				ignitionDelaySec: 5.0,
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
 				jettisonSpeedM_S: 5.0
 			}
 		],
@@ -1319,8 +1371,18 @@ export const MULTISTAGE_PRESETS = {
 		fairing: {
 			enabled: true,
 			massT: 2.0,
-			separationAltKm: 100
-		}
+			separationAltKm: 115
+		},
+		flightProfile: [
+			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+			{ type: 'alt', value: 2000, thrust: 100, angle: 10 },
+			{ type: 'alt', value: 15000, thrust: 100, angle: 25 },
+			{ type: 'alt', value: 40000, thrust: 100, angle: 45 },
+			{ type: 'alt', value: 75000, thrust: 100, angle: 65 },
+			{ type: 'alt', value: 120000, thrust: 100, angle: 80 },
+			{ type: 'alt', value: 180000, thrust: 100, angle: 88 },
+			{ type: 'alt', value: 240000, thrust: 100, angle: 90 }
+		]
 	},
 	"SSTO": {
 		id: "SSTO",
@@ -1345,15 +1407,98 @@ export const MULTISTAGE_PRESETS = {
 			}
 		],
 		payload: {
-			name: "Payload",
-			massT: 0.0,
-			radius: 2.0
+			name: "Orbital Capsule",
+			massT: 2.0,
+			radius: 1.8
 		},
 		fairing: {
-			enabled: false,
-			massT: 0.0,
-			separationAltKm: 100
-		}
+			enabled: true,
+			massT: 1.0,
+			separationAltKm: 110
+		},
+		flightProfile: [
+			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+			{ type: 'alt', value: 2000, thrust: 100, angle: 15 },
+			{ type: 'alt', value: 12000, thrust: 100, angle: 35 },
+			{ type: 'alt', value: 30000, thrust: 100, angle: 55 },
+			{ type: 'alt', value: 60000, thrust: 100, angle: 72 },
+			{ type: 'alt', value: 100000, thrust: 100, angle: 85 },
+			{ type: 'alt', value: 150000, thrust: 100, angle: 90 },
+			{ type: 'alt', value: 200000, thrust: 100, angle: 90 }
+		]
+	},
+	"EPSILON": {
+		id: "EPSILON",
+		name: "Epsilon Style (3-Stage Solid)",
+		colorTheme: "epsilon",
+		description: "Three-stage all-solid propellant launch vehicle with autonomous checkout",
+		stages: [
+			{
+				stageNumber: 1,
+				name: "1st Stage (SRB-A3)",
+				fuelType: "solid",
+				thrustKN: 1800,
+				dryMassT: 8.7,
+				fuelMassT: 66.3,
+				oxidMassT: 0.0,
+				burnTime: 104.0,
+				ofRatio: 0.0,
+				radius: 1.3,
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 15.0
+			},
+			{
+				stageNumber: 2,
+				name: "2nd Stage (M-35)",
+				fuelType: "solid",
+				thrustKN: 340,
+				dryMassT: 2.2,
+				fuelMassT: 15.0,
+				oxidMassT: 0.0,
+				burnTime: 127.0,
+				ofRatio: 0.0,
+				radius: 1.25,
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 8.0
+			},
+			{
+				stageNumber: 3,
+				name: "3rd Stage (KM-V2c)",
+				fuelType: "solid",
+				thrustKN: 85,
+				dryMassT: 0.8,
+				fuelMassT: 2.5,
+				oxidMassT: 0.0,
+				burnTime: 85.0,
+				ofRatio: 0.0,
+				radius: 0.8,
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 5.0
+			}
+		],
+		payload: {
+			name: "ASNARO-2",
+			massT: 0.6,
+			radius: 1.2
+		},
+		fairing: {
+			enabled: true,
+			massT: 0.8,
+			separationAltKm: 115
+		},
+		flightProfile: [
+			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+			{ type: 'alt', value: 2000, thrust: 100, angle: 12 },
+			{ type: 'alt', value: 12000, thrust: 100, angle: 28 },
+			{ type: 'alt', value: 35000, thrust: 100, angle: 48 },
+			{ type: 'alt', value: 70000, thrust: 100, angle: 68 },
+			{ type: 'alt', value: 120000, thrust: 100, angle: 82 },
+			{ type: 'alt', value: 180000, thrust: 100, angle: 88 },
+			{ type: 'alt', value: 240000, thrust: 100, angle: 90 }
+		]
 	}
 };
 

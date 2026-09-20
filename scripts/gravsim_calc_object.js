@@ -6,7 +6,8 @@ import {
 	DEFAULT_OBJECT_PARAMS, TANK_PRESSURE_SIM,
 	OBJECT_TYPES, SIMULATION,
 	MULTISTAGE_ROCKET,
-	TRAJECTORY_PREDICTION
+	TRAJECTORY_PREDICTION,
+	ROCKET_FUELS
 } from './gravsim_const.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
 import { MathUtils, UnitConvertUtils, normalizeRocketConfig } from './gravsim_utils.js';
@@ -247,7 +248,7 @@ export class CalcRocket extends GravSimCalcObject {
 			enabled: !!normConfig.fairing?.enabled,
 			massT: normConfig.fairing?.massT || 0,
 			separationAltKm: normConfig.fairing?.separationAltKm || MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM,
-			isSeparated: false
+			isSeparated: !!normConfig.fairing?.isSeparated
 		};
 		this.currentStageIndex = 0;
 		this.totalStages = this.stages.length;
@@ -320,7 +321,14 @@ export class CalcRocket extends GravSimCalcObject {
 		this.oxidMass = stage.oxidMassT;
 
 		const totalPropT = stage.fuelMassT + stage.oxidMassT;
-		this.massLossRate = stage.burnTime > 0 ? (totalPropT / stage.burnTime) : 0; // t/s
+		if (!this.burnTime || this.burnTime <= 0) {
+			const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
+			const totalPropKg = totalPropT * 1000;
+			if (this.thrustForce > 0 && totalPropKg > 0) {
+				this.burnTime = (totalPropKg * fuel.isp * PHYSICS.G0) / this.thrustForce;
+			}
+		}
+		this.massLossRate = this.burnTime > 0 ? (totalPropT / this.burnTime) : 0; // t/s
 
 		this.updateTotalMass();
 	}
@@ -360,10 +368,29 @@ export class CalcRocket extends GravSimCalcObject {
 		// 1. Calculate jettison velocity & position
 		const sepAngle = this.thrustAngle + Math.PI; // Backward
 		const sepSpeedM = stage.jettisonSpeedM_S || MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S;
-		const sepVx = this.vx + Math.cos(sepAngle) * sepSpeedM;
-		const sepVy = this.vy + Math.sin(sepAngle) * sepSpeedM;
+		let sepVx = this.vx + Math.cos(sepAngle) * sepSpeedM;
+		let sepVy = this.vy + Math.sin(sepAngle) * sepSpeedM;
 		
 		const isFinalStage = (this.currentStageIndex + 1 >= this.totalStages);
+
+		// If final stage (Upper stage releasing payload), apply automated deorbit burn to upper stage debris
+		if (isFinalStage && MULTISTAGE_ROCKET.STAGE2_DEORBIT_BURN_ENABLED) {
+			let ref = this._lastDominantBody;
+			if ((!ref || ref.name === 'Sun') && this.dominantBody && this.dominantBody.name !== 'Sun') {
+				ref = this.dominantBody;
+			}
+			const domVx = ref ? (ref.vx || 0) : 0;
+			const domVy = ref ? (ref.vy || 0) : 0;
+			const relVx = this.vx - domVx;
+			const relVy = this.vy - domVy;
+			const currentRelSpeed = Math.hypot(relVx, relVy);
+			if (currentRelSpeed > 0) {
+				const deorbitAngle = Math.atan2(relVy, relVx) + Math.PI; // retrograde relative to dominant celestial body
+				const deorbitDv = MULTISTAGE_ROCKET.STAGE2_DEORBIT_DELTA_V_M_S || 180.0;
+				sepVx += Math.cos(deorbitAngle) * deorbitDv;
+				sepVy += Math.sin(deorbitAngle) * deorbitDv;
+			}
+		}
 
 		// Scale physical radius with rocket body to unify zoom magnification
 		const debrisRadius = isFinalStage
@@ -392,6 +419,18 @@ export class CalcRocket extends GravSimCalcObject {
 		this.vy += Math.sin(this.thrustAngle) * forwardPush;
 
 		this.stgSepLampTimer = MULTISTAGE_ROCKET.STG_SEP_LAMP_DURATION_SEC;
+
+		// If fairing is still attached when the final stage is jettisoned (payload release),
+		// force fairing separation to ensure the payload satellite is never trapped inside the fairing.
+		if (isFinalStage && this.fairing?.enabled && !this.fairing.isSeparated) {
+			let curAltM = Infinity;
+			if (this._lastDominantBody && this._lastDistToRefM !== undefined) {
+				curAltM = this._lastDistToRefM - this._lastDominantBody.radius;
+			} else if (this._lastDominantBody) {
+				curAltM = Math.hypot(this.x - this._lastDominantBody.x, this.y - this._lastDominantBody.y) - this._lastDominantBody.radius;
+			}
+			this.separateFairing(curAltM, true);
+		}
 
 		// 4. Advance to next stage or finish with payload separation
 		if (!isFinalStage) {
@@ -427,11 +466,11 @@ export class CalcRocket extends GravSimCalcObject {
 		}
 	}
 
-	separateFairing(curAltM) {
+	separateFairing(curAltM, force = false) {
 		if (this.disableStaging || !this.fairing.enabled || this.fairing.isSeparated) { return; }
 
 		const sepAltM = (this.fairing.separationAltKm || MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM) * 1000;
-		if (curAltM >= sepAltM) {
+		if (force || curAltM >= sepAltM) {
 			this.fairing.isSeparated = true;
 			this.updateTotalMass();
 
@@ -746,6 +785,10 @@ export class CalcRocket extends GravSimCalcObject {
 			this._progradeAngle = trueProgradeAngle;
 		}
 
+		// Record last known dominant body and distance for staging altitude checks
+		this._lastDominantBody = refBody;
+		this._lastDistToRefM = distToRefM;
+
 		// Fallback sun finding if sunBody not explicitly provided
 		const effectiveSun = sunBody || (refBody?.name === 'Sun' ? refBody : null);
 
@@ -799,6 +842,92 @@ export class CalcRocket extends GravSimCalcObject {
 			if (this.stgSepLampTimer < 0) this.stgSepLampTimer = 0;
 		}
 
+		// Check Orbital Insertion Cutoff (SECO) or commanded throttle cutoff when autoControl is active
+		if (this.autoControl && !this.disableStaging) {
+			const isFinalStage = (this.currentStageIndex + 1 >= this.totalStages);
+
+			// 1. Autonomous orbital insertion cutoff outside dense atmosphere
+			if (isFinalStage && this.currentStageIndex >= 1 && this.stageState === 'STG_BURNING' && refBody && distToRefM > 0) {
+				const curAltM = distToRefM - refBody.radius;
+				if (curAltM >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MIN_ALT_M) {
+					const GM = PHYSICS.G * refBody.mass;
+					const r = distToRefM;
+					const dvx = this.vx - refBody.vx;
+					const dvy = this.vy - refBody.vy;
+					const v = Math.hypot(dvx, dvy);
+					const E = 0.5 * v * v - GM / r;
+
+					if (E < 0) {
+						const dx = this.x - refBody.x;
+						const dy = this.y - refBody.y;
+						const h = dx * dvy - dy * dvx;
+						const ecc = Math.sqrt(Math.max(0, 1 + (2 * E * h * h) / (GM * GM)));
+						const a = -GM / (2 * E);
+						const peKm = (a * (1 - ecc) - refBody.radius) / 1000;
+
+						// Cutoff when safe perigee is reached or circularized near apogee
+						if (peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MAX_ECC && peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM)) {
+							this.burnTime = 0;
+							this.stageState = 'STG_MECO';
+							this.stgTimer = 0;
+							if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {
+								this.presState = 'MECO_TRANSIENT';
+								this.presTimer = 0;
+							}
+							this.updateTotalMass();
+						}
+					}
+				}
+			}
+
+			// 2. Commanded Coast (throttle <= 0 while burning) vs Re-ignition (throttle > 0 while coasting)
+			if (this.stageState === 'STG_BURNING' && throttle <= 0 && (this.flightComputer?.flightTime || 0) > MULTISTAGE_ROCKET.COMMANDED_CUTOFF_MIN_FLIGHT_TIME_SEC && this.burnTime > 0) {
+				let orbitComplete = false;
+				if (isFinalStage && refBody && distToRefM > 0) {
+					const GM = PHYSICS.G * refBody.mass;
+					const dvx = this.vx - refBody.vx;
+					const dvy = this.vy - refBody.vy;
+					const v = Math.hypot(dvx, dvy);
+					const E = 0.5 * v * v - GM / distToRefM;
+					if (E < 0) {
+						const dx = this.x - refBody.x;
+						const dy = this.y - refBody.y;
+						const h = dx * dvy - dy * dvx;
+						const ecc = Math.sqrt(Math.max(0, 1 + (2 * E * h * h) / (GM * GM)));
+						const a = -GM / (2 * E);
+						const peKm = (a * (1 - ecc) - refBody.radius) / 1000;
+						if (peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM) {
+							orbitComplete = true;
+						}
+					}
+				}
+
+				if (orbitComplete) {
+					this.burnTime = 0;
+					this.stageState = 'STG_MECO';
+					this.stgTimer = 0;
+					if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {
+						this.presState = 'MECO_TRANSIENT';
+						this.presTimer = 0;
+					}
+					this.updateTotalMass();
+				} else {
+					// Coast mode: hold fuel and stage, extinguish engine
+					this.stageState = 'STG_COAST';
+					this.isIgnited = false;
+					this._thrustRatio = 0.0;
+					this.presState = 'POST_MECO_HOLD';
+					this.presTimer = 0;
+				}
+			} else if (this.stageState === 'STG_COAST' && throttle > 0 && this.burnTime > 0) {
+				// Re-ignite engine from Coast mode!
+				this.stageState = 'STG_BURNING';
+				this.isIgnited = true;
+				this.presState = 'IGNITION_TRANSIENT';
+				this.presTimer = 0;
+			}
+		}
+
 		// Handle Staging State Machine
 		if (!this.disableStaging) {
 			const curStage = this.stages[this.currentStageIndex];
@@ -828,7 +957,7 @@ export class CalcRocket extends GravSimCalcObject {
 		}
 
 		// Force cut throttle before ignition or during coast
-		if (!this.isIgnited || this.stageState === 'INTERSTAGE_COAST' || this.stageState === 'STG_MECO' || this.stageState === 'ORBITAL_COAST') {
+		if (!this.isIgnited || this.stageState === 'INTERSTAGE_COAST' || this.stageState === 'STG_MECO' || this.stageState === 'STG_COAST' || this.stageState === 'ORBITAL_COAST') {
 			throttle = 0;
 		}
 

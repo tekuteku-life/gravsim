@@ -67,6 +67,48 @@ test('FlightComputer - Flight Profile Interpolation (_evaluateProfile)', () => {
 	assert.equal(fc._profileState.relAngleDeg, 90);
 });
 
+test('FlightComputer - Apogee Trigger Detection and Profile Evaluation', () => {
+	const fc = new FlightComputer({
+		flightProfile: [
+			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+			{ type: 'time', value: 100, thrust: 0, angle: 90 },
+			{ type: 'apogee', value: 0, thrust: 80, angle: 90 },
+			{ type: 'apogee', value: 30, thrust: 50, angle: 90 }
+		]
+	});
+
+	// Phase 1: Ascent before time 100
+	fc.telemetryCache.altM = 50000;
+	fc.flightTime = 50;
+	fc._evaluateProfile({ dt: 1 });
+	assert.equal(fc._profileState.throttle, 1.0);
+
+	// Phase 2: Coasting at time >= 100 before apogee (vV > 0 climbing)
+	fc.flightTime = 120;
+	const refBody = { radius: 6371000, mass: 5.972e24, x: 0, y: 0, vx: 0, vy: 0 };
+	fc.update({
+		dt: 1, x: 0, y: -6521000, vx: 0, vy: -500,
+		altM: 150000, isHoldDown: false, distToRefM: 6521000, refBody
+	});
+	assert.equal(fc.hasPassedApogee, false);
+	assert.equal(fc._profileState.throttle, 0.0, 'Thrust must be 0 during coast before apogee');
+
+	// Phase 3: Passing apogee (vV transitions <= 0 outside atmosphere)
+	fc.flightTime = 300;
+	fc.update({
+		dt: 1, x: 0, y: -6621000, vx: 0, vy: 50,
+		altM: 250000, isHoldDown: false, distToRefM: 6621000, refBody
+	});
+	assert.equal(fc.hasPassedApogee, true);
+	assert.equal(fc.apogeeTime, 301);
+	assert.equal(fc._profileState.throttle, 0.8, 'Thrust must be 80% at apogee trigger');
+
+	// Phase 4: Interpolation between apogee steps (at apogeeTime + 15s)
+	fc.flightTime = 316;
+	fc._evaluateProfile({ dt: 1 });
+	assert.equal(fc._profileState.throttle, 0.65, 'Thrust should interpolate between 80% and 50%');
+});
+
 test('FlightComputer - Max-G limiting throttle computation', () => {
 	const fc = new FlightComputer({
 		maxGLimit: 3.0 // 3 G

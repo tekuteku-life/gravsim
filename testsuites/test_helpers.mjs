@@ -47,7 +47,7 @@ export const createFalcon9Config = () => {
 				ispSec: 300,
 				separationDelaySec: 1.5,
 				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 2.0,
+				jettisonSpeedM_S: 18.0,
 				radius: 1.85,
 				isIgnited: true,
 				tankPresFuel: 350,
@@ -79,7 +79,7 @@ export const createFalcon9Config = () => {
 		fairing: {
 			enabled: true,
 			massT: 1.7,
-			separationAltKm: 100,
+			separationAltKm: 110,
 			isSeparated: false
 		}
 	};
@@ -494,7 +494,7 @@ export const createMockUniverse = (overrides = {}) => {
 		},
 		RocketLauncher: {
 			flightProfile: [{ type: 'alt', value: 0, thrust: 100, angle: 0 }],
-			stages: [{ stageNumber: 1, fuelMassT: 100, oxidMassT: 200, thrustKN: 5000, ispSec: 300, dryMassT: 20 }],
+			stages: [{ stageNumber: 1, fuelType: 'liquid', fuelMassT: 100, oxidMassT: 200, thrustKN: 5000, ispSec: 300, dryMassT: 20 }],
 			payload: { name: 'Payload', massT: 5 },
 			fairing: { enabled: true, massT: 1 },
 			mode: 'host',

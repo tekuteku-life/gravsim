@@ -18,16 +18,19 @@ export class SystemTab {
 		});
 
 		// Subscribe to camera tracking changes to update dropdown UI
-		EventBus.on('camera:set-tracking-target', (targetObj) => {
+		const onTargetUpdated = (targetObj) => {
 			if (targetObj) {
-				this.ui.centerSelect.value = targetObj.id;
+				this.ui.centerSelect.value = String(targetObj.id);
 
 				this.updateTimeScaleIndicator(this.getTimeScale());
 
 				// Setup initial zoom indicator based on camera target
 				this.updateZoomScaleIndicator(Math.pow(10, this.universe.camera.targetZoomExp));
 			}
-		});
+		};
+		EventBus.on('camera:set-tracking-target', onTargetUpdated);
+		EventBus.on('camera:target-changed', onTargetUpdated);
+		EventBus.on('camera:set-auto-tracking', (target) => onTargetUpdated(target));
 	}
 
 	_initElements() {
@@ -283,7 +286,9 @@ export class SystemTab {
 	}
 
 	updateCenterOptions() {
-		const currentCenterId = this.ui.centerSelect.value;
+		const targetId = (this.universe.camera && this.universe.camera.trackingTarget)
+			? this.universe.camera.trackingTarget.id.toString()
+			: this.ui.centerSelect.value;
 		this.ui.centerSelect.innerHTML = '';
 
 		for (const obj of this.universe.objects) {
@@ -291,11 +296,15 @@ export class SystemTab {
 			option.value = obj.id;
 			option.textContent = `${obj.name} (ID: ${obj.id})`;
 
-			// Keep existing selection if possible
-			if (obj.id.toString() === currentCenterId) {
+			// Select active tracking target or fallback
+			if (obj.id.toString() === targetId) {
 				option.selected = true;
 			}
 			this.ui.centerSelect.appendChild(option);
+		}
+
+		if (targetId) {
+			this.ui.centerSelect.value = targetId;
 		}
 	}
 

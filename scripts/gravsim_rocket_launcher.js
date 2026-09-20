@@ -35,7 +35,7 @@ export class RocketLauncher {
 		// Multi-stage setup (default: Falcon 9 Style 2-stage)
 		const preset = MULTISTAGE_PRESETS.FALCON9;
 		this.currentPresetId = 'FALCON9';
-		this.colorTheme = 'orange';
+		this.colorTheme = preset.colorTheme || 'classic';
 		this.stages = JSON.parse(JSON.stringify(preset.stages));
 		this.payload = JSON.parse(JSON.stringify(preset.payload));
 		this.fairing = JSON.parse(JSON.stringify(preset.fairing));
@@ -47,14 +47,21 @@ export class RocketLauncher {
 		this.fuelType = this.stages[0].fuelType;
 		this.thrustKN = this.stages[0].thrustKN;
 
-		// Default Flight Profile
-		this.flightProfile = [
-			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-			{ type: 'alt', value: 25000, thrust: 100, angle: 45 },
-			{ type: 'alt', value: 70000, thrust: 100, angle: 90 }
-		];
+		// Default Flight Profile (from Preset)
+		this.flightProfile = preset.flightProfile
+			? JSON.parse(JSON.stringify(preset.flightProfile))
+			: [
+				{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+				{ type: 'alt', value: 2000, thrust: 100, angle: 10 },
+				{ type: 'alt', value: 15000, thrust: 100, angle: 25 },
+				{ type: 'alt', value: 40000, thrust: 100, angle: 45 },
+				{ type: 'alt', value: 80000, thrust: 100, angle: 65 },
+				{ type: 'alt', value: 150000, thrust: 100, angle: 78 },
+				{ type: 'alt', value: 220000, thrust: 100, angle: 86 },
+				{ type: 'alt', value: 280000, thrust: 100, angle: 90 }
+			];
 
-		this.thrustKN = 7600;	// (kN)
+		this.thrustKN = this.stages[0].thrustKN;
 		this.calculatedBurnTime = 0;
 		this.maxGLimit = 4.0;	// G
 		this.predictionDurationMonths = 6;
@@ -491,6 +498,10 @@ export class RocketLauncher {
 		const initialMassTon = this.dryMassT + this.fuelMassT + this.oxidMassT;
 		const finalMassTon = this.dryMassT;
 		const massLossRateTon = this.calculatedBurnTime > 0 ? (initialMassTon - finalMassTon) / this.calculatedBurnTime : 0;
+
+		if (this.stages && this.stages[0] && this.calculatedBurnTime > 0) {
+			this.stages[0].burnTime = this.calculatedBurnTime;
+		}
 
 		const optParams = {
 			force: UnitConvertUtils.kn2n(this.thrustKN),

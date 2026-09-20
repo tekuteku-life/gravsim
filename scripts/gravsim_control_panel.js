@@ -73,6 +73,9 @@ export class ControlPanel {
 		} else {
 			// Close tab except for Rocket tab
 			this.rocketTab.close();
+			if (targetId === 'tab-sys') {
+				this.systemTab.updateCenterOptions();
+			}
 		}
 	}
 

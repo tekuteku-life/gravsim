@@ -148,16 +148,17 @@ describe('Regression 07: Trajectory Predictor Multi-Stage Simulation', () => {
 		assert.ok(stg2SepEvent, '2-STG-SEP event must be detected');
 		assert.ok(payloadSepEvent, 'PAYLOAD SEP event must be detected');
 
-		// Assert chronological order
+		// Assert chronological order (Real Falcon 9 sequence: Fairing jettisons at 110km during Stage 2 burn)
 		assert.ok(pitchEvent.time <= meco1Event.time, 'PITCH must occur before MECO-1');
 		assert.ok(meco1Event.time <= stg1SepEvent.time, 'MECO-1 must occur before or at STG-1 SEP');
 		assert.ok(stg1SepEvent.time <= ses1Event.time, 'STG-1 SEP must occur before or at SES-1');
-		assert.ok(ses1Event.time <= seco1Event.time, 'SES-1 must occur before SECO-1');
+		assert.ok(ses1Event.time <= fairingEvent.time, 'SES-1 must occur before FAIRING JETTISON (real Falcon 9 sequence)');
+		assert.ok(fairingEvent.time <= seco1Event.time, 'FAIRING JETTISON must occur before SECO-1');
 		assert.ok(seco1Event.time <= stg2SepEvent.time, 'SECO-1 must occur before 2-STG-SEP');
 		assert.ok(stg2SepEvent.time <= payloadSepEvent.time, '2-STG-SEP must occur before or at PAYLOAD SEP');
 
 		// Assert physical plausibility
-		assert.ok(fairingEvent.altM >= 99000, 'Fairing must jettison at or above 100km threshold');
+		assert.ok(fairingEvent.altM >= 100000, 'Fairing must jettison at or above 100km threshold');
 		assert.ok(seco1Event.altM >= 100000, 'SECO-1 must occur outside dense atmosphere (>100km)');
 	});
 });

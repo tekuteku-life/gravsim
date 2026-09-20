@@ -49,6 +49,9 @@ export class FlightComputer {
 			isGLimitNear: false,
 		};
 		this._isAntiStallActive = false;
+		this.hasPassedApogee = false;
+		this.apogeeTime = null;
+		this._prevVv = 0;
 	}
 
 	_evaluateProfile(sensor) {
@@ -64,9 +67,17 @@ export class FlightComputer {
 		let currentIndex = -1;
 		for (let i = 0; i < this.flightProfile.length; i++) {
 			const step = this.flightProfile[i];
-			const currentVal = step.type === 'time' ? this.flightTime : this.telemetryCache.altM;
+			let triggered = false;
 
-			if (currentVal >= step.value) {
+			if (step.type === 'time') {
+				triggered = (this.flightTime >= step.value);
+			} else if (step.type === 'alt') {
+				triggered = (this.telemetryCache.altM >= step.value);
+			} else if (step.type === 'apogee') {
+				triggered = (this.hasPassedApogee && this.flightTime >= (this.apogeeTime + (step.value || 0)));
+			}
+
+			if (triggered) {
 				currentIndex = i;
 			} else {
 				break;
@@ -99,8 +110,18 @@ export class FlightComputer {
 			return;
 		}
 
-		const currentVal = stepA.type === 'time' ? this.flightTime : this.telemetryCache.altM;
-		const progress = Math.max(0, Math.min(1, (currentVal - stepA.value) / (stepB.value - stepA.value)));
+		let currentVal = 0;
+		if (stepA.type === 'time') {
+			currentVal = this.flightTime;
+		} else if (stepA.type === 'alt') {
+			currentVal = this.telemetryCache.altM;
+		} else if (stepA.type === 'apogee') {
+			currentVal = this.flightTime - (this.apogeeTime || 0);
+		}
+
+		const progress = (stepB.value !== stepA.value)
+			? Math.max(0, Math.min(1, (currentVal - stepA.value) / (stepB.value - stepA.value)))
+			: 1;
 
 		const throttleA = stepA.thrust / 100;
 		const throttleB = stepB.thrust / 100;
@@ -117,6 +138,16 @@ export class FlightComputer {
 		}
 
 		this._updateTelemetry(sensor);
+
+		// Detect Apogee passage outside atmosphere
+		if (!sensor.isHoldDown && !this.hasPassedApogee && this.telemetryCache.altM >= FLIGHT_COMPUTER_CONFIG.APOGEE_MIN_ALT_M) {
+			if (this._prevVv > 0 && this.telemetryCache.vV <= 0) {
+				this.hasPassedApogee = true;
+				this.apogeeTime = this.flightTime;
+			}
+		}
+		this._prevVv = this.telemetryCache.vV;
+
 		this._evaluateProfile(sensor);
 
 		// Apply profile state relative to instantaneous local zenith angle (dynamic attitude guidance)
@@ -320,6 +351,33 @@ export class FlightComputer {
 			}
 		}
 
+		// Orbital Insertion Cutoff (SECO)
+		// When upper stage reaches safe, sustainable orbit (bound energy and perigee above atmosphere)
+		if (sensor.stageIndex !== undefined && sensor.stages && (sensor.stageIndex + 1 >= sensor.stages.length) && sensor.refBody && sensor.distToRefM > 0) {
+			const altM = sensor.distToRefM - sensor.refBody.radius;
+			if (altM >= FLIGHT_COMPUTER_CONFIG.ORBITAL_CUTOFF_MIN_ALT_M) {
+				const GM = PHYSICS.G * sensor.refBody.mass;
+				const r = sensor.distToRefM;
+				const dvx = sensor.vx - sensor.refBody.vx;
+				const dvy = sensor.vy - sensor.refBody.vy;
+				const v = Math.hypot(dvx, dvy);
+				const E = 0.5 * v * v - GM / r;
+
+				if (E < 0) {
+					const dx = sensor.x - sensor.refBody.x;
+					const dy = sensor.y - sensor.refBody.y;
+					const h = dx * dvy - dy * dvx;
+					const ecc = Math.sqrt(Math.max(0, 1 + (2 * E * h * h) / (GM * GM)));
+					const a = -GM / (2 * E);
+					const peKm = (a * (1 - ecc) - sensor.refBody.radius) / 1000;
+
+					if (peKm >= FLIGHT_COMPUTER_CONFIG.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= FLIGHT_COMPUTER_CONFIG.ORBITAL_CUTOFF_MAX_ECC && peKm >= FLIGHT_COMPUTER_CONFIG.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM)) {
+						return 0.0;
+					}
+				}
+			}
+		}
+
 		return throttle;
 	}
 
@@ -334,10 +392,10 @@ export class FlightComputer {
 			if (sensor.isPayloadSeparated && sensor.sunX !== undefined && sensor.sunY !== undefined) {
 				const dx = sensor.sunX - sensor.x;
 				const dy = sensor.sunY - sensor.y;
-				if (dx * dx + dy * dy > 1.0) {
+				if (dx * dx + dy * dy > FLIGHT_COMPUTER_CONFIG.MIN_SUN_DIST_SQ) {
 					const sunAngle = Math.atan2(dy, dx);
 					const turnDiff = MathUtils.normalizeAngle(sunAngle - this.currentThrustAngle);
-					const sunTurnRate = FLIGHT_COMPUTER_CONFIG.SUN_POINTING_TURN_RATE_PER_SEC || 1.5;
+					const sunTurnRate = FLIGHT_COMPUTER_CONFIG.SUN_POINTING_TURN_RATE_PER_SEC;
 					const maxTurn = sunTurnRate * sensor.dt;
 
 					if (Math.abs(turnDiff) > maxTurn) {
@@ -350,7 +408,7 @@ export class FlightComputer {
 
 			// Otherwise track prograde direction smoothly (rocket coasting)
 			const turnDiff = MathUtils.normalizeAngle(progradeAngle - this.currentThrustAngle);
-			const coastTurnRate = FLIGHT_COMPUTER_CONFIG.COAST_TURN_RATE_PER_SEC || 1.5;
+			const coastTurnRate = FLIGHT_COMPUTER_CONFIG.COAST_TURN_RATE_PER_SEC;
 			const maxTurn = coastTurnRate * sensor.dt;
 
 			if (Math.abs(turnDiff) > maxTurn) {

@@ -9,7 +9,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
 import { WorkerBridge } from '../../scripts/gravsim_worker_bridge.js';
-import { OBJECT_TYPES } from '../../scripts/gravsim_const.js';
+import { OBJECT_TYPES, ROCKET_VISUAL } from '../../scripts/gravsim_const.js';
+import { ObjectManager } from '../../scripts/gravsim_object_manager.js';
+import { Rocket } from '../../scripts/gravsim_object.js';
 import { logDebug, assertClose, createFalcon9Config } from '../test_helpers.mjs';
 
 describe('Regression 04: Multi-Stage Debris Generation & Visibility', () => {
@@ -77,10 +79,10 @@ describe('Regression 04: Multi-Stage Debris Generation & Visibility', () => {
 		assertClose(rocket.mass, 110.2, 0.1, 'Rocket mass after Stage 1 drop must be ~110.2t');
 
 		// -------------------------------------------------------------
-		// 2. Fairing Jettison at > 100km altitude
+		// 2. Fairing Jettison at > 110km altitude
 		// -------------------------------------------------------------
-		// Move rocket to 105 km altitude and update forces/distances
-		rocket.y = 6371000 + 105000;
+		// Move rocket to 115 km altitude and update forces/distances
+		rocket.y = 6371000 + 115000;
 		rocket.stageState = 'STG_BURNING';
 		rocket.isIgnited = true;
 
@@ -216,6 +218,42 @@ describe('Regression 04: Multi-Stage Debris Generation & Visibility', () => {
 		const upperStageVisual = getVisualAttributes(2);
 		assert.equal(upperStageVisual.name, 'Stage 2 Upper Stage');
 		assert.ok(upperStageVisual.size >= 3.5, 'Upper stage size must be easily visible (>=3.5px)');
+	});
+
+	it('should spawn debris with color matching rocket colorTheme (classic, epsilon, blue)', () => {
+		const mockWorker = { postMessage: () => {} };
+
+		// 1. Classic theme (Falcon 9)
+		const objMgrClassic = new ObjectManager({}, mockWorker);
+		const rocketClassic = new Rocket(201, 'Falcon 9', 0, 0, 0, 0, 25, 100, 200, '#fff', 3, 2, 0, null, 0, 'classic');
+		objMgrClassic.addObject(rocketClassic, false);
+
+		const bufferClassic = WorkerBridge.formatWorkerToMain([
+			{ id: 201, type: OBJECT_TYPES.ROCKET, x: 0, y: 0, vx: 0, vy: 0, mass: 100, radius: 2 },
+			{ id: 202, type: OBJECT_TYPES.DEBRIS, debrisSubType: 1, x: 0, y: 0, vx: 0, vy: 0, mass: 25, radius: 2 }
+		]);
+		objMgrClassic.updateObjectParams({ objectsData: bufferClassic, validLength: bufferClassic.length });
+
+		const boosterClassic = objMgrClassic.objects.find(o => o.id === 202);
+		assert.ok(boosterClassic, 'Booster debris must exist');
+		assert.equal(boosterClassic.colorTheme, 'classic');
+		assert.equal(boosterClassic.color, ROCKET_VISUAL.THEMES.classic.stg1Grad[1]);
+
+		// 2. Epsilon theme
+		const objMgrEpsilon = new ObjectManager({}, mockWorker);
+		const rocketEpsilon = new Rocket(301, 'Epsilon', 0, 0, 0, 0, 8.7, 66.3, 0, '#fff', 3, 1.3, 0, null, 0, 'epsilon');
+		objMgrEpsilon.addObject(rocketEpsilon, false);
+
+		const bufferEpsilon = WorkerBridge.formatWorkerToMain([
+			{ id: 301, type: OBJECT_TYPES.ROCKET, x: 0, y: 0, vx: 0, vy: 0, mass: 50, radius: 1.3 },
+			{ id: 302, type: OBJECT_TYPES.DEBRIS, debrisSubType: 1, x: 0, y: 0, vx: 0, vy: 0, mass: 8.7, radius: 1.3 }
+		]);
+		objMgrEpsilon.updateObjectParams({ objectsData: bufferEpsilon, validLength: bufferEpsilon.length });
+
+		const boosterEpsilon = objMgrEpsilon.objects.find(o => o.id === 302);
+		assert.ok(boosterEpsilon, 'Booster debris must exist');
+		assert.equal(boosterEpsilon.colorTheme, 'epsilon');
+		assert.equal(boosterEpsilon.color, ROCKET_VISUAL.THEMES.epsilon.stg1Grad[1]);
 	});
 });
 

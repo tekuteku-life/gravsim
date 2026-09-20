@@ -86,17 +86,21 @@ export class RocketRenderer {
 		const l1 = R * m.STAGE1_LENGTH_RATIO;
 		const r2 = R * m.STAGE2_RADIUS_RATIO;
 		const l2 = R * m.STAGE2_LENGTH_RATIO;
+		const r3 = R * (m.STAGE3_RADIUS_RATIO || 0.55);
+		const l3 = R * (m.STAGE3_LENGTH_RATIO || 0.9);
 		const lInter = R * m.INTERSTAGE_LENGTH_RATIO;
+		const lInter2 = R * (m.INTERSTAGE2_LENGTH_RATIO || 0.25);
 		const lFairing = R * m.FAIRING_LENGTH_RATIO;
 		const lNozzle1 = R * m.NOZZLE1_LENGTH_RATIO;
 		const lNozzle2 = R * m.NOZZLE2_LENGTH_RATIO;
+		const lNozzle3 = R * (m.NOZZLE3_LENGTH_RATIO || 0.28);
 
 		if (isPayloadOnly) {
-			this._drawPayloadSatellite(ctx, 0, 0, r2);
+			const payloadR = (totalStg === 1) ? r1 : ((totalStg >= 3) ? r3 : r2);
+			this._drawPayloadSatellite(ctx, 0, 0, payloadR, true);
 			return;
 		}
 
-		const hasStage1 = (curStgIdx === 0);
 		const hasFairing = Boolean(
 			rocket.disableStaging ||
 			(rocket.fairing?.enabled &&
@@ -104,6 +108,101 @@ export class RocketRenderer {
 			!rocket.fairing?.isSeparated)
 		);
 
+		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
+		const curFuel = (rocket.stages && rocket.stages[curStgIdx]?.fuelType) || rocket.fuelType || 'liquid';
+		const throttle = rocket.thrustRatio || 1.0;
+
+		// 1. Single-stage configuration (SSTO): Only Stage 1 + Fairing / Payload
+		if (totalStg === 1) {
+			const stg1X = R * (align.BASE_X_SINGLE_STAGE_RATIO ?? -1.5);
+			const nozzle1X = stg1X - lNozzle1;
+			const fairingX = stg1X + l1;
+
+			if (hasFairing) {
+				this._drawFairing(ctx, fairingX, r1, lFairing, theme);
+			} else {
+				this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r1, false);
+			}
+
+			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
+
+			if (isFiring) {
+				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
+			}
+			return;
+		}
+
+		// 2. Three-stage configuration (e.g., Epsilon solid-propellant rocket)
+		if (totalStg >= 3) {
+			if (curStgIdx === 0) {
+				// All 3 stages attached
+				const stg1X = R * (align.BASE_X_3STG_STAGE1_RATIO ?? -3.1);
+				const nozzle1X = stg1X - lNozzle1;
+				const inter1X = stg1X + l1;
+				const stg2X = inter1X + lInter;
+				const inter2X = stg2X + l2;
+				const stg3X = inter2X + lInter2;
+				const fairingX = stg3X + l3;
+
+				if (hasFairing) {
+					this._drawFairing(ctx, fairingX, r2, lFairing, theme);
+				} else {
+					this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r3, false);
+				}
+
+				this._drawStage2(ctx, stg3X, r3, l3, false, 0, 0, theme);
+				this._drawInterstage(ctx, inter2X, r2, lInter2, theme);
+				this._drawStage2(ctx, stg2X, r2, l2, false, 0, 0, theme);
+				this._drawInterstage(ctx, inter1X, r1, lInter, theme);
+				this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
+
+				if (isFiring) {
+					this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
+				}
+			} else if (curStgIdx === 1) {
+				// Stage 1 jettisoned, Stage 2 active
+				const stg2X = R * (align.BASE_X_3STG_STAGE2_RATIO ?? -1.6);
+				const nozzle2X = stg2X - lNozzle2;
+				const inter2X = stg2X + l2;
+				const stg3X = inter2X + lInter2;
+				const fairingX = stg3X + l3;
+
+				if (hasFairing) {
+					this._drawFairing(ctx, fairingX, r2, lFairing, theme);
+				} else {
+					this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r3, false);
+				}
+
+				this._drawStage2(ctx, stg3X, r3, l3, false, 0, 0, theme);
+				this._drawInterstage(ctx, inter2X, r2, lInter2, theme);
+				this._drawStage2(ctx, stg2X, r2, l2, true, nozzle2X, lNozzle2, theme);
+
+				if (isFiring) {
+					this._drawPlume(ctx, nozzle2X, 0, align.UPPER_PLUME_SCALE, throttle, curFuel, R);
+				}
+			} else {
+				// Stage 2 jettisoned, Stage 3 active
+				const stg3X = R * (align.BASE_X_3STG_STAGE3_RATIO ?? -0.9);
+				const nozzle3X = stg3X - lNozzle3;
+				const fairingX = stg3X + l3;
+
+				if (hasFairing) {
+					this._drawFairing(ctx, fairingX, r2, lFairing, theme);
+				} else {
+					this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r3, false);
+				}
+
+				this._drawStage2(ctx, stg3X, r3, l3, true, nozzle3X, lNozzle3, theme);
+
+				if (isFiring) {
+					this._drawPlume(ctx, nozzle3X, 0, align.STAGE3_PLUME_SCALE ?? 0.5, throttle, curFuel, R);
+				}
+			}
+			return;
+		}
+
+		// 3. Standard two-stage configuration (Falcon 9, H3)
+		const hasStage1 = (curStgIdx === 0);
 		const baseX = hasStage1 ? R * align.BASE_X_STAGE1_RATIO : R * align.BASE_X_UPPER_RATIO;
 		const stg2X = baseX;
 		const fairingX = stg2X + l2;
@@ -115,23 +214,17 @@ export class RocketRenderer {
 		if (hasFairing) {
 			this._drawFairing(ctx, fairingX, r2, lFairing, theme);
 		} else {
-			this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r2);
+			this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r2, false);
 		}
 
 		this._drawStage2(ctx, stg2X, r2, l2, !hasStage1, nozzle2X, lNozzle2, theme);
 
 		if (hasStage1) {
-			if (totalStg > 1) {
-				this._drawInterstage(ctx, interX, r1, lInter, theme);
-			}
+			this._drawInterstage(ctx, interX, r1, lInter, theme);
 			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
 		}
 
-		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
 		if (isFiring) {
-			const curFuel = (rocket.stages && rocket.stages[curStgIdx]?.fuelType) || rocket.fuelType || 'liquid';
-			const throttle = rocket.thrustRatio || 1.0;
-
 			if (hasStage1) {
 				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
 			} else {
@@ -243,7 +336,7 @@ export class RocketRenderer {
 		ctx.fill();
 	}
 
-	static _drawPayloadSatellite(ctx, cx, cy, R) {
+	static _drawPayloadSatellite(ctx, cx, cy, R, isDeployed = false) {
 		ctx.save();
 		ctx.translate(cx, cy);
 
@@ -251,30 +344,96 @@ export class RocketRenderer {
 		const busW = R * m.SATELLITE_BUS_W_RATIO;
 		const busH = R * m.SATELLITE_BUS_H_RATIO;
 
+		// 1. Satellite Bus (Center Gold Foil / MLI Body matching stage width)
 		ctx.fillStyle = m.SATELLITE_BUS_FILL;
 		ctx.strokeStyle = m.SATELLITE_BUS_STROKE;
 		ctx.lineWidth = 1;
 		ctx.fillRect(-busW * 0.5, -busH * 0.5, busW, busH);
 		ctx.strokeRect(-busW * 0.5, -busH * 0.5, busW, busH);
 
-		const dishR = busH * m.SATELLITE_DISH_R_RATIO;
+		// MLI panel division lines across body
+		ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
 		ctx.beginPath();
-		ctx.arc(busW * m.SATELLITE_DISH_OFFSET_RATIO, 0, dishR, -Math.PI * 0.5, Math.PI * 0.5);
-		ctx.strokeStyle = m.SATELLITE_DISH_COLOR;
-		ctx.lineWidth = 1.0;
+		ctx.moveTo(0, -busH * 0.5);
+		ctx.lineTo(0, busH * 0.5);
+		ctx.moveTo(-busW * 0.5, 0);
+		ctx.lineTo(busW * 0.5, 0);
 		ctx.stroke();
 
-		const panelW = busW * m.SATELLITE_PANEL_W_RATIO;
-		const panelH = busH * m.SATELLITE_PANEL_H_RATIO;
-		ctx.fillStyle = m.SATELLITE_PANEL_FILL;
-		ctx.strokeStyle = m.SATELLITE_PANEL_STROKE;
-		ctx.lineWidth = 1;
+		if (!isDeployed) {
+			// Folded Solar Arrays (accordion stowed along top and bottom edges)
+			const foldedH = busH * (m.SATELLITE_PANEL_FOLDED_H_RATIO || 0.12);
+			ctx.fillStyle = m.SATELLITE_PANEL_FILL;
+			ctx.strokeStyle = m.SATELLITE_PANEL_STROKE;
+			ctx.lineWidth = 1;
 
-		ctx.fillRect(-panelW * 0.5, -busH * 0.5 - panelH - m.SATELLITE_PANEL_MARGIN, panelW, panelH);
-		ctx.strokeRect(-panelW * 0.5, -busH * 0.5 - panelH - m.SATELLITE_PANEL_MARGIN, panelW, panelH);
+			// Top folded array
+			ctx.fillRect(-busW * 0.45, -busH * 0.5, busW * 0.9, foldedH);
+			ctx.strokeRect(-busW * 0.45, -busH * 0.5, busW * 0.9, foldedH);
 
-		ctx.fillRect(-panelW * 0.5, busH * 0.5 + m.SATELLITE_PANEL_MARGIN, panelW, panelH);
-		ctx.strokeRect(-panelW * 0.5, busH * 0.5 + m.SATELLITE_PANEL_MARGIN, panelW, panelH);
+			// Bottom folded array
+			ctx.fillRect(-busW * 0.45, busH * 0.5 - foldedH, busW * 0.9, foldedH);
+			ctx.strokeRect(-busW * 0.45, busH * 0.5 - foldedH, busW * 0.9, foldedH);
+
+			// Stowed antenna dish
+			const dishR = busH * m.SATELLITE_DISH_R_RATIO;
+			ctx.beginPath();
+			ctx.arc(busW * 0.5, 0, dishR * 0.4, -Math.PI * 0.5, Math.PI * 0.5);
+			ctx.strokeStyle = m.SATELLITE_DISH_COLOR;
+			ctx.lineWidth = 1.0;
+			ctx.stroke();
+		} else {
+			// Deployed High-Gain Parabolic Dish Antenna (+x face)
+			const dishR = busH * m.SATELLITE_DISH_R_RATIO;
+			const dishX = busW * m.SATELLITE_DISH_OFFSET_RATIO;
+			ctx.strokeStyle = m.SATELLITE_DISH_COLOR;
+			ctx.lineWidth = 1.2;
+			ctx.beginPath();
+			ctx.arc(dishX, 0, dishR, -Math.PI * 0.5, Math.PI * 0.5);
+			ctx.stroke();
+
+			// Antenna feed horn / boom
+			ctx.beginPath();
+			ctx.moveTo(busW * 0.5, 0);
+			ctx.lineTo(dishX + dishR * 0.3, 0);
+			ctx.stroke();
+
+			// Expanded Solar Panels (deployed on booms in ±y)
+			const panelW = busW * m.SATELLITE_PANEL_W_RATIO;
+			const panelH = busH * m.SATELLITE_PANEL_H_RATIO;
+			const margin = m.SATELLITE_PANEL_MARGIN;
+			const boomW = busW * (m.SATELLITE_PANEL_BOOM_W_RATIO || 0.15);
+
+			// Boom arms
+			ctx.fillStyle = '#7a828a';
+			ctx.fillRect(-boomW * 0.5, -busH * 0.5 - margin, boomW, margin);
+			ctx.fillRect(-boomW * 0.5, busH * 0.5, boomW, margin);
+
+			ctx.fillStyle = m.SATELLITE_PANEL_FILL;
+			ctx.strokeStyle = m.SATELLITE_PANEL_STROKE;
+			ctx.lineWidth = 1;
+
+			// Top panel
+			ctx.fillRect(-panelW * 0.5, -busH * 0.5 - panelH - margin, panelW, panelH);
+			ctx.strokeRect(-panelW * 0.5, -busH * 0.5 - panelH - margin, panelW, panelH);
+
+			// Bottom panel
+			ctx.fillRect(-panelW * 0.5, busH * 0.5 + margin, panelW, panelH);
+			ctx.strokeRect(-panelW * 0.5, busH * 0.5 + margin, panelW, panelH);
+
+			// Solar cell gridlines
+			ctx.strokeStyle = 'rgba(0, 200, 255, 0.6)';
+			ctx.beginPath();
+			ctx.moveTo(-panelW * 0.5, -busH * 0.5 - panelH * 0.5 - margin);
+			ctx.lineTo(panelW * 0.5, -busH * 0.5 - panelH * 0.5 - margin);
+			ctx.moveTo(-panelW * 0.5, busH * 0.5 + panelH * 0.5 + margin);
+			ctx.lineTo(panelW * 0.5, busH * 0.5 + panelH * 0.5 + margin);
+			ctx.moveTo(0, -busH * 0.5 - panelH - margin);
+			ctx.lineTo(0, -busH * 0.5 - margin);
+			ctx.moveTo(0, busH * 0.5 + margin);
+			ctx.lineTo(0, busH * 0.5 + panelH + margin);
+			ctx.stroke();
+		}
 
 		ctx.restore();
 	}

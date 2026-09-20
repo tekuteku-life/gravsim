@@ -380,6 +380,7 @@
 					<select id="rl-preset-select" class="full-width">
 						<option value="FALCON9" selected>Falcon 9 Style (2-Stage)</option>
 						<option value="H3">H3 Style (2-Stage)</option>
+						<option value="EPSILON">Epsilon Style (3-Stage Solid)</option>
 						<option value="SSTO">Single Stage (SSTO)</option>
 					</select>
 					<button type="button" id="rl-load-preset-btn" style="white-space: nowrap;">LOAD</button>
@@ -388,8 +389,9 @@
 				<!-- Color Theme -->
 				<label style="margin-top: 8px;">Color Theme:</label>
 				<select id="rl-color-theme" class="full-width">
-					<option value="orange" selected>Cryogenic Orange (H3 / SLS Style)</option>
-					<option value="classic">Classic White (Falcon 9 Style)</option>
+					<option value="classic" selected>Classic White (Falcon 9 Style)</option>
+					<option value="orange">Cryogenic Orange (H3 / SLS Style)</option>
+					<option value="epsilon">Epsilon Style (White & Crimson Accent)</option>
 					<option value="blue">Deep Space Blue (Tech / Sci-Fi Style)</option>
 				</select>
 
@@ -418,8 +420,8 @@
 					<input type="range" id="rl-launch-thrust" min="100" max="10000" step="50" value="7600" class="slider-full">
 
 					<div id="rl-separation-settings">
-						<label id="rl-sep-delay-label">Separation Delay (s): <span id="rl-sep-delay-val">2.0</span></label>
-						<input type="range" id="rl-sep-delay" min="0.5" max="10.0" step="0.5" value="2.0" class="slider-full">
+						<label id="rl-sep-delay-label">Separation Delay (s): <span id="rl-sep-delay-val">3.0</span></label>
+						<input type="range" id="rl-sep-delay" min="0.5" max="10.0" step="0.5" value="3.0" class="slider-full">
 
 						<label id="rl-ign-delay-label" style="display:none;">Ignition Delay (s): <span id="rl-ign-delay-val">2.0</span></label>
 						<input type="range" id="rl-ign-delay" min="0.5" max="10.0" step="0.5" value="2.0" class="slider-full" style="display:none;">
@@ -441,8 +443,8 @@
 						<label>Fairing Mass (t): <span id="rl-fairing-mass-val">1.7</span></label>
 						<input type="range" id="rl-fairing-mass" min="0.1" max="10" step="0.1" value="1.7" class="slider-full">
 
-						<label>Separation Alt (km): <span id="rl-fairing-alt-val">100</span></label>
-						<input type="range" id="rl-fairing-alt" min="50" max="150" step="5" value="100" class="slider-full">
+						<label>Separation Alt (km): <span id="rl-fairing-alt-val">110</span></label>
+						<input type="range" id="rl-fairing-alt" min="50" max="150" step="5" value="110" class="slider-full">
 					</div>
 				</div>
 

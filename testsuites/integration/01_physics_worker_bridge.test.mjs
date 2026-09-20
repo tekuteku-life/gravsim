@@ -138,6 +138,7 @@ describe('Integration 01: Physics & Worker Bridge Interoperability', () => {
 
 		// Rocket at MECO staging condition
 		const f9 = createFalcon9Config();
+		f9.fairing.isSeparated = true;
 		engine.addObject({
 			id: 100,
 			name: 'Falcon 9',

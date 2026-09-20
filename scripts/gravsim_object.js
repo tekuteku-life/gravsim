@@ -582,6 +582,18 @@ export class Debris extends GravSimObject {
 			const hw = RENDER.DEBRIS_HARDWARE;
 			const theme = ROCKET_VISUAL.THEMES[this.colorTheme] || ROCKET_VISUAL.THEMES.orange;
 
+			if (R < hw.LOD_RADIUS_THRESHOLD) {
+				const len = (this.debrisSubType === 1) ? R * hw.STAGE1_LEN_RATIO : (this.debrisSubType === 2 ? R * hw.STAGE2_LEN_RATIO : R * hw.FAIRING_LEN_RATIO);
+				const w = (this.debrisSubType === 1) ? R * hw.STAGE1_WIDTH_RATIO : (this.debrisSubType === 2 ? R * hw.STAGE2_WIDTH_RATIO : R * hw.FAIRING_WIDTH_RATIO);
+				const fill = (this.debrisSubType === 1) ? theme.stg1Grad[1] : (this.debrisSubType === 2 ? theme.stg2Grad[0] : theme.fairingGrad[0]);
+				ctx.fillStyle = fill;
+				ctx.beginPath();
+				ctx.ellipse(0, 0, len * 0.5, Math.max(0.75, w * 0.5), 0, 0, Math.PI * 2);
+				ctx.fill();
+				ctx.restore();
+				return;
+			}
+
 			if (this.debrisSubType === 1) {
 				const len = R * hw.STAGE1_LEN_RATIO;
 				const w = R * hw.STAGE1_WIDTH_RATIO;

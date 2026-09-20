@@ -1,7 +1,7 @@
 
 // gravsim_tab_rocket.js
 
-import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, MULTISTAGE_PRESETS } from './gravsim_const.js';
+import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, MULTISTAGE_PRESETS, MULTISTAGE_ROCKET } from './gravsim_const.js';
 import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 
@@ -120,20 +120,59 @@ export class RocketTab {
 		this.ui.rlFuelType.addEventListener('change', (e) => {
 			const stg = this._getCurrentStage();
 			if (!stg) { return; }
-			stg.fuelType = e.target.value;
-			const fuelDef = ROCKET_FUELS[e.target.value];
-			if (fuelDef && fuelDef.ofRatio === 0) {
+			const oldFuelType = stg.fuelType || 'liquid';
+			const newFuelType = e.target.value;
+			stg.fuelType = newFuelType;
+			const oldFuelDef = ROCKET_FUELS[oldFuelType] || ROCKET_FUELS['liquid'];
+			const newFuelDef = ROCKET_FUELS[newFuelType] || ROCKET_FUELS['liquid'];
+
+			// 1. Calculate propellant mass scaled by density ratio (conserving tank volume)
+			const currentPropT = (stg.fuelMassT || 0) + (stg.oxidMassT || 0);
+			const basePropT = currentPropT > 0 ? currentPropT : 100;
+			const densityRatio = (newFuelDef.density && oldFuelDef.density) ? (newFuelDef.density / oldFuelDef.density) : 1.0;
+			let scaledPropT = Math.max(1, Math.round(basePropT * densityRatio));
+
+			// 2. Allocate fuel and oxidizer based on ofRatio
+			if (newFuelDef.ofRatio === 0) {
+				// Solid or Ion: No separate oxidizer
+				stg.fuelMassT = Math.min(scaledPropT, 1500);
 				stg.oxidMassT = 0;
 				this.ui.rlOxidMass.value = 0;
 				this.ui.rlOxidMass.disabled = true;
-			} else if (fuelDef) {
+			} else {
 				this.ui.rlOxidMass.disabled = false;
-				stg.oxidMassT = Math.round(stg.fuelMassT * fuelDef.ofRatio);
+				const fuelPart = Math.max(1, Math.round(scaledPropT / (1 + newFuelDef.ofRatio)));
+				const oxidPart = Math.max(0, Math.round(fuelPart * newFuelDef.ofRatio));
+				stg.fuelMassT = Math.min(fuelPart, 1500);
+				stg.oxidMassT = Math.min(oxidPart, 3000);
 				this.ui.rlOxidMass.value = stg.oxidMassT;
 			}
-			if (this.ui.rlOxidMassVal) {
-				this.ui.rlOxidMassVal.textContent = this.ui.rlOxidMass.value;
+			this.ui.rlFuelMass.value = stg.fuelMassT;
+			if (this.ui.rlFuelMassVal) this.ui.rlFuelMassVal.textContent = stg.fuelMassT;
+			if (this.ui.rlOxidMassVal) this.ui.rlOxidMassVal.textContent = stg.oxidMassT;
+
+			// 3. For stage 1: Safeguard liftoff TWR >= 1.25 on Earth
+			if (this.currentTab === 0) {
+				const rl = this.universe.RocketLauncher;
+				const payloadM = (rl.payload?.massT !== undefined) ? rl.payload.massT : 8.0;
+				const fairingM = (rl.fairing?.enabled ? rl.fairing.massT : 0) || 0;
+				let totalLiftoffMassT = payloadM + fairingM + stg.dryMassT + stg.fuelMassT + stg.oxidMassT;
+				for (let i = 1; i < (rl.stages?.length || 0); i++) {
+					const s = rl.stages[i];
+					totalLiftoffMassT += (s.dryMassT + s.fuelMassT + s.oxidMassT);
+				}
+				const targetTwr = (newFuelType === 'ion') ? 0.05 : 1.35;
+				const minThrustKN = Math.round((totalLiftoffMassT * PHYSICS.G0 * targetTwr) / 50) * 50;
+				if (newFuelType !== 'ion' && stg.thrustKN < minThrustKN) {
+					stg.thrustKN = Math.min(Math.max(stg.thrustKN, minThrustKN), 10000);
+					this.ui.rlLaunchThrust.value = stg.thrustKN;
+					if (this.ui.rlLaunchThrustVal) this.ui.rlLaunchThrustVal.textContent = stg.thrustKN;
+				}
 			}
+
+			// 4. Recalculate burn time
+			this._recalculateStageBurnTime(stg);
+
 			this._syncStageZero();
 			this._updateRocketStats();
 		});
@@ -152,6 +191,7 @@ export class RocketTab {
 				this.ui.rlOxidMass.value = newOxid;
 				this.ui.rlOxidMassVal.textContent = newOxid;
 			}
+			this._recalculateStageBurnTime(stg);
 			this._syncStageZero();
 			this._updateRocketStats();
 		});
@@ -170,6 +210,7 @@ export class RocketTab {
 				this.ui.rlFuelMass.value = newFuel;
 				this.ui.rlFuelMassVal.textContent = newFuel;
 			}
+			this._recalculateStageBurnTime(stg);
 			this._syncStageZero();
 			this._updateRocketStats();
 		});
@@ -190,6 +231,7 @@ export class RocketTab {
 			if (!stg) { return; }
 			stg.thrustKN = val;
 			this.ui.rlLaunchThrustVal.textContent = val;
+			this._recalculateStageBurnTime(stg);
 			this._syncStageZero();
 			this._updateRocketStats();
 		});
@@ -330,7 +372,7 @@ export class RocketTab {
 			
 			const tdType = document.createElement('td');
 			const selType = document.createElement('select');
-			selType.innerHTML = `<option value="alt" ${step.type==='alt'?'selected':''}>Alt(m)</option><option value="time" ${step.type==='time'?'selected':''}>Time(s)</option>`;
+			selType.innerHTML = `<option value="alt" ${step.type==='alt'?'selected':''}>Alt(m)</option><option value="time" ${step.type==='time'?'selected':''}>Time(s)</option><option value="apogee" ${step.type==='apogee'?'selected':''}>Apogee(±s)</option>`;
 			selType.onchange = (e) => { step.type = e.target.value; this._updateRocketStats(); };
 			tdType.appendChild(selType);
 			
@@ -381,6 +423,20 @@ export class RocketTab {
 		return null;
 	}
 
+	_recalculateStageBurnTime(stg) {
+		if (!stg) return;
+		const fuelDef = ROCKET_FUELS[stg.fuelType || 'liquid'] || ROCKET_FUELS['liquid'];
+		const totalPropT = (stg.fuelMassT || 0) + (stg.oxidMassT || 0);
+		const thrustKN = stg.thrustKN || 0;
+		if (thrustKN > 0 && totalPropT > 0) {
+			const burnTime = (totalPropT * fuelDef.isp * PHYSICS.G0) / thrustKN;
+			stg.burnTime = Math.round(burnTime * 10) / 10;
+		}
+		if (this.currentTab === 0) {
+			this.universe.RocketLauncher.calculatedBurnTime = stg.burnTime || 0;
+		}
+	}
+
 	_syncStageZero() {
 		if (this.currentTab === 0) {
 			const rl = this.universe.RocketLauncher;
@@ -391,6 +447,9 @@ export class RocketTab {
 				rl.oxidMassT = stg0.oxidMassT;
 				rl.thrustKN = stg0.thrustKN;
 				rl.fuelType = stg0.fuelType;
+				if (stg0.burnTime !== undefined) {
+					rl.calculatedBurnTime = stg0.burnTime;
+				}
 			}
 		}
 	}
@@ -449,7 +508,7 @@ export class RocketTab {
 			const fMass = rl.fairing?.massT !== undefined ? rl.fairing.massT : 1.7;
 			if (this.ui.rlFairingMass) this.ui.rlFairingMass.value = fMass;
 			if (this.ui.rlFairingMassVal) this.ui.rlFairingMassVal.textContent = fMass;
-			const fAlt = rl.fairing?.separationAltKm !== undefined ? rl.fairing.separationAltKm : 100;
+			const fAlt = rl.fairing?.separationAltKm !== undefined ? rl.fairing.separationAltKm : MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM;
 			if (this.ui.rlFairingAlt) this.ui.rlFairingAlt.value = fAlt;
 			if (this.ui.rlFairingAltVal) this.ui.rlFairingAltVal.textContent = fAlt;
 		} else {
@@ -463,7 +522,11 @@ export class RocketTab {
 			if (this.ui.rlFuelType) this.ui.rlFuelType.value = stg.fuelType || 'liquid';
 			if (this.ui.rlFuelMass) this.ui.rlFuelMass.value = stg.fuelMassT;
 			if (this.ui.rlFuelMassVal) this.ui.rlFuelMassVal.textContent = stg.fuelMassT;
-			if (this.ui.rlOxidMass) this.ui.rlOxidMass.value = stg.oxidMassT;
+			const fuelDef = ROCKET_FUELS[stg.fuelType || 'liquid'];
+			if (this.ui.rlOxidMass) {
+				this.ui.rlOxidMass.value = stg.oxidMassT;
+				this.ui.rlOxidMass.disabled = Boolean(fuelDef && fuelDef.ofRatio === 0);
+			}
 			if (this.ui.rlOxidMassVal) this.ui.rlOxidMassVal.textContent = stg.oxidMassT;
 			if (this.ui.rlLaunchMass) this.ui.rlLaunchMass.value = stg.dryMassT;
 			if (this.ui.rlLaunchMassVal) this.ui.rlLaunchMassVal.textContent = stg.dryMassT;
@@ -491,10 +554,20 @@ export class RocketTab {
 		if (!preset) return;
 		const rl = this.universe.RocketLauncher;
 		rl.currentPresetId = presetKey;
-		rl.colorTheme = preset.colorTheme || 'orange';
+		rl.colorTheme = preset.colorTheme || 'classic';
+		if (this.ui.rlColorTheme) {
+			this.ui.rlColorTheme.value = rl.colorTheme;
+		}
 		rl.stages = JSON.parse(JSON.stringify(preset.stages));
 		rl.payload = JSON.parse(JSON.stringify(preset.payload || { massT: 0 }));
-		rl.fairing = JSON.parse(JSON.stringify(preset.fairing || { enabled: false, massT: 0, separationAltKm: 100 }));
+		rl.fairing = JSON.parse(JSON.stringify(preset.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }));
+		if (rl.stages?.[0]) {
+			rl.calculatedBurnTime = rl.stages[0].burnTime;
+		}
+		if (preset.flightProfile) {
+			rl.flightProfile = JSON.parse(JSON.stringify(preset.flightProfile));
+			this._renderProfileTable();
+		}
 		this._syncStageZero();
 		this.currentTab = 0;
 		this._renderStageTabs();

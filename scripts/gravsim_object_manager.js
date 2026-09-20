@@ -3,7 +3,7 @@
 
 import {
 	SIMULATION, OBJECT_STATE, OBJECT_TYPES,
-	MULTISTAGE_ROCKET,
+	MULTISTAGE_ROCKET, ROCKET_VISUAL
 } from './gravsim_const.js';
 import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
@@ -177,14 +177,24 @@ export class ObjectManager {
 				};
 
 				const activeRocket = this.objects.find(o => o.type === OBJECT_TYPES.ROCKET);
-				const currentTheme = activeRocket?.colorTheme || 'orange';
+				const currentTheme = activeRocket?.colorTheme || 'classic';
+				const theme = ROCKET_VISUAL.THEMES[currentTheme] || ROCKET_VISUAL.THEMES.classic;
+
+				let debColor = spec.color;
+				if (objData.debrisSubType === 1) {
+					debColor = theme.stg1Grad[1] || theme.accentBand;
+				} else if (objData.debrisSubType === 2) {
+					debColor = theme.stg2Grad[0] || theme.accentBand;
+				} else if (objData.debrisSubType === 3) {
+					debColor = theme.fairingGrad[0] || '#e8ebed';
+				}
 
 				const deb = new Debris(
 					objData.id,
 					spec.name,
 					x, y, vx, vy,
 					massT,
-					spec.color,
+					debColor,
 					spec.size,
 					objData.radius || MULTISTAGE_ROCKET.DEFAULT_STAGE_RADIUS_M,
 					objData.generation || 1,

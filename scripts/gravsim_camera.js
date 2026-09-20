@@ -63,6 +63,9 @@ export class Camera {
 
 		// Reset target offset so the camera smoothly pans to the center of the new target
 		this.targetOffset = { x: 0, y: 0 };
+		if (newTarget) {
+			EventBus.emit('camera:target-changed', newTarget);
+		}
 	}
 
 	addPan(dxPx, dyPx) {

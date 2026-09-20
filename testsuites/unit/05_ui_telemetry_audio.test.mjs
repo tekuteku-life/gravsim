@@ -463,6 +463,22 @@ test('ControlPanel - SystemTab, NaviTab, and DeployTab comprehensive interaction
 	sys.updateCenterOptions();
 	assert.ok(sys.ui.centerSelect.children.length >= 2, 'Center select should contain options for Sun and Earth');
 
+	// Verify centerSelect tracks camera target and synchronizes on events
+	const mockRocket = { id: 101, name: 'Falcon 9' };
+	universe.objects.push(mockRocket);
+	universe.camera.trackingTarget = mockRocket;
+	sys.updateCenterOptions();
+	assert.equal(sys.ui.centerSelect.value, '101', 'centerSelect should reflect active tracking target');
+
+	EventBus.emit('camera:set-auto-tracking', mockRocket, universe.objects[0]);
+	assert.equal(sys.ui.centerSelect.value, '101', 'centerSelect should update on camera:set-auto-tracking');
+
+	mockRocket.name = 'Dragon Payload';
+	EventBus.emit('object-list-changed', universe.objects.length);
+	assert.equal(sys.ui.centerSelect.value, '101');
+	const selectedOpt = Array.from(sys.ui.centerSelect.children).find(o => o.value === 101 || o.value === '101');
+	assert.ok(selectedOpt.textContent.includes('Dragon Payload'), 'Option text should update to payload name');
+
 	sys.updateTimeScaleIndicator(1.0);
 	assert.ok(sys.ui.timeIndicator.textContent.length > 0);
 
@@ -703,14 +719,48 @@ test('RocketTab - Preset loading, stage tabs, profile table, and rollout/ignite/
 	const ctrl = new ControlPanel(universe);
 	const rTab = ctrl.rocketTab;
 
-	// Load preset
+	// Load preset FALCON9
 	rTab.ui.rlPresetSelect.value = 'FALCON9';
 	rTab.loadPreset('FALCON9');
 	assert.equal(universe.RocketLauncher.stages.length, 2);
+	assert.equal(universe.RocketLauncher.colorTheme, 'classic');
+	assert.equal(rTab.ui.rlColorTheme.value, 'classic');
 
-	// Switch stage tabs
+	// Load preset SSTO
+	rTab.ui.rlPresetSelect.value = 'SSTO';
+	rTab.loadPreset('SSTO');
+	assert.equal(universe.RocketLauncher.stages.length, 1);
+	assert.equal(universe.RocketLauncher.fairing.enabled, true);
+	assert.equal(universe.RocketLauncher.payload.massT, 2.0);
+	assert.equal(universe.RocketLauncher.colorTheme, 'blue');
+	assert.equal(rTab.ui.rlColorTheme.value, 'blue');
+
+	// Load preset EPSILON
+	rTab.ui.rlPresetSelect.value = 'EPSILON';
+	rTab.loadPreset('EPSILON');
+	assert.equal(universe.RocketLauncher.stages.length, 3);
+	assert.equal(universe.RocketLauncher.stages[0].fuelType, 'solid');
+	assert.equal(universe.RocketLauncher.fairing.enabled, true);
+	assert.equal(universe.RocketLauncher.colorTheme, 'epsilon');
+	assert.equal(rTab.ui.rlColorTheme.value, 'epsilon');
+	assert.equal(rTab.ui.rlOxidMass.disabled, true);
+
+	// Switch stage tabs for EPSILON (all solid)
 	rTab.selectTab(1);
 	assert.equal(rTab.currentTab, 1);
+	assert.equal(rTab.ui.rlOxidMass.disabled, true);
+	rTab.selectTab(2);
+	assert.equal(rTab.currentTab, 2);
+	assert.equal(rTab.ui.rlOxidMass.disabled, true);
+	rTab.selectTab('payload');
+	assert.equal(rTab.currentTab, 'payload');
+
+	// Load preset H3 via presetSelect change event
+	rTab.ui.rlPresetSelect.value = 'H3';
+	rTab.ui.rlPresetSelect.dispatchEvent({ type: 'change', target: { value: 'H3' } });
+	assert.equal(universe.RocketLauncher.colorTheme, 'orange');
+	assert.equal(rTab.ui.rlColorTheme.value, 'orange');
+	assert.equal(rTab.ui.rlOxidMass.disabled, false);
 
 	// Update stats
 	rTab._updateRocketStats();
@@ -935,9 +985,18 @@ test('RocketTab - Comprehensive configuration, payload tab, and state loading', 
 	rTab.ui.rlModeSelect.value = 'host';
 	rTab.ui.rlModeSelect.dispatchEvent({ type: 'change', target: { value: 'host' } });
 
-	// Fuel type change (solid vs liquid)
+	// Theme color change
+	rTab.ui.rlColorTheme.value = 'classic';
+	rTab.ui.rlColorTheme.dispatchEvent({ type: 'change', target: { value: 'classic' } });
+	assert.equal(universe.RocketLauncher.colorTheme, 'classic');
+
+	// Fuel type change (solid vs liquid vs hydro vs ion)
+	rTab.ui.rlFuelType.value = 'hydro';
+	rTab.ui.rlFuelType.dispatchEvent({ type: 'change', target: { value: 'hydro' } });
 	rTab.ui.rlFuelType.value = 'solid';
 	rTab.ui.rlFuelType.dispatchEvent({ type: 'change', target: { value: 'solid' } });
+	rTab.ui.rlFuelType.value = 'ion';
+	rTab.ui.rlFuelType.dispatchEvent({ type: 'change', target: { value: 'ion' } });
 	rTab.ui.rlFuelType.value = 'liquid';
 	rTab.ui.rlFuelType.dispatchEvent({ type: 'change', target: { value: 'liquid' } });
 
@@ -946,6 +1005,37 @@ test('RocketTab - Comprehensive configuration, payload tab, and state loading', 
 	rTab.ui.rlFuelMass.dispatchEvent({ type: 'input', target: { value: '150' } });
 	rTab.ui.rlOxidMass.value = '300';
 	rTab.ui.rlOxidMass.dispatchEvent({ type: 'input', target: { value: '300' } });
+	rTab.ui.rlLaunchMass.value = '30';
+	rTab.ui.rlLaunchMass.dispatchEvent({ type: 'input', target: { value: '30' } });
+	rTab.ui.rlLaunchThrust.value = '7800';
+	rTab.ui.rlLaunchThrust.dispatchEvent({ type: 'input', target: { value: '7800' } });
+
+	// Staging delay sliders
+	rTab.ui.rlSepDelay.value = '3.5';
+	rTab.ui.rlSepDelay.dispatchEvent({ type: 'input', target: { value: '3.5' } });
+	rTab.ui.rlIgnDelay.value = '2.5';
+	rTab.ui.rlIgnDelay.dispatchEvent({ type: 'input', target: { value: '2.5' } });
+
+	// Switch to stage 2 (if present)
+	if (universe.RocketLauncher.stages?.length > 1) {
+		rTab.selectTab(1);
+		assert.equal(rTab.currentTab, 1);
+		rTab.selectTab(0);
+	}
+
+	// Fairing and Payload sliders
+	rTab.selectTab('payload');
+	rTab.ui.rlFairingEnabled.checked = false;
+	rTab.ui.rlFairingEnabled.dispatchEvent({ type: 'change', target: { checked: false } });
+	rTab.ui.rlFairingEnabled.checked = true;
+	rTab.ui.rlFairingEnabled.dispatchEvent({ type: 'change', target: { checked: true } });
+	rTab.ui.rlFairingMass.value = '2.5';
+	rTab.ui.rlFairingMass.dispatchEvent({ type: 'input', target: { value: '2.5' } });
+	rTab.ui.rlFairingAlt.value = '60';
+	rTab.ui.rlFairingAlt.dispatchEvent({ type: 'input', target: { value: '60' } });
+	rTab.ui.rlPayloadMass.value = '10.0';
+	rTab.ui.rlPayloadMass.dispatchEvent({ type: 'input', target: { value: '10.0' } });
+	rTab.selectTab(0);
 
 	// Add profile step
 	rTab.ui.rlAddProfileBtn.click();
@@ -954,6 +1044,7 @@ test('RocketTab - Comprehensive configuration, payload tab, and state loading', 
 	// Load State
 	rTab.loadState({
 		mode: 'host',
+		colorTheme: 'blue',
 		hostAngleDeg: 90,
 		hostAltitudeM: 1000,
 		dryMassT: 25,
@@ -964,6 +1055,7 @@ test('RocketTab - Comprehensive configuration, payload tab, and state loading', 
 		autoControl: true,
 		flightProfile: [{ type: 'alt', value: 0, thrust: 100, angle: 0 }]
 	});
+	assert.equal(universe.RocketLauncher.colorTheme, 'blue');
 	assert.equal(universe.RocketLauncher.hostAngleDeg, 90);
 	assert.equal(rTab.ui.rlHostAlt.value, 1000);
 

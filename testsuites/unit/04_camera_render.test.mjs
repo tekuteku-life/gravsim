@@ -11,6 +11,7 @@ import { OverlayRenderer } from '../../scripts/gravsim_overlay_renderer.js';
 import { PadEffectRenderer } from '../../scripts/gravsim_pad_effect.js';
 import { RocketRenderer } from '../../scripts/gravsim_rocket_renderer.js';
 import { VisualEffectManager } from '../../scripts/gravsim_visual_effect_manager.js';
+import { Debris } from '../../scripts/gravsim_object.js';
 import { TrailLineRenderer, EffectRenderer } from '../../scripts/gravsim_trail_renderer.js';
 import { Trajectory } from '../../scripts/gravsim_trajectory.js';
 import { EffectTrail } from '../../scripts/gravsim_effect_trail.js';
@@ -676,5 +677,112 @@ test('RocketRenderer - Low detail and High detail rendering across flight phases
 	};
 	RocketRenderer.draw(ctx, slingshotRocket, 200, 200, 50, 1.0);
 	RocketRenderer.draw(ctx, slingshotRocket, 200, 200, 10, 1.0);
+
+	// 10. Single-stage (SSTO) - Fairing attached and firing
+	const sstoRocketWithFairing = {
+		thrustAngle: 0.2,
+		colorTheme: 'blue',
+		currentStageIndex: 0,
+		totalStages: 1,
+		stages: [{ fuelType: 'liquid' }],
+		fairing: { enabled: true, isSeparated: false },
+		isIgnited: true,
+		burnTime: 80,
+		thrustRatio: 1.0,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, sstoRocketWithFairing, 200, 200, 45, 1.0);
+
+	// 11. Single-stage (SSTO) - Fairing separated (payload exposed)
+	const sstoRocketExposed = {
+		...sstoRocketWithFairing,
+		fairing: { enabled: true, isSeparated: true },
+		telemetry: { isFairingSeparated: true }
+	};
+	RocketRenderer.draw(ctx, sstoRocketExposed, 200, 200, 45, 1.0);
+
+	// 12. 3-stage rocket (Epsilon) - Stage 1 active (solid plume)
+	const epsilonStg1 = {
+		thrustAngle: 0.1,
+		colorTheme: 'classic',
+		currentStageIndex: 0,
+		totalStages: 3,
+		stages: [{ fuelType: 'solid' }, { fuelType: 'solid' }, { fuelType: 'solid' }],
+		fairing: { enabled: true, isSeparated: false },
+		isIgnited: true,
+		burnTime: 100,
+		thrustRatio: 1.0,
+		disableStaging: false
+	};
+	RocketRenderer.draw(ctx, epsilonStg1, 200, 200, 50, 1.0);
+
+	// 13. 3-stage rocket (Epsilon) - Stage 2 active with fairing separated
+	const epsilonStg2 = {
+		...epsilonStg1,
+		currentStageIndex: 1,
+		telemetry: { stageIndex: 1, isFairingSeparated: true },
+		fairing: { enabled: true, isSeparated: true }
+	};
+	RocketRenderer.draw(ctx, epsilonStg2, 200, 200, 50, 1.0);
+
+	// 14. 3-stage rocket (Epsilon) - Stage 3 active
+	const epsilonStg3 = {
+		...epsilonStg1,
+		currentStageIndex: 2,
+		telemetry: { stageIndex: 2, isFairingSeparated: true },
+		fairing: { enabled: true, isSeparated: true }
+	};
+	RocketRenderer.draw(ctx, epsilonStg3, 200, 200, 50, 1.0);
+
+	// 15. Epsilon color theme validation
+	const epsilonThemeRocket = {
+		...epsilonStg1,
+		colorTheme: 'epsilon'
+	};
+	RocketRenderer.draw(ctx, epsilonThemeRocket, 200, 200, 40, 1.0);
+
+	// 16. Payload Satellite: Stowed paddles (isDeployed=false) vs Deployed paddles (isDeployed=true)
+	RocketRenderer._drawPayloadSatellite(ctx, 0, 0, 20, false);
+	RocketRenderer._drawPayloadSatellite(ctx, 0, 0, 20, true);
 });
+
+test('Debris - Stage debris LOD rendering, theme colors, and minimum drawing radius', () => {
+	const mockCanvas = createMockElement('canvas');
+	const ctx = mockCanvas.getContext('2d');
+
+	// Create Stage 1 Booster Debris with epsilon theme
+	const debBooster = new Debris(
+		1001, 'Stage 1 Booster', 100, 100, 0, 0,
+		8.7, '#ffffff', 1.8, 1.3, 1, '#00ffcc', 0,
+		1, 'epsilon'
+	);
+	assert.ok(debBooster._getDrawRadius(0.0001) <= 2.0, 'Booster min radius must be <= 2.0');
+
+	// Create Stage 2 Upper Stage Debris with classic theme
+	const debUpper = new Debris(
+		1002, 'Stage 2 Upper Stage', 200, 200, 0, 0,
+		4.5, '#e2e6ea', 1.4, 1.0, 1, '#00ffcc', 0,
+		2, 'classic'
+	);
+	assert.ok(debUpper._getDrawRadius(0.0001) <= 1.5, 'Upper stage min radius must be <= 1.5');
+
+	// Create Fairing Debris with orange theme
+	const debFairing = new Debris(
+		1003, 'Fairing Half', 300, 300, 0, 0,
+		1.0, '#ffffff', 1.0, 0.8, 1, '#00ffcc', 0,
+		3, 'orange'
+	);
+	assert.ok(debFairing._getDrawRadius(0.0001) <= 1.2, 'Fairing min radius must be <= 1.2');
+
+	// 1. Zoomed out LOD rendering (screenRadius < LOD_RADIUS_THRESHOLD)
+	debBooster._drawBody(ctx, 100, 100, 1.8);
+	debUpper._drawBody(ctx, 200, 200, 1.4);
+	debFairing._drawBody(ctx, 300, 300, 1.0);
+
+	// 2. Zoomed in High Detail hardware rendering (screenRadius >= LOD_RADIUS_THRESHOLD)
+	debBooster._drawBody(ctx, 100, 100, 15.0);
+	debUpper._drawBody(ctx, 200, 200, 12.0);
+	debFairing._drawBody(ctx, 300, 300, 10.0);
+});
+
 
