@@ -378,7 +378,15 @@ export const setupMockDOM = () => {
 		globalThis.document = {
 			getElementById: (id) => {
 				if (!elementRegistry.has(id)) {
-					elementRegistry.set(id, createMockElement('div'));
+					const el = createMockElement('div');
+					if (id === 'pred-duration') {
+						el.setAttribute('min', '0.2');
+						el.setAttribute('max', '36');
+						el.setAttribute('step', '0.1');
+						el.setAttribute('value', '1');
+						el.value = '1';
+					}
+					elementRegistry.set(id, el);
 				}
 				return elementRegistry.get(id);
 			},
@@ -485,6 +493,8 @@ export const createMockUniverse = (overrides = {}) => {
 			y: 0,
 			zoom: 1,
 			trackingTarget: null,
+			targetOffset: { x: 0, y: 0 },
+			setTargetOffset: (x, y) => {},
 			toScreenX: (x) => x,
 			toScreenY: (y) => y,
 			toWorldX: (x) => x,

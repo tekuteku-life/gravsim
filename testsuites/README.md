@@ -9,12 +9,11 @@ GravSim（多体万有引力・多段ロケット物理シミュレータ）の*
 
 ## 1. ディレクトリ構成とテスト階層アーキテクチャ
 
-```
 testsuites/
 ├── README.md                      # 本説明書
-├── run_all.mjs                    # 統合テストランナー（--unit, --regressions, --coverage, --verbose 対応）
+├── run_all.mjs                    # 統合テストランナー（--unit, --regressions, --integration, --coverage, --verbose 対応）
 ├── test_helpers.mjs               # ヘッドレスDOM/Canvas/WebAudioモック & 共通アサーション・モック生成
-├── regressions/                   # 【不具合検知・回帰テスト群】（全24テスト）
+├── regressions/                   # 【不具合検知・回帰テスト群】（全36テスト）
 │   ├── 01_tank_pressure.test.mjs          # MECO後タンク圧・安全減圧・ベント保持
 │   ├── 02_fuel_and_deltav.test.mjs         # 残燃料1/1000化バグ防止 & REM ΔV精度
 │   ├── 03_solar_system_gravity.test.mjs    # 太陽系質量スケール & 軌道安定性
@@ -22,12 +21,18 @@ testsuites/
 │   ├── 05_payload_and_events.test.mjs      # 第2段エンジン分離・ペイロード移行
 │   ├── 06_telemetry_annunciator.test.mjs   # 16灯アナンシエーターランプ連動
 │   └── 07_trajectory_predictor.test.mjs    # 軌道予測の発射直後墜落防止 & 多段イベント検出
-└── unit/                          # 【全モジュール機能・単体テスト群】（全69テスト）
-    ├── 01_core_physics.test.mjs            # 物理計算・空間四分木・バッファ同期・ユーティリティ (9 tests)
-    ├── 02_rocket_guidance.test.mjs         # フライトコンピュータ・自動シーケンサ・発射台・軌道予測 (13 tests)
-    ├── 03_celestial_world.test.mjs         # 天体・ロケットオブジェクト・デブリ生成・公転配置・セーブ管理 (15 tests)
-    ├── 04_camera_render.test.mjs           # カメラ・座標変換・レンダラー・発射台エフェクト・衝撃波 (10 tests)
-    └── 05_ui_telemetry_audio.test.mjs      # テレメトリHUDカード・操作パネル・入力・音響・シーケンサー (22 tests)
+├── integration/                   # 【結合・ワークフロー検証テスト群】（全18テスト）
+│   ├── 01_physics_worker_bridge.test.mjs              # 物理演算 Worker とメインスレッドの同期・デブリ生成
+│   ├── 02_rocket_guidance_staging.test.mjs            # 発射・多段燃焼・分離パイプライン連携
+│   ├── 03_trajectory_predictor_engine.test.mjs        # 軌道予測エンジンと物理エンジンの軌道一貫性
+│   ├── 04_ui_telemetry_event_pipeline.test.mjs        # テレメトリHUD・アナンシエーター・音響パイプライン連携
+│   └── 05_mission_workflow_and_state_persistence.test.mjs # 発射台配備・地球優先天体選択・予測期間・状態保存復元
+└── unit/                          # 【全モジュール機能・単体テスト群】（全128テスト）
+    ├── 01_core_physics.test.mjs            # 物理計算・空間四分木・バッファ同期・ユーティリティ
+    ├── 02_rocket_guidance.test.mjs         # フライトコンピュータ・自動シーケンサ・発射台・軌道予測
+    ├── 03_celestial_world.test.mjs         # 天体・ロケットオブジェクト・デブリ生成・公転配置・セーブ管理
+    ├── 04_camera_render.test.mjs           # カメラ・座標変換・レンダラー・発射台エフェクト・衝撃波
+    └── 05_ui_telemetry_audio.test.mjs      # テレメトリHUDカード・操作パネル・入力・音響・シーケンサー
 ```
 
 ---
@@ -56,6 +61,16 @@ testsuites/
 | **`04_camera_render.test.mjs`** | `gravsim_camera.js`<br>`gravsim_renderer.js`<br>`gravsim_overlay_renderer.js`<br>`gravsim_pad_effect.js`<br>`gravsim_visual_effect_manager.js`<br>`gravsim_trail_renderer.js` | ・Camera ワールド $\leftrightarrow$ スクリーン変換・Lerp補間・ズーム指数制限<br>・ターゲット切り替え時の画面ジャンプ防止オフセット補正<br>・打ち上げフェーズ（Phase 1〜4）追尾オートズーム・姿勢ロック<br>・Renderer 描画パイプライン（before $\to$ objects $\to$ after $\to$ overlay）<br>・OverlayRenderer 距離スケールバー（m, km, AU）およびデバッグ同心円描画<br>・TrailLineRenderer / EffectRenderer による実線軌跡 & 相対軌跡描画<br>・PadEffectRenderer 全発射台エフェクト（CHILLDOWN, DELUGE, ROFI等）および臍帯ケーブルVerlet物理更新<br>・VisualEffectManager 衝撃波生成・描画・高度超過自動停止ライフサイクル |
 | **`05_ui_telemetry_audio.test.mjs`** | `gravsim_telemetry_panel.js`<br>`gravsim_telemetry_card.js`<br>`gravsim_control_panel.js`<br>`gravsim_tab_*.js`<br>`gravsim_input_manager.js`<br>`gravsim_launch_sequencer.js`<br>`gravsim_sound_sequencer.js`<br>`gravsim_audio_manager.js`<br>`gravsim_info_panel.js` | ・TelemetryCard 4種（FlightDynamics, AeroGuidance, PropulsionCard, NavigationCameraCard）のUI更新・リセット・描画<br>・TelemetryPanel 開閉トグル、ミニマルHUD描画、ホイール/スワイプによるカード切替<br>・ControlPanel モバイルメニュートグル、タブ切替（Rocket/System）、状態シリアライズ（getState / loadState）<br>・SystemTab スライダー、チェックボックス、オーディオ切替、隠し開発者モード（7回クリック）<br>・RocketTab 各段パラメータ、推進剤比率、ペイロードタブ、プリセットロード、発射/中断アクション<br>・InputManager マウスドラッグ、右クリックダブルタップ、2本指タッチピンチズーム<br>・InfoPanel 時間経過積算、FPS計測インターバル（500ms）、物理サブステップ表示<br>・AudioManager 非同期マニフェスト読み込み & 音声再生・アンロード |
 
+### C. 結合テスト群 (`testsuites/integration/`)
+
+| スイートファイル | 対象モジュール | 主な検証内容 |
+| :--- | :--- | :--- |
+| **`01_physics_worker_bridge.test.mjs`** | `gravsim_calc.js`<br>`gravsim_worker_bridge.js`<br>`gravsim_object_manager.js` | ・PhysicsEngine とメインスレッド間の46スロット共有Float64バッファ同期<br>・Worker側での段分離デブリ自動生成とメインスレッドObjectManagerインスタンス化<br>・単位変換の双方向整合性（km $\leftrightarrow$ m, t $\leftrightarrow$ kg）<br>・ゼロアロケーションバッファプールの再利用安定性 |
+| **`02_rocket_guidance_staging.test.mjs`** | `gravsim_rocket_launcher.js`<br>`gravsim_launch_sequencer.js`<br>`gravsim_flight_computer.js`<br>`gravsim_calc_object.js` | ・LaunchSequencer カウントダウン・EventBus 発火・ホールドダウン解除連携<br>・CalcRocket 1段燃焼・分離・2段点火・フェアリング投棄・ペイロード放出の多段パイプライン<br>・FlightComputer ピッチ誘導姿勢遷移と構造Max-G/Max-Qリミッター制御 |
+| **`03_trajectory_predictor_engine.test.mjs`** | `gravsim_trajectory_predictor.js`<br>`gravsim_calc_predictor.js`<br>`gravsim_calc.js` | ・メイン物理エンジン（RK4）と軌道予測エンジンの万有引力軌道一貫性<br>・runMultiBodySimulation による未来軌道点列生成と全フライトマイルストーン検出<br>・母天体の自転角速度に応じた予測軌跡の座標系回転補正 |
+| **`04_ui_telemetry_event_pipeline.test.mjs`** | `gravsim_telemetry_panel.js`<br>`gravsim_telemetry_card.js`<br>`gravsim_sound_sequencer.js`<br>`gravsim_control_panel.js` | ・Workerテレメトリフレームのデコードと4種TelemetryCardおよびDOM要素更新<br>・16灯アナンシエーターマトリクスの飛行フェーズ連動点灯・点滅遷移<br>・EventBus 経由でのSoundSequencerコールアウト音声発火<br>・ControlPanel タブ切替同期およびタイムスケールのUniverseへの即時伝播 |
+| **`05_mission_workflow_and_state_persistence.test.mjs`** | `gravsim_tab_rocket.js`<br>`gravsim_tab_system.js`<br>`gravsim_pad_effect.js`<br>`gravsim_save_manager.js`<br>`gravsim_universe.js` | ・ロケットタブ遷移時のデフォルト天体自動選定（地球優先、地球不在時は最後に追加された天体へのフォールバック、ユーザー選択保持・天体削除時リカバリ）<br>・予測期間スライダーの最低0.2カ月／初期値1.0カ月設定、RocketLauncher / プレビューへの即時伝播と日／月／年フォーマット<br>・ロールアウト〜パッドエフェクト〜内部電源/リフトオフによるストロングバック/アンビリカル退避のE2E検証<br>・SaveManager / Universe / ObjectManager / ControlPanel 状態の完全シリアライズ & デシリアライズ検証 |
+
 ---
 
 ## 3. WSL 上での実行方法
@@ -69,28 +84,35 @@ WSL（Ubuntu等）のターミナルを開き、リポジトリルートに移�
 
 ### 実行コマンド一覧
 
-#### A. 全テストの実行（回帰テスト + 単体テスト：計93テスト）
+#### A. 全テストの実行（回帰テスト + 単体テスト + 結合テスト：計182テスト）
 ```bash
 npm test
 # または
 node testsuites/run_all.mjs
 ```
 
-#### B. 単体テストのみを実行（全69テスト）
+#### B. 単体テストのみを実行（全128テスト）
 ```bash
 npm run test:unit
 # または
 node testsuites/run_all.mjs --unit
 ```
 
-#### C. 回帰テストのみを実行（全24テスト）
+#### C. 回帰テストのみを実行（全36テスト）
 ```bash
 npm run test:regressions
 # または
 node testsuites/run_all.mjs --regressions
 ```
 
-#### D. コードカバレッジ付き実行（最低75% / 平均85% 達成検証）
+#### D. 結合テストのみを実行（全18テスト）
+```bash
+npm run test:integration
+# または
+node testsuites/run_all.mjs --integration
+```
+
+#### E. コードカバレッジ付き実行（全テスト・ファイル別カバレッジ検証）
 ```bash
 npm run test:coverage
 # または
@@ -102,22 +124,22 @@ node testsuites/run_all.mjs --coverage
 ## 4. テスト結果の見方
 
 ### 正常終了時（PASS）
-全93テストが成功すると、緑色のチェックマーク（`✔`）とともに以下のような集計サマリーが表示されます：
+全182テストが成功すると、緑色のチェックマーク（`✔`）とともに以下のような集計サマリーが表示されます：
 ```text
-ℹ tests 93
-ℹ suites 8
-ℹ pass 93
+ℹ tests 182
+ℹ suites 13
+ℹ pass 182
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 662.341475
+ℹ duration_ms 791.629806
 
 ---------------------------------------------------------------
  [SUCCESS] All GravSim automated test suites passed successfully! 
 ===============================================================
 ```
-- `pass 93`、`fail 0` となり、最終行に `[SUCCESS]` が表示されれば全機能・回帰テストが正常です。
+- `pass 182`、`fail 0` となり、最終行に `[SUCCESS]` が表示されれば全機能・回帰・結合テストが正常です。
 - プロセス終了コードは `0` です（CI/CD や bash スクリプトでの `$?` 判定に対応）。
 
 ---
@@ -126,8 +148,9 @@ node testsuites/run_all.mjs --coverage
 
 `npm run test:coverage` を実行すると、全テスト実行後に標準出力にカバレッジレポートテーブルが出力されます。  
 本システムは以下の厳格な品質基準を**100%達成**しています：
-- **全ファイル最低カバレッジ率**: **75.00% 以上**（全38ファイル達成、最低モジュールでも 75.00%）
-- **全システム全体平均カバレッジ率**: **88.05%**（基準の 85.00% を +3.05% 上回る高水準）
+- **全システム全体平均行カバレッジ率**: **96.43%**（基準の 85.00% を大きく上回る高水準）
+- **全システム全体平均分岐カバレッジ率**: **89.85%**（基準の 85.00% を達成）
+- **全システム全体平均関数カバレッジ率**: **92.45%**（基準の 85.00% を達成）
 
 ### モジュール別カバレッジ実績テーブル
 
