@@ -11,9 +11,10 @@ import { ObjectManager } from '../../scripts/gravsim_object_manager.js';
 import { DebrisGenerator } from '../../scripts/gravsim_debris_generator.js';
 import { SaveManager } from '../../scripts/gravsim_save_manager.js';
 import { ObjectPlacer } from '../../scripts/gravsim_object_placer.js';
+import { RocketLauncher } from '../../scripts/gravsim_rocket_launcher.js';
 import { WorkerBridge } from '../../scripts/gravsim_worker_bridge.js';
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
-import { PHYSICS, OBJECT_TYPES, OBJECT_STATE, TRAIL_MODE, DEPLOY_PROFILES } from '../../scripts/gravsim_const.js';
+import { PHYSICS, OBJECT_TYPES, OBJECT_STATE, TRAIL_MODE, DEPLOY_PROFILES, MULTISTAGE_PRESETS } from '../../scripts/gravsim_const.js';
 
 test('GravSimObject hierarchy - CelestialBody, Rocket, and Debris creation', () => {
 	const body = new CelestialBody(1, 'Earth', 0, 0, 0, 0, 5.972e24, '#3366cc', 5, 6371000, 0, '#ffffff', 1, false);
@@ -1054,5 +1055,548 @@ test('CelestialBody & Rocket - Escape trails, rotating atmosphere, actual flight
 	rocket.draw({ ctx, basis: earth, zoomScale: 1.0, cameraOffset: { x: 0, y: 0 }, objects: [earth] });
 	assert.equal(rocket.predictedTrajectory.hostId, earth.id);
 });
+
+test('ObjectManager, ObjectPlacer, and RocketLauncher deep branch coverage', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const workerManager = { postMessage: () => {} };
+	const objMgr = new ObjectManager(universe.renderer, workerManager);
+	universe.ObjectManager = objMgr;
+
+	// 1. ObjectManager error throws
+	assert.throws(() => objMgr.removeObject({}), /Invalid object type/);
+	assert.throws(() => objMgr.updateObject({}), /Invalid object type/);
+
+	// updateRocketState with non-existent id
+	objMgr.updateRocketState(9999, true, false);
+
+	// Autonomous debris spawn with subtypes 1, 2, 3, 99
+	const rocket = new Rocket(10, 'Falcon 9', 0, 0, 0, 0, 25, 100, 200, '#fff', 5, 3.7, 0, null, 0);
+	rocket.colorTheme = 'classic';
+	objMgr.addObject(rocket, false);
+
+	objMgr.updateObjectParams({
+		id: 101, type: OBJECT_TYPES.DEBRIS, debrisSubType: 1,
+		x: 100, y: 100, vx: 10, vy: 0, mass: 20, radius: 3.7
+	});
+	objMgr.updateObjectParams({
+		id: 102, type: OBJECT_TYPES.DEBRIS, debrisSubType: 2,
+		x: 200, y: 100, vx: 20, vy: 0, mass: 5, radius: 3.7
+	});
+	objMgr.updateObjectParams({
+		id: 103, type: OBJECT_TYPES.DEBRIS, debrisSubType: 3,
+		x: 300, y: 100, vx: 30, vy: 0, mass: 1, radius: 3.7
+	});
+	objMgr.updateObjectParams({
+		id: 104, type: OBJECT_TYPES.DEBRIS, debrisSubType: 99,
+		x: 400, y: 100, vx: 40, vy: 0, mass: 2, radius: 3.7
+	});
+
+	// Debris spawn when no active rocket in manager (fallback theme)
+	objMgr.objects = objMgr.objects.filter(o => o.id !== 10);
+	objMgr.updateObjectParams({
+		id: 105, type: OBJECT_TYPES.DEBRIS, debrisSubType: 1,
+		x: 500, y: 100, vx: 50, vy: 0, mass: 20, radius: 3.7
+	});
+
+	// Rocket payload separation name update
+	rocket.payload = { name: 'Dragon V2' };
+	rocket.name = 'Falcon 9';
+	objMgr.objects.push(rocket);
+	let listChangedEmitted = false;
+	EventBus.on('object-list-changed', () => { listChangedEmitted = true; });
+	objMgr._applyRocketState(rocket, {
+		mass: 10, fuelMass: 0, oxidMass: 0, burnTime: 0, thrustRatio: 0,
+		isHoldDown: false, isIgnited: false, isPayloadSeparated: true,
+		radius: 3.7, tmTankPresFuel: 0, tmTankPresOxid: 0,
+		tmStatus: 0, tmQAxial: 0, tmQLateral: 0, tmStructRatio: 0,
+		tmAoaDeg: 0, tmProgradeAngle: 0, tmGravityAngle: 0,
+		tmRemDv: 0, tmTwr: 0, tmAltM: 200000, tmVv: 0, tmVh: 7800,
+		tmAv: 0, tmAh: 0, tmCurrentG: 1, tmFlightTime: 500,
+		isAntiStall: false, isQLimitNear: false, isGLimitNear: false,
+		tmStageIndex: 1, tmTotalStages: 2, tmStgSepActive: false,
+		tmFairingSeparated: true, thrustAngle: 0
+	});
+	assert.equal(rocket.name, 'Dragon V2');
+	assert.equal(listChangedEmitted, true);
+
+	// loadState with rocket state having undefined flightProfile (lines 385-386)
+	objMgr.loadState([
+		{
+			type: OBJECT_TYPES.ROCKET,
+			id: 201, name: 'SSTO', x: 0, y: 0, vx: 0, vy: 0,
+			dryMass: 10, fuelMass: 50, oxidMass: 100, color: '#fff',
+			size: 5, radius: 2, generation: 0,
+			flightProfile: undefined // hits lines 385-386!
+		}
+	]);
+	const loadedRocket = objMgr.objects.find(o => o.id === 201);
+	assert.deepEqual(loadedRocket.flightProfile, []);
+
+	// 2. ObjectPlacer cancel drag & drawPreview with rotation
+	universe.camera.getRenderState = () => ({
+		basis: earth,
+		zoomScale: 1.0,
+		cameraOffset: { x: 0, y: 0 },
+		rotation: 0
+	});
+	const placer = new ObjectPlacer(universe);
+	placer.setReadyForLaunch(100, 100);
+	assert.equal(placer.isSlingshotting, true);
+	EventBus.emit('input:drag-cancel');
+	assert.equal(placer.isSlingshotting, false);
+
+	// drawPreview with slingshot active and rotation !== 0
+	placer.setReadyForLaunch(100, 100);
+	placer.updateDrag(150, 150);
+	universe.camera.getRenderState = () => ({
+		basis: earth,
+		zoomScale: 1.0,
+		cameraOffset: { x: 0, y: 0 },
+		rotation: 0.8
+	});
+	const mockCtx = createMockElement('canvas').getContext('2d');
+	placer.drawPreview(mockCtx, earth, 1.0);
+	placer.destroy();
+
+	// 3. RocketLauncher presets, lengths, and zero burn-time computation
+	const origFP = MULTISTAGE_PRESETS.FALCON9.flightProfile;
+	MULTISTAGE_PRESETS.FALCON9.flightProfile = null;
+	const rl = new RocketLauncher(universe);
+	MULTISTAGE_PRESETS.FALCON9.flightProfile = origFP;
+	assert.ok(rl.flightProfile.length >= 8); // hits default flightProfile fallback lines 54-61!
+
+	// getBaseRadiusM fallback to stages[0].rocketLengthM (lines 176-178)
+	rl.currentPresetId = 'NON_EXISTENT_PRESET';
+	rl.stages = [{ rocketLengthM: 45 }];
+	assert.equal(rl.getBaseRadiusM(), 45);
+	assert.equal(rl.getRocketLengthM(), 45);
+
+	// Fallback to DEFAULT_OBJECT_PARAMS['Rocket'] radius
+	rl.stages = [];
+	assert.equal(rl.getBaseRadiusM(), 63);
+
+	// getBottomOffsetM for single, two, and three stage
+	rl.stages = [{ rocketLengthM: 50 }];
+	const offsetSingle = rl.getBottomOffsetM();
+	assert.ok(offsetSingle > 0);
+
+	rl.stages = [{ rocketLengthM: 50 }, { rocketLengthM: 50 }];
+	const offsetTwo = rl.getBottomOffsetM();
+	assert.ok(offsetTwo > 0);
+
+	rl.stages = [{ rocketLengthM: 50 }, { rocketLengthM: 50 }, { rocketLengthM: 50 }];
+	const offsetThree = rl.getBottomOffsetM();
+	assert.ok(offsetThree > 0);
+
+	// _calculateTransform with burnTime = 0 calculates burnTime from thrust & mass flow
+	rl.stages = [{ burnTime: 0, rocketLengthM: 50 }];
+	rl.thrustKN = 7000;
+	rl.fuelMassT = 100;
+	rl.oxidMassT = 200;
+	rl._calculateTransform();
+	assert.ok(rl.calculatedBurnTime > 0);
+});
+
+test('ObjectManager - Full branch coverage: errors, worker payloads, debris types, and escape pruning', () => {
+	// 1. Single argument constructor fallback (lines 15-18)
+	const mockRendererWorker = {
+		renderer: {},
+		calcWorkerManager: { postMessage: () => {} }
+	};
+	const objMgrSingle = new ObjectManager(mockRendererWorker);
+	assert.ok(objMgrSingle.workerManager);
+
+	const mockWorker = { postMessage: () => {} };
+	const objMgr = new ObjectManager(null, mockWorker);
+
+	// 2. Type validation throws
+	assert.throws(() => objMgr.addObject({}), /Invalid object type/);
+	assert.throws(() => objMgr.removeObject({}), /Invalid object type/);
+	assert.throws(() => objMgr.updateObject({}), /Invalid object type/);
+
+	// 3. addObject with Debris (lines 68-70)
+	const debris = new Debris(10, 'Stage Debris', 0, 0, 0, 0, 5.0, '#fff', 5, 2.0);
+	objMgr.addObject(debris);
+
+	// 4. updateRocketState edge cases
+	objMgr.updateRocketState(9999, undefined, undefined); // non-existent rocket
+	objMgr.updateRocketState(10, true, false); // debris target (type !== ROCKET)
+
+	// 5. updateObjectParams with shattered and impact on dead target
+	const earth = new CelestialBody(1, 'Earth', 0, 0, 0, 0, 5.972e24, '#3366cc', 5, 6371000);
+	objMgr.addObject(earth);
+	earth.state = OBJECT_STATE.REMOVED; // dead target
+	objMgr.updateObjectParams({ id: 1, type: OBJECT_TYPES.CELESTIAL, isImpact: true, isCollided: true });
+	objMgr.updateObjectParams({ id: 1, type: OBJECT_TYPES.CELESTIAL, isShattered: true, isCollided: true });
+
+	// 6. updateObjectParams autonomous debris generation: subtype 1, 2, 3, and 0
+	[1, 2, 3, 0].forEach(subType => {
+		objMgr.updateObjectParams({
+			id: 500 + subType,
+			type: OBJECT_TYPES.DEBRIS,
+			debrisSubType: subType,
+			x: 1000, y: 1000, vx: 10, vy: 10, mass: 2.0, radius: 2.0,
+			isCollided: false, isShattered: false
+		});
+	});
+
+	// 7. Rocket payload rename on payload separation (lines 271-276)
+	const rocket = new Rocket(200, 'Rocket', 0, 0, 0, 0, 10, 50, 50, '#fff', 5, 20);
+	rocket.payload = { name: 'JamesWebb' };
+	objMgr.addObject(rocket);
+	objMgr.updateObjectParams({
+		id: 200,
+		type: OBJECT_TYPES.ROCKET,
+		mass: 10, fuelMass: 0, oxidMass: 0, burnTime: 0, thrustRatio: 0,
+		isPayloadSeparated: true,
+		radius: 5, tmTankPresFuel: 200, tmTankPresOxid: 200,
+		tmStatus: 5, tmAltM: 500000, tmStageIndex: 2, tmTotalStages: 2
+	});
+	assert.equal(rocket.name, 'JamesWebb');
+
+	// 8. _checkEscapeAndRemove edge cases
+	objMgr.objects = []; // no massive bodies
+	objMgr._checkEscapeAndRemove(); // hits massiveBodies.length === 0
+
+	const sun = new CelestialBody(0, 'Sun', 0, 0, 0, 0, 1.989e30, '#ff0', 10, 6.96e8);
+	const escapingObj = new CelestialBody(99, 'EscapingAsteroid', 1e15, 1e15, 1000, 1000, 1e12, '#aaa', 5, 1000);
+	escapingObj.isEscaping = true;
+	objMgr.objects = [sun, escapingObj];
+	objMgr._checkEscapeAndRemove(); // removes escaping object
+
+	// 9. loadState non-array & rocket without flightProfile
+	objMgr.loadState(null); // ignores non-array
+	objMgr.loadState([
+		{ id: 1, type: OBJECT_TYPES.CELESTIAL, name: 'Sun', x: 0, y: 0, vx: 0, vy: 0, mass: 1e30, color: '#ff0', size: 10, radius: 100 },
+		{ id: 2, type: OBJECT_TYPES.ROCKET, name: 'Rocket', x: 10, y: 10, vx: 0, vy: 0, dryMass: 10, fuelMass: 50, color: '#fff', size: 5, radius: 10 }
+	]);
+	assert.equal(objMgr.objects.length, 2);
+});
+
+test('ObjectPlacer - Full branch coverage: options, throws, custom profiles, and input states', () => {
+	const sun = new CelestialBody(1, 'Sun', 0, 0, 0, 0, 1.989e30, '#ffff00', 10, 6.9634e8, 0, null, 0, true);
+	const earth = new CelestialBody(2, 'Earth', 1000, 0, 0, 0, 5.972e24, '#3366cc', 5, 6371000, 0, null, 0);
+	const universe = createMockUniverse({ objects: [sun, earth] });
+	universe.canvas = { width: 800, height: 600 };
+	universe.camera.getRenderState = () => ({ zoomScale: 1.0, basis: sun, cameraOffset: { x: 0, y: 0 }, rotation: 0.5 });
+	universe.RocketLauncher = {
+		isActive: true,
+		mode: 'free',
+		stages: [{ rocketLengthM: 50 }],
+		payload: { name: 'Sat', massT: 2 },
+		setFreePosition: () => {}
+	};
+	const placer = new ObjectPlacer(universe);
+
+	// 1. placeObject Rocket with time <= 0, disableStaging, no stages
+	const coldRocket = placer.placeObject('Rocket', 0, 0, 0, 0, {
+		time: 0,
+		disableStaging: true,
+		stages: []
+	});
+	assert.ok(coldRocket.fairing.enabled);
+	assert.ok(coldRocket.stages.length > 0);
+
+	// 2. placeObject CelestialBody with full custom options (lines 164-180)
+	const customPlanet = placer.placeObject('Earth', 500, 500, 10, -10, {
+		name: 'CustomMars',
+		mass: 6.4e23,
+		color: '#ff3300',
+		radius: 3389000,
+		minDrawSize: 4.5
+	});
+	assert.equal(customPlanet.name, 'CustomMars');
+
+	// 3. placeAtOrbitAroundHost & placeAtOrbitAroundSun missing body errors
+	assert.throws(() => placer.placeAtOrbitAroundHost('NonExistentPlanet', 'Rocket'), /not found in the universe/);
+	const emptyUniverse = createMockUniverse({ objects: [] });
+	const emptyPlacer = new ObjectPlacer(emptyUniverse);
+	assert.throws(() => emptyPlacer.placeAtOrbitAroundSun('Rocket'), /Sun object not found/);
+
+	// 4. deployProfile edge cases: unknown profile
+	placer.deployProfile('UNKNOWN_PROFILE_KEY');
+
+	// 5. _deployBinarySystem without existing objects (canvas centering lines 401-406)
+	const cleanUniverse = createMockUniverse({ objects: [] });
+	cleanUniverse.canvas = { width: 1000, height: 1000 };
+	const cleanPlacer = new ObjectPlacer(cleanUniverse);
+	cleanPlacer._deployBinarySystem({
+		primary: { template: 'Sun', name: 'Primary' },
+		secondary: { template: 'Sun', name: 'Secondary' },
+		planets: [
+			{ host: 'primary', template: 'Earth', distanceAu: 0.5, hasMoon: true },
+			{ host: 'barycenter', template: 'Jupiter', distanceAu: 5.0 }
+		]
+	});
+	assert.ok(cleanUniverse.objects.length >= 4);
+
+	// 6. _deployThreeBody without existing objects & with planet (lines 532-557)
+	const threeBodyUniverse = createMockUniverse({ objects: [] });
+	threeBodyUniverse.canvas = { width: 1000, height: 1000 };
+	const threeBodyPlacer = new ObjectPlacer(threeBodyUniverse);
+	threeBodyPlacer._deployThreeBody({
+		radiusAu: 2.0,
+		includePlanet: true,
+		planetDistanceAu: 0.4
+	});
+	assert.ok(threeBodyUniverse.objects.length >= 4);
+
+	// 7. setReadyForLaunch when RocketLauncher is active & mode === 'free' (lines 621-626)
+	placer.setReadyForLaunch(200, 200);
+
+	// 8. Slingshot dragging and preview with small arrow (lines 759-770)
+	universe.RocketLauncher.isActive = false;
+	placer.setReadyForLaunch(300, 300);
+	placer.updateDrag(301, 301); // very small movement -> lineLength <= ARROW_MIN_LEN
+	const ctx = createMockElement('canvas').getContext('2d');
+	placer.drawPreview(ctx, sun, 1.0);
+	placer.goLaunch(301, 301);
+	assert.equal(placer.isSlingshotting, false);
+
+	placer.destroy();
+});
+
+test('GravSimObject & Rocket - In-atmosphere flame, LOD drawing, and stage separation polygons', () => {
+	const earth = new CelestialBody(1, 'Earth', 0, 0, 0, 0, 5.972e24, '#3366cc', 5, 6371000);
+	const rocket = new Rocket(2, 'Falcon9', 0, -6371000, 0, 0, 30, 400, 100, '#ffffff', 2, 20);
+	rocket.dominantBodyId = 1;
+	rocket.isIgnited = true;
+	rocket.burnTime = 100;
+	rocket.thrustAngle = -Math.PI / 2;
+	rocket.inAtmosphere = true;
+	rocket.isHoldDown = false;
+	rocket.isInternalPower = true;
+
+	const ctx = createMockElement('canvas').getContext('2d');
+	const renderContext = {
+		ctx,
+		basis: earth,
+		zoomScale: 1.0,
+		cameraOffset: { x: 0, y: 0 },
+		rotation: 0.5
+	};
+
+	// Draw high detail with internal power glow
+	rocket.draw(renderContext);
+
+	// Draw low detail with flame (LOD threshold < 25)
+	const lowDetailRenderCtx = {
+		ctx,
+		basis: earth,
+		zoomScale: 0.1,
+		cameraOffset: { x: 0, y: 0 },
+		rotation: 0
+	};
+	rocket.draw(lowDetailRenderCtx);
+
+	// Debris polygon drawing with stage 1 and 2 subTypes
+	const deb1 = new Debris(10, 'Stage 1', 0, 0, 0, 0, 5.0, '#fff', 5, 20, 1, null, 0, 1);
+	deb1.draw(renderContext);
+	const deb2 = new Debris(11, 'Stage 2', 0, 0, 0, 0, 3.0, '#fff', 5, 15, 1, null, 0, 2);
+	deb2.draw(renderContext);
+	const debFairing = new Debris(12, 'Fairing', 0, 0, 0, 0, 1.0, '#fff', 5, 10, 1, null, 0, 3);
+	debFairing.draw(renderContext);
+
+	// 1. Atmosphere radial gradient drawing (lines 214-229)
+	const zoomedRenderCtx = {
+		ctx,
+		basis: earth,
+		zoomScale: 500, // triggers screenThicknessPx >= 1
+		cameraOffset: { x: 0, y: 0 },
+		rotation: 0
+	};
+	earth.draw(zoomedRenderCtx);
+
+	// 2. Rocket.draw atmospheric flame with 1-stage, 2-stage upper, and 3-stage (lines 382, 384-385, 394-395, 401-403, 405-415)
+	const flameRenderCtx = {
+		ctx,
+		basis: earth,
+		zoomScale: 2.0,
+		cameraOffset: { x: 0, y: 0 },
+		rotation: 0
+	};
+
+	// Single Stage (SSTO) flame
+	rocket.totalStages = 1;
+	rocket.currentStageIndex = 0;
+	rocket.draw(flameRenderCtx);
+
+	// Two-Stage Upper flame
+	rocket.totalStages = 2;
+	rocket.currentStageIndex = 1;
+	rocket.draw(flameRenderCtx);
+
+	// Three-Stage: Stage 1, Stage 2, Stage 3 flames
+	rocket.totalStages = 3;
+	rocket.currentStageIndex = 0;
+	rocket.draw(flameRenderCtx);
+	rocket.currentStageIndex = 1;
+	rocket.draw(flameRenderCtx);
+	rocket.currentStageIndex = 2;
+	rocket.draw(flameRenderCtx);
+
+	// 3. _recordActualFlightPath when actualFlightPath is null (lines 479-480)
+	rocket.actualFlightPath = null;
+	rocket._recordActualFlightPath([earth, rocket]);
+	assert.ok(rocket.actualFlightPath.length > 0);
+});
+
+test('ObjectPlacer and ObjectManager - Additional deep branches', () => {
+	// ObjectManager single argument constructor with renderer.workerManager (line 17)
+	const mockRenderer = {
+		renderer: {},
+		workerManager: { postMessage: () => {} }
+	};
+	const mgr = new ObjectManager(mockRenderer);
+	assert.ok(mgr.workerManager);
+
+	// updateObject on Debris (non-celestial path lines 111-120)
+	const deb = new Debris(99, 'Debris', 10, 10, 0, 0, 2.0, '#fff', 5, 2.0);
+	mgr.addObject(deb, false);
+	mgr.updateObject(deb);
+
+	// updateObjectParams with single object data (data.objectsData undefined lines 228-230)
+	mgr.updateObjectParams({
+		id: 99,
+		type: OBJECT_TYPES.DEBRIS,
+		x: 20, y: 20, vx: 0, vy: 0, ax: 0, ay: 0, mass: 2.0, radius: 2.0
+	});
+
+	// ObjectPlacer placeObject options coverage
+	const universe = createMockUniverse({ objects: [] });
+	universe.canvas = { width: 800, height: 600 };
+	universe.camera.getRenderState = () => ({ zoomScale: 1.0, basis: { x: 0, y: 0, vx: 0, vy: 0 }, cameraOffset: { x: 0, y: 0 }, rotation: 0 });
+	universe.RocketLauncher = null;
+	const placer = new ObjectPlacer(universe);
+
+	// Rocket without fuelMass option (calculated from options.mass - emptyMass lines 88-89)
+	const r1 = placer.placeObject('Rocket', 0, 0, 0, 0, {
+		mass: 500,
+		emptyMass: 50,
+		ofRatio: 2.5,
+		angle: 1.57,
+		flightProfile: [{ type: 'alt', value: 1000, thrust: 100, angle: 10 }],
+		time: 120,
+		force: 7000000,
+		lossRate: 3.5,
+		maxGLimit: 4.0,
+		autoControl: true,
+		hostId: 1,
+		hostAngleRad: 1.57,
+		hostAltM: 100,
+		bottomOffsetM: 30,
+		baseRadiusM: 60,
+		isHoldDown: false,
+		isIgnited: true,
+		stages: [{ fuelType: 'liquid' }],
+		payload: { name: 'Sat' },
+		fairing: { enabled: true, isSeparated: false },
+		disableStaging: false
+	});
+	assert.equal(r1.fuelMass, 450);
+
+	// Slingshot drag cancel
+	EventBus.emit('input:drag-cancel');
+	assert.equal(placer.isSlingshotting, false);
+
+	// Swarm generators and launch object name branches
+	const sun = new CelestialBody(1, 'Sun', 0, 0, 0, 0, 1.989e30, '#ff0', 10, 6.96e8);
+	universe.objects = [sun];
+
+	placer._deployEllipticalSwarm(sun, {
+		template: 'Earth',
+		count: 2,
+		perihelionAuMin: 0.8,
+		perihelionAuMax: 1.2,
+		aphelionAuMin: 1.5,
+		aphelionAuMax: 2.0
+	});
+
+	placer._deployCircularSwarm(sun, {
+		templates: ['Earth', 'Moon'],
+		count: 2,
+		radiusAuMin: 1.0,
+		radiusAuMax: 1.5
+	});
+
+	// getLaunchObjectName with mass-select DOM
+	const massSel = document.getElementById('mass-select');
+	massSel.value = 'Sun';
+	assert.equal(placer.getLaunchObjectName(), 'Sun');
+	massSel.value = 'UnknownObject';
+	assert.equal(placer.getLaunchObjectName(), 'Rocket');
+
+	// goLaunch early return when not slingshotting
+	placer.isSlingshotting = false;
+	placer.goLaunch(100, 100);
+
+	// drawPreview & updateDrag early returns
+	const mockCtx = createMockElement('canvas').getContext('2d');
+	placer.drawPreview(mockCtx, sun, 1.0); // isSlingshotting = false
+	placer.isSlingshotting = true;
+	placer.startRelX = null;
+	placer.drawPreview(mockCtx, sun, 1.0); // startRelX = null
+	placer.isSlingshotting = false;
+	placer.updateDrag(200, 200); // isSlingshotting = false
+
+	// placeAtOrbit with unknown object fallback to Earth (line 188)
+	const orbitObj = placer.placeAtOrbit('UnknownSatellite', sun);
+	assert.ok(orbitObj);
+
+	// placeObject with disableStaging, empty stages, and null RocketLauncher payload (lines 157-158)
+	universe.RocketLauncher = {
+		isActive: false,
+		stages: [{ rocketLengthM: 50 }],
+		payload: null // triggers default payload object { name: 'Payload', massT: 5.0, radius: 1.0 }
+	};
+	const noPayloadRocket = placer.placeObject('Rocket', 0, 0, 0, 0, {
+		disableStaging: true,
+		stages: []
+	});
+	assert.equal(noPayloadRocket.payload.name, 'Payload');
+
+	// placeObject with disableStaging, already has fairing, and empty RocketLauncher stages (lines 145 false & 155 false)
+	universe.RocketLauncher.stages = [];
+	const fairingRocket = placer.placeObject('Rocket', 0, 0, 0, 0, {
+		disableStaging: true,
+		fairing: { enabled: true, isSeparated: false, massT: 2.0 },
+		stages: []
+	});
+	assert.equal(fairingRocket.fairing.massT, 2.0);
+
+	// Slingshot preview with large drag (lineLength > ARROW_MIN_LEN arrow head drawing lines 759-770)
+	// and camera rotation = 0 (line 604 & line 709)
+	universe.camera.getRenderState = () => ({
+		basis: sun,
+		zoomScale: 1.0,
+		cameraOffset: { x: 0, y: 0 },
+		rotation: 0 // zero rotation branch!
+	});
+	placer.setReadyForLaunch(100, 100);
+	placer.updateDrag(400, 400); // large drag distance > ARROW_MIN_LEN
+	placer.drawPreview(mockCtx, sun, 1.0);
+	placer.goLaunch(400, 400);
+
+	// deployProfile with generator missing host (line 278) & static objects without host (line 261)
+	DEPLOY_PROFILES.MOCK_TEST_PROFILE = {
+		name: 'Mock Test Profile',
+		clearPrevious: false,
+		staticObjects: [
+			{ template: 'Earth', x: 500, y: 500, vx: 0, vy: 10 }
+		],
+		generators: [
+			{ type: 'circular_swarm', host: 'NonExistentHost', templates: ['Earth'], count: 1 }
+		]
+	};
+	placer.deployProfile('MOCK_TEST_PROFILE');
+	delete DEPLOY_PROFILES.MOCK_TEST_PROFILE;
+
+	placer.destroy();
+});
+
+
+
+
 
 

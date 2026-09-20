@@ -10,13 +10,15 @@ import { Renderer } from '../../scripts/gravsim_renderer.js';
 import { OverlayRenderer } from '../../scripts/gravsim_overlay_renderer.js';
 import { PadEffectRenderer } from '../../scripts/gravsim_pad_effect.js';
 import { RocketRenderer } from '../../scripts/gravsim_rocket_renderer.js';
+import { TrajectoryPredictor } from '../../scripts/gravsim_trajectory_predictor.js';
 import { VisualEffectManager } from '../../scripts/gravsim_visual_effect_manager.js';
-import { Debris } from '../../scripts/gravsim_object.js';
+import { Debris, Rocket } from '../../scripts/gravsim_object.js';
 import { TrailLineRenderer, EffectRenderer } from '../../scripts/gravsim_trail_renderer.js';
 import { Trajectory } from '../../scripts/gravsim_trajectory.js';
 import { EffectTrail } from '../../scripts/gravsim_effect_trail.js';
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
-import { ROCKET_LAUNCHER_CONFIG, TRAIL_MODE, RENDER } from '../../scripts/gravsim_const.js';
+import { ROCKET_LAUNCHER_CONFIG, TRAIL_MODE, RENDER, OBJECT_STATE, ROCKET_VISUAL, PAD_EFFECT } from '../../scripts/gravsim_const.js';
+import { RocketLauncher } from '../../scripts/gravsim_rocket_launcher.js';
 import { UnitConvertUtils } from '../../scripts/gravsim_utils.js';
 
 test('Camera - Viewport state, zooming limits, and pan translation', () => {
@@ -310,6 +312,20 @@ test('PadEffectRenderer - Lifecycle, sequence events, and Verlet cable swing phy
 	pad.handleEvent('T-3s MAIN ENGINE START');
 	pad.update(0.016, mockContext);
 
+	// Exercise venting and chilldown emitter branches with predictable random
+	const origRandom = Math.random;
+	try {
+		Math.random = () => 0.001;
+		pad.flags.isVenting = true;
+		pad.flags.isPressurized = true;
+		pad.flags.isChilldown = true;
+		for (let i = 0; i < 5; i++) {
+			pad.update(0.016, mockContext);
+		}
+	} finally {
+		Math.random = origRandom;
+	}
+
 	// Draw background structure & particles
 	pad.drawBackground(ctx, mockRc, mockContext);
 
@@ -317,6 +333,18 @@ test('PadEffectRenderer - Lifecycle, sequence events, and Verlet cable swing phy
 	pad.handleLiftoff();
 	mockContext.isHoldDown = false;
 	rocket.isHoldDown = false;
+
+	// Draw foreground while particles still exist (before expiration)
+	pad.drawForeground(ctx, mockRc, mockContext);
+
+	// Update with large dt to expire particles and trigger particle splice
+	pad.update(10.0, mockContext);
+
+	// Fallback position and layout tests
+	const emptyContext = { m2pix: (m) => m * 10 };
+	pad.drawBackground(ctx, mockRc, emptyContext);
+	const fallbackLayout = pad.getTowerLayout({});
+	assert.ok(fallbackLayout.groundXM < 0);
 
 	// Update several steps with disconnected cable (exercises swing, gravity, damping, and constraints)
 	for (let i = 0; i < 10; i++) {
@@ -328,6 +356,136 @@ test('PadEffectRenderer - Lifecycle, sequence events, and Verlet cable swing phy
 
 	pad.stop();
 	assert.equal(pad.isActive, false);
+
+	// --- Edge cases & Branch Coverage Enhancements for PadEffectRenderer ---
+	// 1. Inactive calls (early return)
+	pad.update(0.016, mockContext);
+	pad.drawBackground(ctx, mockRc, mockContext);
+	pad.drawForeground(ctx, mockRc, mockContext);
+
+	// 2. Liftoff when lastContext is null
+	const freshPad = new PadEffectRenderer();
+	freshPad.start(201, 1);
+	freshPad.handleLiftoff(); // lastContext is null
+	freshPad.handleEvent('UNKNOWN EVENT'); // eventName doesn't match any branch
+
+	// 3. update() with rocket baseRadiusM, bottomOffsetM, and zoomScale <= 0
+	freshPad.flags.isInternalPower = true;
+	freshPad.flags.isVenting = true;
+	freshPad.flags.isPressurized = false; // vent rate branch when not pressurized
+	freshPad.flags.isWaterDeluge = true;
+	freshPad.flags.isROFI = true;
+	const rocketWithOffsets = createMockRocket({
+		id: 201,
+		isHoldDown: true,
+		thrustAngle: 0,
+		baseRadiusM: 3.0,
+		bottomOffsetM: 9.0
+	});
+	const zeroZoomCtx = {
+		rocket: rocketWithOffsets,
+		host: host,
+		m2pix: (m) => m * 10,
+		zoomScale: 0
+	};
+	freshPad.update(0.016, zeroZoomCtx);
+
+	// 4. Clamping strongback and umbilical angles when exceeding max
+	freshPad.strongbackAngle = 999;
+	freshPad.umbilicalAngle = 999;
+	rocketWithOffsets.isHoldDown = false;
+	freshPad.update(0.016, { rocket: rocketWithOffsets, host, m2pix: (m) => m * 10, zoomScale: 1.0 });
+	assert.equal(freshPad.strongbackAngle, PAD_EFFECT.STRUCTURE.STRONGBACK_MAX_ANGLE);
+	assert.equal(freshPad.umbilicalAngle, PAD_EFFECT.STRUCTURE.UMBILICAL_MAX_ANGLE);
+
+	// 5. Host rotation update after liftoff (with hostParam and without hostParam)
+	const unknownHost = { id: 99, name: 'UnknownBody', x: 0, y: 0 };
+	freshPad.update(0.016, { rocket: rocketWithOffsets, host: unknownHost, m2pix: (m) => m * 10, zoomScale: 1.0 });
+
+	// 6. update() when rocket is null
+	freshPad.update(0.016, { rocket: null, host, m2pix: (m) => m * 10, zoomScale: 1.0 });
+
+	// 7. _getAbsPadPosition when !rocket.isHoldDown but host exists
+	const postLiftoffCtx = { rocket: null, host, m2pix: (m) => m * 10, zoomScale: 1.0 };
+	freshPad.drawBackground(ctx, mockRc, postLiftoffCtx);
+
+	// 8. Custom rocket with _getDrawRadius
+	const customRadiusRocket = {
+		...rocketWithOffsets,
+		_getDrawRadius: () => 30
+	};
+	freshPad.drawBackground(ctx, mockRc, { rocket: customRadiusRocket, host, m2pix: (m) => m * 10, zoomScale: 1.0 });
+
+	// 9. ctx without arc (fallback to fillRect)
+	const ctxWithoutArc = {
+		save: () => {},
+		restore: () => {},
+		translate: () => {},
+		rotate: () => {},
+		fillRect: () => {},
+		beginPath: () => {},
+		fill: () => {},
+		stroke: () => {},
+		moveTo: () => {},
+		lineTo: () => {},
+		ellipse: () => {},
+		arc: null
+	};
+	freshPad.drawBackground(ctxWithoutArc, mockRc, mockContext);
+
+	// 10. getTowerLayout edge cases & fallbacks
+	freshPad.getTowerLayout(null);
+	freshPad.getTowerLayout({ rocket: { baseRadiusM: 4.0, bottomOffsetM: 12.0 } });
+	const origNozzleMult = PAD_EFFECT.PHYSICS.NOZZLE_OFFSET_MULT;
+	const origBaseXMult = PAD_EFFECT.STRUCTURE.BASE_X_OFFSET_MULT;
+	const origUmbY = PAD_EFFECT.STRUCTURE.UMBILICAL_OFFSET_Y;
+	delete PAD_EFFECT.PHYSICS.NOZZLE_OFFSET_MULT;
+	delete PAD_EFFECT.STRUCTURE.BASE_X_OFFSET_MULT;
+	delete PAD_EFFECT.STRUCTURE.UMBILICAL_OFFSET_Y;
+	try {
+		freshPad.getTowerLayout({});
+		freshPad.drawBackground(ctx, mockRc, mockContext);
+	} finally {
+		PAD_EFFECT.PHYSICS.NOZZLE_OFFSET_MULT = origNozzleMult;
+		PAD_EFFECT.STRUCTURE.BASE_X_OFFSET_MULT = origBaseXMult;
+		PAD_EFFECT.STRUCTURE.UMBILICAL_OFFSET_Y = origUmbY;
+	}
+
+	// 11. UmbilicalCable draw & constraint distance threshold edge cases
+	const cable = freshPad.umbilicalCable;
+	cable.isInitialized = false;
+	cable.draw(ctx, 10, PAD_EFFECT.STRUCTURE); // uninitialized early return
+	cable._initNodes(PAD_EFFECT.STRUCTURE);
+	cable.nodes = [cable.nodes[0]]; // length < 2 early return
+	cable.draw(ctx, 10, PAD_EFFECT.STRUCTURE);
+	cable._initNodes(PAD_EFFECT.STRUCTURE);
+	cable.nodes[1].x = cable.nodes[0].x; // dist < 1e-6 in constraint solver
+	cable.nodes[1].y = cable.nodes[0].y;
+	cable.update(0.016, PAD_EFFECT.STRUCTURE, 0, false);
+
+	// 12. Particles drawing with square, stretch, and arc shapes
+	freshPad.particles = [
+		{ type: 'ice', x: 0, y: 0, vx: 1, vy: 1, life: 0.8, maxLife: 1.0 }, // SHAPE: square, no size
+		{ type: 'deluge', x: 5, y: 5, vx: 10, vy: 10, life: 0.6, maxLife: 2.0, size: 0.4 }, // SHAPE: stretch, with size
+		{ type: 'spark', x: -2, y: -2, vx: 0, vy: 0, life: 0.5, maxLife: 0.8 }, // SHAPE: circle, GRAVITY_MULT: 0
+		{ type: 'smoke_white', x: 1, y: 1, vx: 2, vy: 2, life: 0.9, maxLife: 2.0, size: 0.2 } // SHAPE: circle, GRAVITY_MULT: 0.1
+	];
+	freshPad.drawForeground(ctx, mockRc, mockContext);
+	freshPad.drawBackground(ctx, mockRc, mockContext);
+	freshPad.update(0.016, mockContext); // exercises grow_speed, gravity mult, etc.
+
+	// 13. Strongback retract on either INTERNAL POWER or LIFTOFF (QUICK launch verification)
+	const quickLaunchPad = new PadEffectRenderer();
+	quickLaunchPad.start(301, 1);
+	assert.equal(quickLaunchPad.strongbackAngle, 0);
+	assert.equal(quickLaunchPad.flags.isInternalPower, false);
+	// In QUICK launch: no INTERNAL POWER event is emitted, only LIFTOFF happens
+	quickLaunchPad.handleEvent('LIFTOFF');
+	assert.equal(quickLaunchPad.flags.isLiftoff, true);
+	const holdDownRocket = createMockRocket({ id: 301, isHoldDown: false });
+	quickLaunchPad.update(0.5, { rocket: holdDownRocket, host, m2pix: (m) => m * 10, zoomScale: 1.0 });
+	assert.ok(quickLaunchPad.strongbackAngle > 0, 'Strongback must retract on LIFTOFF during QUICK launch');
+	assert.ok(quickLaunchPad.umbilicalAngle > 0, 'Umbilical tower must retract on LIFTOFF during QUICK launch');
 });
 
 test('VisualEffectManager - Shockwaves, pad lifecycle, and fallback hooks', () => {
@@ -744,6 +902,17 @@ test('RocketRenderer - Low detail and High detail rendering across flight phases
 	// 16. Payload Satellite: Stowed paddles (isDeployed=false) vs Deployed paddles (isDeployed=true)
 	RocketRenderer._drawPayloadSatellite(ctx, 0, 0, 20, false);
 	RocketRenderer._drawPayloadSatellite(ctx, 0, 0, 20, true);
+
+	// 17. Rocket._getDrawRadius across 1-stage, 2-stage, and 3-stage configs
+	const rkt1 = new Rocket(501, 'SSTO', 0, 0, 0, 0, 10, 50, 100, '#fff', 5, 25, 0, null, 0);
+	rkt1.stages = [{ stageNumber: 1 }];
+	rkt1.bottomOffsetM = 25.0;
+	assert.ok(rkt1._getDrawRadius(1.0) > 0);
+
+	const rkt3 = new Rocket(502, 'Epsilon', 0, 0, 0, 0, 10, 50, 100, '#fff', 5, 13, 0, null, 0);
+	rkt3.stages = [{ stageNumber: 1 }, { stageNumber: 2 }, { stageNumber: 3 }];
+	rkt3.bottomOffsetM = 13.0;
+	assert.ok(rkt3._getDrawRadius(1.0) > 0);
 });
 
 test('Debris - Stage debris LOD rendering, theme colors, and minimum drawing radius', () => {
@@ -784,5 +953,749 @@ test('Debris - Stage debris LOD rendering, theme colors, and minimum drawing rad
 	debUpper._drawBody(ctx, 200, 200, 12.0);
 	debFairing._drawBody(ctx, 300, 300, 10.0);
 });
+
+test('PadEffectRenderer, RocketRenderer, and TrajectoryPredictor deep branch coverage', () => {
+	const mockCanvas = createMockElement('canvas');
+	const ctx = mockCanvas.getContext('2d');
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, mass: 5.972e21, x: 0, y: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+
+	// 1. PadEffectRenderer particles & drawing shapes (square, stretch, circle)
+	const pad = new PadEffectRenderer();
+	pad.isActive = true;
+	pad.targetRocketId = 101;
+	pad.hostId = earth.id;
+	pad.rocketRadius = 3.7;
+
+	// Populate particles of various shapes
+	pad.particles = [
+		{ type: 'spark', x: 0, y: 0, vx: 50, vy: 50, life: 0.8, size: 0.2 }, // shape: stretch
+		{ type: 'ice', x: 10, y: 10, vx: 0, vy: -5, life: 0.5, size: 0.3 }, // shape: square
+		{ type: 'deluge', x: -10, y: 0, vx: 10, vy: 0, life: 0.9, size: 0.4 }, // shape: circle
+		{ type: 'smoke_white', x: 0, y: 20, vx: 5, vy: 5, life: 0.7, size: 0.5 },
+		{ type: 'chill', x: 0, y: -20, vx: 0, vy: -2, life: 0.6, size: 0.2 }
+	];
+
+	const renderContext = {
+		basis: earth,
+		zoomScale: 1.0,
+		canvas: mockCanvas
+	};
+	const context = {
+		rocket: { baseRadiusM: 3.7, bottomOffsetM: 10, _getDrawRadius: () => 20 },
+		m2pix: (m) => m * 0.1,
+		zoomScale: 1.0
+	};
+
+	pad.drawBackground(ctx, renderContext, context);
+	pad.drawForeground(ctx, renderContext, context);
+
+	// Test drawBackground without ctx.arc to cover fillRect fallback (lines 634-636, 673-675)
+	const origArc = ctx.arc;
+	delete ctx.arc;
+	pad.drawBackground(ctx, renderContext, context);
+	ctx.arc = origArc;
+
+	// Update flags & particles spawn
+	pad.flags.isVenting = true;
+	pad.flags.isPressurized = true;
+	pad.flags.isChilldown = true;
+	pad.flags.isWaterDeluge = true;
+	pad.flags.isROFI = true;
+	pad.lastContext = context;
+	pad.update(0.016, context);
+	pad.handleLiftoff();
+	pad.stop();
+	assert.equal(pad.isActive, false);
+
+	// 2. RocketRenderer: low detail payload-only & firing, high detail payload-only & 3-stage no-fairing
+	const theme = ROCKET_VISUAL.THEMES.classic;
+
+	// Low detail payload only (lines 39-50)
+	const lowPayloadRocket = {
+		isPayloadSeparated: true,
+		disableStaging: false,
+		stages: [{ stageNumber: 1 }],
+		currentStageIndex: 1,
+		totalStages: 1
+	};
+	RocketRenderer._drawLowDetail(ctx, lowPayloadRocket, 10, theme);
+
+	// Low detail firing (lines 62-70)
+	const lowFiringRocket = {
+		isPayloadSeparated: false,
+		isIgnited: true,
+		burnTime: 10,
+		thrustRatio: 1.0,
+		stages: [{ stageNumber: 1 }],
+		currentStageIndex: 0,
+		totalStages: 1
+	};
+	RocketRenderer._drawLowDetail(ctx, lowFiringRocket, 10, theme);
+
+	// High detail payload only (lines 98-100)
+	const highPayloadRocket = {
+		isPayloadSeparated: true,
+		disableStaging: false,
+		stages: [{ stageNumber: 1 }],
+		currentStageIndex: 1,
+		totalStages: 1
+	};
+	RocketRenderer._drawHighDetail(ctx, highPayloadRocket, 30, 1.0, theme);
+
+	// 3-stage rocket with fairing separated on stage 1, stage 2, stage 3 (lines 150-151, 173-174, 191-193)
+	const rkt3StageNoFairing = {
+		currentStageIndex: 0,
+		totalStages: 3,
+		stages: [{ stageNumber: 1 }, { stageNumber: 2 }, { stageNumber: 3 }],
+		isFairingSeparated: true,
+		isPayloadSeparated: false,
+		disableStaging: false,
+		isIgnited: true,
+		burnTime: 10,
+		thrustRatio: 1.0
+	};
+	RocketRenderer._drawHighDetail(ctx, rkt3StageNoFairing, 30, 1.0, theme); // Stage 1, no fairing
+
+	rkt3StageNoFairing.currentStageIndex = 1;
+	RocketRenderer._drawHighDetail(ctx, rkt3StageNoFairing, 30, 1.0, theme); // Stage 2, no fairing
+
+	rkt3StageNoFairing.currentStageIndex = 2;
+	RocketRenderer._drawHighDetail(ctx, rkt3StageNoFairing, 30, 1.0, theme); // Stage 3, no fairing
+
+	// 3. TrajectoryPredictor: orbit and impact events, render & culling
+	const predRocket = createMockRocket({
+		id: 201,
+		x: UnitConvertUtils.m2pix(6371000 + 250000),
+		y: 0,
+		vx: 0,
+		vy: UnitConvertUtils.m2pix(7800),
+		hostId: earth.id,
+		telemetry: {
+			altM: 250000, // > ORBIT_MIN_ALT_M
+			flightTime: 500,
+			status: 5
+		}
+	});
+	predRocket.predictedTrajectory = {
+		events: [
+			{ id: 'orb_1', type: 'orbit', name: 'Orbit Injection' },
+			{ id: 'imp_1', type: 'impact', name: 'Ground Impact' }
+		]
+	};
+	predRocket.passedEventIds = new Set();
+
+	universe.objects = [earth, predRocket];
+	const renderCtx = { basis: earth, objectsMap: new Map([[earth.id, earth]]) };
+	TrajectoryPredictor.updateRocketFlightEvents(predRocket, renderCtx);
+	assert.ok(predRocket.passedEventIds.has('orb_1'), 'Orbit event should pass at high speed & altitude');
+
+	// Impact event
+	predRocket.state = OBJECT_STATE.REMOVED;
+	predRocket.telemetry.altM = 0;
+	TrajectoryPredictor.updateRocketFlightEvents(predRocket, renderCtx);
+	assert.ok(predRocket.passedEventIds.has('imp_1'), 'Impact event should pass when removed or alt <= 0');
+
+	// Test handleEvent branches
+	pad.handleEvent('COUNTDOWN START');
+	pad.handleEvent('CHILLDOWN');
+	pad.handleEvent('PRESSURIZATION');
+	pad.handleEvent('INTERNAL POWER');
+	pad.handleEvent('WATER DELUGE');
+	pad.handleEvent('ROFI');
+	pad.handleEvent('MAIN ENGINE START');
+
+	// Umbilical retraction past max angle & particle life expiration
+	const liftoffRocket = { isHoldDown: false };
+	context.rocket = liftoffRocket;
+	pad.umbilicalAngle = 100; // > UMBILICAL_MAX_ANGLE
+	pad.particles.push({ type: 'smoke_white', x: 0, y: 0, vx: 0, vy: 0, life: -0.1, maxLife: 1.0, size: 0.1 });
+	pad.update(1.0, context);
+
+	// Early return when inactive
+	pad.isActive = false;
+	pad.drawBackground(ctx, renderContext, context);
+	pad.drawForeground(ctx, renderContext, context);
+
+	// 2. RocketRenderer: 3-stage rocket WITH fairing intact on stage 2 and stage 3 (lines 171, 190)
+	const rkt3StageWithFairing = {
+		currentStageIndex: 1,
+		totalStages: 3,
+		stages: [{ stageNumber: 1 }, { stageNumber: 2 }, { stageNumber: 3 }],
+		fairing: { enabled: true, isSeparated: false },
+		isPayloadSeparated: false,
+		disableStaging: false,
+		isIgnited: true,
+		burnTime: 10,
+		thrustRatio: 1.0
+	};
+	RocketRenderer._drawHighDetail(ctx, rkt3StageWithFairing, 30, 1.0, theme); // hits line 171!
+
+	rkt3StageWithFairing.currentStageIndex = 2;
+	RocketRenderer._drawHighDetail(ctx, rkt3StageWithFairing, 30, 1.0, theme); // hits line 190!
+
+	// 3. TrajectoryPredictor: orbit, impact, worker catch, hostNotInBodies, and inSubpath = false
+	// Worker catch block (lines 87-89)
+	const origWorker = globalThis.Worker;
+	globalThis.Worker = class FailingWorker {
+		constructor() { throw new Error('Worker creation disabled in test'); }
+	};
+	const failingWorkerPredictor = new TrajectoryPredictor(universe);
+	assert.equal(failingWorkerPredictor._worker, null);
+	globalThis.Worker = origWorker;
+
+	// _buildSimulationParams when host not in universe.objects (lines 199-210)
+	const isolatedUniverse = createMockUniverse({ objects: [] });
+	const isolatedPredictor = new TrajectoryPredictor(isolatedUniverse);
+	const simParams = isolatedPredictor._buildSimulationParams({ host: earth });
+	assert.ok(simParams.celestialBodies.some(b => b.id === earth.id));
+
+	// TrajectoryPredictor.render with alternating onscreen-offscreen points to trigger inSubpath = false (lines 625-626)
+	const cullingPredictor = new TrajectoryPredictor(universe);
+	cullingPredictor.prediction = {
+		hostId: earth.id,
+		points: [
+			{ relX: 0, relY: 0, altM: 100 },              // onscreen (inSubpath = true)
+			{ relX: 10, relY: 10, altM: 100 },           // onscreen
+			{ relX: 500000, relY: 500000, altM: 100 },   // offscreen (inSubpath = false, line 625-626!)
+			{ relX: 500010, relY: 500010, altM: 100 },   // offscreen
+			{ relX: 20, relY: 20, altM: 100 },           // onscreen again
+			{ relX: 30, relY: 30, altM: 100 }            // onscreen again
+		],
+		events: []
+	};
+	cullingPredictor.render(ctx, {
+		basis: earth,
+		zoomScale: 1.0,
+		canvas: { width: 400, height: 400 },
+		showPredictedTrajectory: true,
+		showActualFlightPath: false
+	});
+});
+
+test('RocketRenderer - Exhaust plumes, multistage variations, and low/high detail branch coverage', () => {
+	const ctx = createMockElement('canvas').getContext('2d');
+	const theme = ROCKET_VISUAL.THEMES.classic;
+
+	// 1. _drawPlume with all fuel types and default/unknown fallback
+	RocketRenderer._drawPlume(ctx, 0, 0, 1.0, 1.0, 'hydro', 50);
+	RocketRenderer._drawPlume(ctx, 0, 0, 1.0, 1.0, 'solid', 50);
+	RocketRenderer._drawPlume(ctx, 0, 0, 1.0, 1.0, 'ion', 50);
+	RocketRenderer._drawPlume(ctx, 0, 0, 1.0, 1.0, 'liquid', 50);
+	RocketRenderer._drawPlume(ctx, 0, 0, 1.0, 1.0, 'metha_unknown', 50);
+
+	// 2. _drawLowDetail variations: twr fallback, stage 1 vs 2, payload
+	RocketRenderer._drawLowDetail(ctx, {
+		disableStaging: false,
+		isPayloadSeparated: false,
+		currentStageIndex: 0,
+		isIgnited: true,
+		burnTime: 10,
+		thrustRatio: 0,
+		telemetry: { twr: 1.5 }
+	}, 10, theme);
+
+	RocketRenderer._drawLowDetail(ctx, {
+		disableStaging: false,
+		isPayloadSeparated: false,
+		currentStageIndex: 1,
+		isIgnited: false,
+		burnTime: 0
+	}, 10, theme);
+
+	// 3. _drawHighDetail: 3-stage with fairing on Stage 1
+	RocketRenderer._drawHighDetail(ctx, {
+		currentStageIndex: 0,
+		totalStages: 3,
+		stages: [{ fuelType: 'liquid' }, { fuelType: 'hydro' }, { fuelType: 'solid' }],
+		fairing: { enabled: true, isSeparated: false },
+		isPayloadSeparated: false,
+		disableStaging: false,
+		isIgnited: true,
+		burnTime: 50,
+		thrustRatio: 1.0
+	}, 35, 1.0, theme);
+
+	// 4. _drawHighDetail: 2-stage without fairing (Stage 1 firing, Stage 2 firing, not firing)
+	const stg2Rocket = {
+		currentStageIndex: 0,
+		totalStages: 2,
+		stages: [{ fuelType: 'liquid' }, { fuelType: 'liquid' }],
+		fairing: { enabled: false },
+		isPayloadSeparated: false,
+		disableStaging: false,
+		isIgnited: true,
+		burnTime: 40,
+		thrustRatio: 1.0
+	};
+	RocketRenderer._drawHighDetail(ctx, stg2Rocket, 35, 1.0, theme); // Stage 1 firing
+	stg2Rocket.currentStageIndex = 1;
+	RocketRenderer._drawHighDetail(ctx, stg2Rocket, 35, 1.0, theme); // Stage 2 firing
+	stg2Rocket.isIgnited = false;
+	RocketRenderer._drawHighDetail(ctx, stg2Rocket, 35, 1.0, theme); // Not firing
+
+	// 5. _drawHighDetail: Single Stage (SSTO) with and without fairing, firing & not firing
+	const sstoRocket = {
+		currentStageIndex: 0,
+		totalStages: 1,
+		stages: [{ fuelType: 'liquid' }],
+		fairing: { enabled: false },
+		isPayloadSeparated: false,
+		disableStaging: false,
+		isIgnited: false,
+		burnTime: 0
+	};
+	RocketRenderer._drawHighDetail(ctx, sstoRocket, 35, 1.0, theme);
+	sstoRocket.isIgnited = true;
+	sstoRocket.burnTime = 20;
+	sstoRocket.thrustRatio = 0.9;
+	RocketRenderer._drawHighDetail(ctx, sstoRocket, 35, 1.0, theme);
+
+	// 6. _drawHighDetail: Payload satellite only for 2-stage and 3-stage
+	RocketRenderer._drawHighDetail(ctx, {
+		disableStaging: false,
+		isPayloadSeparated: true,
+		totalStages: 2,
+		stages: [{ fuelType: 'liquid' }, { fuelType: 'liquid' }]
+	}, 35, 1.0, theme);
+
+	RocketRenderer._drawHighDetail(ctx, {
+		disableStaging: false,
+		isPayloadSeparated: true,
+		totalStages: 3,
+		stages: [{ fuelType: 'solid' }, { fuelType: 'solid' }, { fuelType: 'solid' }]
+	}, 35, 1.0, theme);
+});
+
+test('TrajectoryPredictor - Worker events, flight event detection, and rendering edge cases', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, mass: 5.972e24 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const predictor = new TrajectoryPredictor(universe);
+
+	// 1. Worker message handling (simulate worker response)
+	let callbackInvoked = false;
+	const dummyReqId = predictor.requestPrediction({ host: earth }, (res) => {
+		callbackInvoked = true;
+	});
+	assert.ok(dummyReqId > 0);
+
+	if (predictor._worker && predictor._worker.onmessage) {
+		// Normal predictionResult
+		predictor._worker.onmessage({
+			data: {
+				cmd: 'predictionResult',
+				requestId: dummyReqId,
+				hostId: earth.id,
+				points: [{ relX: 0, relY: 0, time: 0 }, { relX: 100, relY: 100, time: 10 }],
+				events: [{ id: 'liftoff', type: 'liftoff', relX: 0, relY: 0, passed: false }],
+				isOrbital: false,
+				maxSimTime: 1000,
+				maxAltM: 50000,
+				maxQ: 35
+			}
+		});
+		assert.ok(callbackInvoked);
+
+		// Worker error handler
+		if (predictor._worker.onerror) {
+			predictor._worker.onerror(new Error('Simulated worker test error'));
+		}
+	}
+
+	// 2. Coalescing request while busy
+	predictor._isBusy = true;
+	const busyReqId = predictor.requestPrediction({ host: earth });
+	assert.equal(predictor._nextPendingRequest !== null, true);
+	predictor._isBusy = false;
+
+	// 3. calculate() with cached prediction
+	const cachedResult = predictor.calculate({ host: earth });
+	assert.ok(cachedResult);
+
+	// 4. calculateSync() without valid host
+	const invalidSync = predictor.calculateSync({ host: null });
+	assert.equal(invalidSync, null);
+
+	// 5. updateRocketFlightEvents: test all unpassed branches
+	const mockRocket = createMockRocket({
+		id: 99,
+		hostId: earth.id,
+		isHoldDown: true,
+		flightTime: 0.5,
+		telemetry: {
+			status: 1,
+			altM: 10,
+			vV: 5,
+			flightTime: 0.5,
+			stageIndex: 0,
+			totalStages: 2
+		},
+		predictedTrajectory: {
+			events: [
+				{ id: 'liftoff', type: 'liftoff', passed: false },
+				{ id: 'pitch', type: 'pitch', altM: 5000, time: 10, passed: false },
+				{ id: 'maxq', type: 'maxq', altM: 15000, passed: false },
+				{ id: 'seco_1', type: 'meco', time: 500, passed: false },
+				{ id: 'meco_1', type: 'meco', time: 150, passed: false },
+				{ id: 'stg_sep_1', type: 'staging', time: 155, passed: false },
+				{ id: 'payload_sep', type: 'staging', time: 600, passed: false },
+				{ id: 'custom_staging', type: 'staging', time: 200, passed: false },
+				{ id: 'stg_meco_custom', type: 'stg_meco', time: 140, passed: false },
+				{ id: 'custom_ign', type: 'ignition', time: 160, passed: false },
+				{ id: 'custom_fairing', type: 'fairing', time: 180, passed: false },
+				{ id: 'target_alt', type: 'alt', altM: 100000, passed: false },
+				{ id: 'no_val_alt', type: 'alt', passed: false },
+				{ id: 'target_time', type: 'time', time: 300, passed: false },
+				{ id: 'no_val_time', type: 'time', passed: false },
+				{ id: 'apoapsis', type: 'apoapsis', passed: false },
+				{ id: 'orbit_evt', type: 'orbit', time: 800, passed: false },
+				{ id: 'impact_evt', type: 'impact', passed: false }
+			]
+		}
+	});
+	mockRocket.totalStages = 2;
+	mockRocket.currentStageIndex = 0;
+	mockRocket.fuelMass = 50;
+	mockRocket.burnTime = 100;
+	mockRocket.isIgnited = false;
+	mockRocket.state = OBJECT_STATE.ACTIVE;
+	mockRocket.passedEventIds = new Set();
+
+	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, {
+		objectsMap: new Map([[earth.id, earth]]),
+		basis: earth
+	});
+
+	// Check that events remain unpassed under these initial conditions
+	const liftoffEv = mockRocket.predictedTrajectory.events.find(e => e.id === 'liftoff');
+	assert.equal(liftoffEv.passed, false);
+
+	// Single stage rocket MECO unpassed branch
+	const sstoRocket = {
+		telemetry: { status: 1, altM: 2000, flightTime: 10 },
+		totalStages: 1,
+		currentStageIndex: 0,
+		fuelMass: 10,
+		burnTime: 50,
+		passedEventIds: new Set(),
+		predictedTrajectory: {
+			events: [{ id: 'meco_ssto', type: 'meco', time: 100, passed: false }]
+		}
+	};
+	TrajectoryPredictor.updateRocketFlightEvents(sstoRocket, null);
+	assert.equal(sstoRocket.predictedTrajectory.events[0].passed, false);
+
+	// 6. renderTrajectory edge cases: null prediction, points < 2, host not found, flight time >= maxTime
+	const ctx = createMockElement('canvas').getContext('2d');
+	const renderCtx = {
+		basis: earth,
+		zoomScale: 1.0,
+		objectsMap: new Map([[earth.id, earth]]),
+		cameraOffset: { x: 0, y: 0 }
+	};
+	TrajectoryPredictor.renderTrajectory(ctx, renderCtx, null);
+	TrajectoryPredictor.renderTrajectory(ctx, renderCtx, { points: [{ relX: 0, relY: 0 }] });
+	TrajectoryPredictor.renderTrajectory(ctx, { basis: earth, zoomScale: 1.0 }, { hostId: 9999, points: [{ relX: 0, relY: 0 }, { relX: 10, relY: 10 }] });
+
+	// Flight mode expiration
+	TrajectoryPredictor.renderTrajectory(ctx, renderCtx, {
+		hostId: earth.id,
+		maxSimTime: 100,
+		points: [{ relX: 0, relY: 0, time: 0 }, { relX: 100, relY: 100, time: 100 }],
+		events: []
+	}, { mode: 'flight', currentFlightTime: 150 });
+
+	// Actual flight path with rocket screen position and rotation
+	TrajectoryPredictor.renderTrajectory(ctx, renderCtx, {
+		hostId: earth.id,
+		points: [
+			{ r: 6500000, phiSurf: 0, time: 0 },
+			{ r: 6600000, phiSurf: 0.1, time: 10 }
+		],
+		events: [
+			{ id: 'imp', type: 'impact', r: 6371000, phiSurf: 0.2, name: 'Crash', passed: false },
+			{ id: 'imp2', type: 'impact', relX: 50, relY: 50, name: 'Crash Passed', passed: true },
+			{ id: 'norm', type: 'meco', r: 6500000, phiSurf: 0.05, name: 'MECO', passed: false },
+			{ id: 'norm2', type: 'meco', relX: 30, relY: 30, name: 'MECO Passed', passed: true },
+			{ id: 'off', type: 'meco', relX: 9999999, relY: 9999999, name: 'Offscreen', passed: false }
+		]
+	}, {
+		mode: 'flight',
+		rotationOffset: 0.5,
+		actualFlightPath: [
+			{ r: 6500000, phiSurf: 0 },
+			{ relX: 20, relY: 20 }
+		],
+		rocketX: earth.x + 25,
+		rocketY: earth.y + 25,
+		passedEventIds: new Set(['imp2', 'norm2'])
+	});
+
+	// 7. rotatePrediction edge cases: null, 0 angle, with and without phiSurf
+	assert.equal(TrajectoryPredictor.rotatePrediction(null, 1.0), null);
+	const predSample = {
+		points: [{ relX: 10, relY: 0, phiSurf: 0 }, { relX: 20, relY: 0 }],
+		events: [{ relX: 10, relY: 0, phiSurf: 0 }]
+	};
+	const unrotated = TrajectoryPredictor.rotatePrediction(predSample, 0);
+	assert.equal(unrotated.points.length, 2);
+	const rotated = TrajectoryPredictor.rotatePrediction(predSample, Math.PI / 2);
+	assert.ok(Math.abs(rotated.points[0].relY - 10) < 1e-4);
+});
+
+test('PadEffectRenderer - Deep coverage for umbilical cable, particles, and layout', () => {
+	const pad = new PadEffectRenderer();
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, mass: 5.972e24 });
+	const rocket = createMockRocket({ id: 2, x: 100, y: 100, radius: 10, isHoldDown: true });
+	rocket.baseRadiusM = 63;
+	rocket.bottomOffsetM = 195;
+
+	pad.start(rocket.id, earth.id);
+
+	// Test all handleEvent keywords
+	pad.handleEvent('COUNTDOWN START (T-00:15)');
+	assert.equal(pad.flags.isVenting, true);
+	pad.handleEvent('LOX/CH4 CHILLDOWN');
+	assert.equal(pad.flags.isChilldown, true);
+	pad.handleEvent('PROPELLANT PRESSURIZATION');
+	assert.equal(pad.flags.isPressurized, true);
+	pad.handleEvent('INTERNAL POWER TRANSFER');
+	assert.equal(pad.flags.isInternalPower, true);
+	pad.handleEvent('WATER DELUGE SYSTEM ACTIVATED');
+	assert.equal(pad.flags.isWaterDeluge, true);
+	pad.handleEvent('RADIAL OUTWARD FIRING IGNITER (ROFI)');
+	assert.equal(pad.flags.isROFI, true);
+	pad.handleEvent('MAIN ENGINE START');
+	assert.equal(pad.flags.isChilldown, false);
+
+	// Context for update
+	const context = {
+		rocket: rocket,
+		host: earth,
+		zoomScale: 1.0,
+		m2pix: (m) => m / 1000
+	};
+
+	// UmbilicalCable update while holddown then released
+	pad.update(0.1, context);
+	assert.ok(pad.particles.length > 0);
+
+	// Test liftoff event
+	pad.handleLiftoff();
+	assert.equal(pad.flags.isVenting, false);
+	assert.equal(pad.flags.isROFI, false);
+
+	// Rocket after liftoff (isHoldDown = false)
+	rocket.isHoldDown = false;
+	pad.update(0.2, context);
+
+	// Strongback and Umbilical max angle capping
+	pad.strongbackAngle = 100;
+	pad.umbilicalAngle = 100;
+	pad.update(0.1, context);
+	assert.ok(pad.strongbackAngle <= 25);
+	assert.ok(pad.umbilicalAngle <= 30);
+
+	// Particle types: square, stretch, circle, and particle death
+	pad.particles.push(
+		{ type: 'ice', x: 0, y: 0, vx: 10, vy: 10, life: 0.01, maxLife: 0.02, size: 0.1 },
+		{ type: 'spark', x: 0, y: 0, vx: 50, vy: 50, life: 0.8, maxLife: 1.0 },
+		{ type: 'deluge', x: 0, y: 0, vx: 20, vy: -30, life: 0.9, maxLife: 1.0, size: 0.2 }
+	);
+	pad.update(0.05, context);
+
+	// Rendering
+	const ctx = createMockElement('canvas').getContext('2d');
+	const renderContext = {
+		basis: earth,
+		zoomScale: 1.0
+	};
+
+	pad.drawBackground(ctx, renderContext, context);
+	pad.drawForeground(ctx, renderContext, context);
+
+	// Visual multiplier edge cases: rPx <= 0
+	pad.rocketRadius = 0;
+	const mult = pad._getVisualMultiplier({ m2pix: () => 0, zoomScale: 0 });
+	assert.equal(mult, 1.0);
+
+	// Context without rocket (abs position uses host or (0,0))
+	pad._getAbsPadPosition({ rocket: null, host: earth });
+	pad._getAbsPadPosition({ rocket: null, host: null });
+
+	// Background drawing fallback when ctx.arc is undefined (lines 634, 674)
+	const rectCtx = createMockElement('canvas').getContext('2d');
+	rectCtx.arc = undefined; // triggers ctx.fillRect fallback branch!
+	pad.drawBackground(rectCtx, renderContext, context);
+
+	// Inactive drawing and updates
+	pad.stop();
+	assert.equal(pad.isActive, false);
+	pad.update(0.1, context); // early return
+	pad.drawBackground(ctx, renderContext, context); // early return
+	pad.drawForeground(ctx, renderContext, context); // early return
+
+	// Fresh instance handleLiftoff without lastContext
+	const freshPad = new PadEffectRenderer();
+	freshPad.handleLiftoff(); // no lastContext
+
+	// UmbilicalCable uninitialized draw & constraint dist < 1e-6
+	const cable = freshPad.umbilicalCable;
+	cable.draw(ctx, 10, {}); // uninitialized return
+	cable._initNodes({}, 3.10); // default conf values
+	cable.nodes = [{ x: 0, y: 0, prevX: 0, prevY: 0 }, { x: 0, y: 0, prevX: 0, prevY: 0 }];
+	cable.restLengths = [10];
+	cable.isInitialized = true;
+	cable.update(0.01, {}, 0, false, 3.1); // hits dist < 1e-6 (line 138)
+
+	// In-progress retraction without hitting max angles
+	freshPad.start(rocket.id, earth.id);
+	freshPad.flags.isInternalPower = true;
+	freshPad.flags.isVenting = true;
+	freshPad.flags.isPressurized = false; // unpressurized venting rate
+	freshPad.flags.isChilldown = true;
+	freshPad.flags.isWaterDeluge = true;
+	freshPad.flags.isROFI = true;
+	rocket.isHoldDown = false;
+	freshPad.strongbackAngle = 0;
+	freshPad.umbilicalAngle = 0;
+	freshPad.update(0.001, context); // strongbackAngle and umbilicalAngle increase without reaching max!
+	assert.ok(freshPad.strongbackAngle > 0 && freshPad.strongbackAngle < 10);
+	assert.ok(freshPad.umbilicalAngle > 0 && freshPad.umbilicalAngle < 10);
+
+	// Explicitly test _drawParticles for all shape branches (square, stretch, circle)
+	freshPad._drawParticles(ctx, renderContext, context, ['deluge']); // deluge: stretch
+	freshPad._drawParticles(ctx, renderContext, context, ['spark']);  // spark: square
+	freshPad._drawParticles(ctx, renderContext, context, ['chill']);  // chill: circle
+
+	// getAttachPos with empty config (lines 61 & 72 defaults)
+	cable.getAttachPos({}, 0, 3.10);
+
+	// Particles with size undefined and GRAVITY_MULT === 0 (lines 508 false & 512 false)
+	freshPad.particles = [
+		{ type: 'spark', x: 0, y: 0, vx: 5, vy: 5, life: 0.9, maxLife: 1.0 } // size undefined, GRAVITY_MULT === 0
+	];
+	freshPad.update(0.01, context);
+
+	// Update with host without ROTATION_PERIOD (line 358 false)
+	const hostNoRot = createMockCelestialBody({ id: 99, name: 'SunWithoutRotation', radius: 1000, mass: 1e20 });
+	freshPad.update(0.01, { rocket: rocket, host: hostNoRot, zoomScale: 1.0, m2pix: () => 1 });
+
+	// getTowerLayout with context without rocket
+	const layoutNoRocket = freshPad.getTowerLayout(null);
+	assert.ok(layoutNoRocket.strongback.isGrounded);
+});
+
+test('RocketLauncher - Preview, staging math, and rollout lifecycle deep branches', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, mass: 5.972e24 });
+	const universe = createMockUniverse({ objects: [earth] });
+	universe.camera.trackingTarget = earth;
+	universe.ObjectPlacer = {
+		placeObject: (name, x, y, vx, vy, opt) => {
+			const obj = createMockRocket({ id: 88, name, x, y, vx, vy });
+			Object.assign(obj, opt);
+			universe.objects.push(obj);
+			return obj;
+		}
+	};
+	universe.ObjectManager = {
+		removeObject: (obj) => {
+			universe.objects = universe.objects.filter(o => o.id !== obj.id);
+		}
+	};
+	universe.ControlPanel = {
+		systemTab: { updateCenterOptions: () => {} },
+		rocketTab: { setRolloutState: () => {} }
+	};
+	universe.InfoPanel = { updateCamera: () => {} };
+	universe.TelemetryPanel = { open: () => {} };
+	universe.LaunchSequencer = { start: () => {}, abort: () => {} };
+
+	const launcher = new RocketLauncher(universe);
+	launcher.hostId = earth.id;
+
+	// 1. getBaseRadiusM and getBottomOffsetM for 1-stage, 2-stage, 3-stage
+	launcher.currentPresetId = 'EPSILON'; // 3-stage
+	assert.ok(launcher.getBottomOffsetM() > 0);
+
+	launcher.currentPresetId = 'SSTO'; // 1-stage
+	assert.ok(launcher.getBottomOffsetM() > 0);
+
+	launcher.currentPresetId = 'FALCON9'; // 2-stage
+	assert.ok(launcher.getBottomOffsetM() > 0);
+
+	// 2. _calculateTransform with thrustKN <= 0 and burnTime > 0
+	launcher.stages[0].burnTime = 120;
+	let transform = launcher._calculateTransform();
+	assert.equal(launcher.calculatedBurnTime, 120);
+
+	launcher.stages[0].burnTime = 0;
+	launcher.thrustKN = 0;
+	transform = launcher._calculateTransform();
+	assert.equal(launcher.calculatedBurnTime, 0);
+
+	// 3. togglePreview free mode vs host mode
+	launcher.mode = 'free';
+	launcher.togglePreview(true);
+	assert.equal(launcher.isActive, true);
+	launcher.setFreePosition(500, 600);
+	assert.equal(launcher.freeX, 500);
+
+	launcher.togglePreview(false);
+	assert.equal(launcher.isActive, false);
+
+	launcher.mode = 'host';
+	launcher.togglePreview(true);
+
+	// 4. drawTargetMarker & drawPreview in host and free modes
+	const ctx = createMockElement('canvas').getContext('2d');
+	const renderCtx = { basis: earth, zoomScale: 1.0, name: 'main' };
+
+	launcher.drawTargetMarker(ctx, earth, 1.0);
+	launcher.drawPreview(ctx, earth, 1.0, renderCtx);
+
+	launcher.mode = 'free';
+	launcher.drawPreview(ctx, earth, 1.0, renderCtx);
+
+	// 5. rollout, ignite, and abortRollout lifecycle
+	launcher.mode = 'host';
+	launcher.thrustKN = 7600;
+	launcher.stages[0].burnTime = 160;
+	launcher.rollout();
+	assert.ok(launcher.rolloutedRocketId !== null);
+
+	// Preview while rocket is rollouted on the pad
+	launcher.drawPreview(ctx, earth, 1.0, renderCtx);
+
+	// Ignite
+	launcher.ignite('LEGACY_QUICK');
+
+	// Abort rollout
+	launcher.abortRollout();
+	assert.equal(launcher.rolloutedRocketId, null);
+
+	// 6. getState and loadState
+	const state = launcher.getState();
+	assert.equal(state.mode, 'host');
+	assert.equal(state.hostId, earth.id);
+
+	launcher.loadState(null); // safely ignores null
+	launcher.loadState({
+		mode: 'host',
+		hostId: earth.id,
+		hostAngleDeg: 45,
+		hostAltitudeM: 20,
+		thrustKN: 8000,
+		maxGLimit: 3.5,
+		autoControl: false
+	});
+	assert.equal(launcher.hostAngleDeg, 45);
+	assert.equal(launcher.thrustKN, 8000);
+	assert.equal(launcher.autoControl, false);
+
+	// 7. requestPreviewUpdate immediate (delayMs <= 0)
+	launcher.requestPreviewUpdate(0);
+});
+
 
 

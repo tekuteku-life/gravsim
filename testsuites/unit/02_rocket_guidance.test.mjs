@@ -12,7 +12,12 @@ import { TrajectoryPredictor } from '../../scripts/gravsim_trajectory_predictor.
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
 import { DebrisGenerator } from '../../scripts/gravsim_debris_generator.js';
 import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
-import { PHYSICS, TELEMETRY, MULTISTAGE_PRESETS, normalizeRocketConfig, OBJECT_TYPES, OBJECT_STATE } from '../../scripts/gravsim_const.js';
+import { PadEffectRenderer } from '../../scripts/gravsim_pad_effect.js';
+import { Rocket, Debris } from '../../scripts/gravsim_object.js';
+import { CalcRocket } from '../../scripts/gravsim_calc_object.js';
+import { PropulsionCard } from '../../scripts/gravsim_telemetry_card.js';
+import { UnitConvertUtils } from '../../scripts/gravsim_utils.js';
+import { PHYSICS, TELEMETRY, MULTISTAGE_PRESETS, normalizeRocketConfig, OBJECT_TYPES, OBJECT_STATE, ROCKET_VISUAL, RENDER, DEFAULT_OBJECT_PARAMS, PAD_EFFECT } from '../../scripts/gravsim_const.js';
 
 test('FlightComputer - Initialization and default telemetry cache', () => {
 	const fc = new FlightComputer({
@@ -1287,5 +1292,781 @@ test('Slingshot Rocket - Preserves fairing and prevents stage separation', () =>
 	assert.equal(slingshotRocket.isPayloadSeparated, false, 'Payload must not separate');
 });
 
+test('RocketLauncher - Nozzle bottom offset calculation on rollout and transform', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0, radius: 6371000 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const launcher = new RocketLauncher(universe);
+	const offsets = ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET;
 
+	// Falcon 9 (70m baseRadius -> 70 * 3.10 = 217m offset)
+	launcher.currentPresetId = 'FALCON9';
+	assert.equal(launcher.getBaseRadiusM(), 70.0);
+	assert.equal(launcher.getBottomOffsetM(), 70.0 * offsets.TWO_STAGE);
+
+	// H3 (63m baseRadius -> 63 * 3.10 = 195.3m offset)
+	launcher.currentPresetId = 'H3';
+	assert.equal(launcher.getBaseRadiusM(), 63.0);
+	assert.equal(launcher.getBottomOffsetM(), 63.0 * offsets.TWO_STAGE);
+
+	// Epsilon (26m baseRadius -> 26 * 3.45 = 89.7m offset)
+	launcher.currentPresetId = 'EPSILON';
+	assert.equal(launcher.getBaseRadiusM(), 26.0);
+	assert.equal(launcher.getBottomOffsetM(), 26.0 * offsets.THREE_STAGE);
+
+	// SSTO (50m baseRadius -> 50 * 1.85 = 92.5m offset)
+	launcher.currentPresetId = 'SSTO';
+	assert.equal(launcher.getBaseRadiusM(), 50.0);
+	assert.equal(launcher.getBottomOffsetM(), 50.0 * offsets.SINGLE_STAGE);
+
+	// Transform distance includes bottomOffsetM + hostAltitudeM
+	launcher.hostId = earth.id;
+	launcher.hostAltitudeM = 15;
+	const tf = launcher._calculateTransform();
+	assert.ok(tf);
+	const distM = UnitConvertUtils.pix2m(Math.hypot(tf.x - earth.x, tf.y - earth.y));
+	assertClose(distM, earth.radius + launcher.getBottomOffsetM() + 15, 1e-3);
+});
+
+test('RocketLauncher - Falcon 9 stage burn time preservation and rollout synchronization', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0, radius: 6371000 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const launcher = new RocketLauncher(universe);
+
+	launcher.hostId = earth.id;
+	assert.equal(launcher.stages[0].burnTime, 162.0, 'Preset burn time should be 162.0s');
+
+	launcher.rollout();
+	assert.equal(launcher.stages[0].burnTime, 162.0, 'Rollout should preserve 162.0s burn time without Isp overwrite');
+	assert.equal(launcher.calculatedBurnTime, 162.0, 'Calculated burn time should match stage 0 burn time');
+	assert.ok(launcher.currentPrediction, 'Prediction should be generated during rollout');
+});
+
+test('TrajectoryPredictor - Smooth Bezier polyline and surface-relative coordinate rendering', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0, radius: 6371000 });
+	earth.rotationAngle = 0.5;
+
+	const dummyPrediction = {
+		hostId: earth.id,
+		points: [
+			{ r: 100, phiSurf: 0, altM: 0, time: 0 },
+			{ r: 110, phiSurf: 0.05, altM: 1000, time: 10 },
+			{ r: 120, phiSurf: 0.12, altM: 5000, time: 20 },
+			{ r: 130, phiSurf: 0.20, altM: 12000, time: 30 }
+		],
+		events: [
+			{ id: 'liftoff', name: 'LIFTOFF', type: 'liftoff', r: 100, phiSurf: 0, time: 0 },
+			{ id: 'maxq', name: 'MAX-Q', type: 'maxq', r: 115, phiSurf: 0.08, time: 15 }
+		],
+		isOrbital: false,
+		maxSimTime: 100
+	};
+
+	const quadCalls = [];
+	const lineCalls = [];
+	const mockCtx = {
+		save() {},
+		restore() {},
+		beginPath() {},
+		stroke() {},
+		fill() {},
+		moveTo(x, y) {},
+		lineTo(x, y) { lineCalls.push({ x, y }); },
+		quadraticCurveTo(cx, cy, x, y) { quadCalls.push({ cx, cy, x, y }); },
+		arc() {},
+		fillRect() {},
+		fillText() {},
+		measureText() { return { width: 40 }; },
+		setLineDash() {},
+		canvas: { width: 1000, height: 1000 }
+	};
+
+	const renderContext = {
+		basis: earth,
+		zoomScale: 1.0,
+		cameraOffset: { x: 0, y: 0 },
+		objectsMap: new Map([[earth.id, earth]]),
+		objects: [earth],
+		showPredictedTrajectory: true,
+		showActualFlightPath: true
+	};
+
+	TrajectoryPredictor.renderTrajectory(mockCtx, renderContext, dummyPrediction, {
+		mode: 'flight',
+		actualFlightPath: [
+			{ r: 100, phiSurf: 0 },
+			{ r: 105, phiSurf: 0.02 },
+			{ r: 110, phiSurf: 0.05 },
+			{ r: 115, phiSurf: 0.08 }
+		],
+		rocketX: 115 * Math.cos(0.58),
+		rocketY: 115 * Math.sin(0.58)
+	});
+
+	assert.ok(lineCalls.length > 0, 'Standard polyline interpolation must call lineTo');
+
+	// Also verify smooth mode explicitly if enabled
+	const prevSmooth = RENDER.PREDICTED_TRAJECTORY.SMOOTH_CURVE_ENABLED;
+	try {
+		RENDER.PREDICTED_TRAJECTORY.SMOOTH_CURVE_ENABLED = true;
+		TrajectoryPredictor.renderTrajectory(mockCtx, renderContext, dummyPrediction, {
+			mode: 'flight',
+			actualFlightPath: [
+				{ r: 100, phiSurf: 0 },
+				{ r: 105, phiSurf: 0.02 },
+				{ r: 110, phiSurf: 0.05 },
+				{ r: 115, phiSurf: 0.08 }
+			],
+			rocketX: 115 * Math.cos(0.58),
+			rocketY: 115 * Math.sin(0.58)
+		});
+		assert.ok(quadCalls.length > 0, 'Smooth curve interpolation must call quadraticCurveTo when enabled');
+	} finally {
+		RENDER.PREDICTED_TRAJECTORY.SMOOTH_CURVE_ENABLED = prevSmooth;
+	}
+});
+
+test('PadEffectRenderer - Bilateral water deluge spray emission', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0, radius: 6371000 });
+	const rocket = createMockRocket({ id: 101, isHoldDown: true, thrustAngle: -Math.PI / 2, radius: 2.0 });
+	const pad = new PadEffectRenderer();
+	pad.start(101, 1);
+	pad.rocketRadius = 2.0;
+	pad.startLaunchAngle = -Math.PI / 2;
+
+	const mockContext = {
+		rocket: rocket,
+		host: earth,
+		m2pix: (m) => m * 10,
+		zoomScale: 1.0,
+		padX_px: 0,
+		padY_px: 0,
+		isHoldDown: true
+	};
+
+	pad.handleEvent('T-15s WATER DELUGE');
+	pad.update(0.05, mockContext);
+
+	const delugeParticles = pad.particles.filter(p => p.type === 'deluge');
+	assert.ok(delugeParticles.length > 0, 'Deluge particles should be emitted');
+
+	// Verify bilateral emission: particles exist on both sides (x < 0 and x > 0 relative to thrust axis)
+	const hasNegativeX = delugeParticles.some(p => p.x < 0);
+	const hasPositiveX = delugeParticles.some(p => p.x > 0);
+	assert.ok(hasNegativeX, 'Should have left manifold deluge particles');
+	assert.ok(hasPositiveX, 'Should have right manifold deluge particles');
+});
+
+test('PhysicsEngine - Rocket launch collision safeguard and impact detection', () => {
+	const engine = new PhysicsEngine();
+	const earth = {
+		id: 1,
+		name: 'Earth',
+		type: OBJECT_TYPES.CELESTIAL,
+		x: 0,
+		y: 0,
+		vx: 0,
+		vy: 0,
+		ax: 0,
+		ay: 0,
+		radius: 6371000,
+		mass: 5.972e21 // t
+	};
+	engine.addObject(earth);
+
+	// Falcon 9 style rocket on pad with altitude = 0
+	const rocketLength = MULTISTAGE_PRESETS.FALCON9?.lengthM || 70.0;
+	const offsets = ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET;
+	const bottomOffset = rocketLength * offsets.TWO_STAGE; // 217.0 m
+	const initialR = earth.radius + bottomOffset; // rocket nozzle sits exactly at pad level
+
+	const rocket = {
+		id: 101,
+		name: 'Falcon 9',
+		type: OBJECT_TYPES.ROCKET,
+		x: 0,
+		y: -initialR,
+		vx: 0,
+		vy: -10, // Ascending upwards (canvas -Y is zenith)
+		ax: 0,
+		ay: -5,
+		radius: bottomOffset,
+		bottomOffsetM: bottomOffset,
+		hostId: earth.id,
+		isHoldDown: false,
+		isIgnited: true,
+		dryMass: 25,
+		fuelMass: 140,
+		oxidMass: 280,
+		mass: 445
+	};
+	engine.addObject(rocket);
+
+	// Build quadtree and check collisions
+	engine._buildQuadTree(0.016);
+	engine._checkCollisions(0.016);
+
+	const rocketInEngine = engine.objects.find(o => o.id === 101);
+	assert.ok(rocketInEngine, 'Rocket should exist in engine');
+	assert.equal(rocketInEngine.collided, false, 'Ascending rocket at pad level must NOT collide with Earth');
+
+	// Now simulate descending rocket penetrating surface: y falls below initialR
+	rocketInEngine.vy = 20; // Falling back towards Earth
+	rocketInEngine.y = -initialR + 1.0; // Sunk 1m below pad level
+	engine._buildQuadTree(0.016);
+	engine._checkCollisions(0.016);
+
+	assert.equal(rocketInEngine.collided, true, 'Descending rocket penetrating below pad must collide with Earth');
+});
+
+test('Rocket - Smoke emission originates precisely from flame tip during burn and nozzle during cutoff', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0, rotationAngle: 0 });
+	const objects = [earth];
+
+	// Create H3 style 2-stage rocket firing vertical (zenith: -PI/2)
+	const baseRadiusM = 63.0;
+	const offsets = ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET;
+	const bottomOffset = baseRadiusM * offsets.TWO_STAGE;
+	const rocket = new Rocket(201, 'H3', 0, -6371100, 0, -100, 25, 34, 206, '#fff', 5, bottomOffset, 0, null, 0, 'orange');
+	rocket.stages = [
+		{ stageNumber: 1, fuelType: 'hydro', thrustKN: 4500, burnTime: 235 },
+		{ stageNumber: 2, fuelType: 'hydro', thrustKN: 200, burnTime: 618 }
+	];
+	rocket.baseRadiusM = baseRadiusM;
+	rocket.bottomOffsetM = bottomOffset;
+	rocket.thrustAngle = -Math.PI / 2; // Pointing upwards (-Y)
+	rocket.dominantBodyId = earth.id;
+	rocket.inAtmosphere = true;
+	rocket.isHoldDown = false;
+	rocket.isIgnited = true;
+	rocket.burnTime = 100;
+	rocket.thrustRatio = 1.0;
+
+	// 1. Update history while burning: smoke point added to effectTrail
+	rocket.updateHistory(1, objects);
+	assert.ok(rocket.effectTrail.count > 0, 'EffectTrail should record points while firing');
+
+	const burningPt = rocket.effectTrail.getPoint(rocket.effectTrail.count - 1);
+	const distFromCenterM = UnitConvertUtils.pix2m(burningPt.y - rocket.y);
+	const expectedNozzleDistM = baseRadiusM * offsets.TWO_STAGE;
+	const expectedFlameLenM = baseRadiusM * ROCKET_VISUAL.PLUMES.hydro.lenMult * 1.0 * 1.0;
+	const expectedTipDistM = expectedNozzleDistM + expectedFlameLenM;
+
+	assertClose(distFromCenterM, expectedTipDistM, 1e-2);
+
+	// 2. When engine cuts off (burnTime = 0, isBurning = false)
+	rocket.burnTime = 0;
+	rocket.updateHistory(2, objects);
+	const cutoffPt = rocket.effectTrail.getPoint(rocket.effectTrail.count - 1);
+	const cutoffDistM = UnitConvertUtils.pix2m(cutoffPt.y - rocket.y);
+	assertClose(cutoffDistM, expectedNozzleDistM, 1e-2);
+});
+
+test('Rocket & Pad - Visual scale and proportions between rocket and pad structure', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, rotationAngle: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const launcher = new RocketLauncher(universe);
+	launcher.hostId = earth.id;
+	launcher.currentPresetId = 'H3';
+	launcher.rollout();
+
+	const rocket = universe.objects.find(o => o.id === launcher.rolloutedRocketId);
+	assert.ok(rocket, 'Rocket should be placed after rollout');
+
+	// Verify rocket visual base radius is maintained (prevent shrinking to ~10m)
+	assert.ok(rocket.baseRadiusM >= 50, `Rocket baseRadiusM (${rocket.baseRadiusM}) must be at least 50m to preserve clear visibility`);
+	assert.equal(rocket.baseRadiusM, 63.0, 'H3 baseRadiusM should equal 63m');
+
+	// Verify PadEffectRenderer scale matches rocket draw radius exactly
+	const pad = new PadEffectRenderer();
+	pad.start(rocket.id, earth.id);
+	const zoomScale = 1.5;
+	const mockContext = {
+		rocket: rocket,
+		host: earth,
+		m2pix: (m) => UnitConvertUtils.m2pix(m),
+		zoomScale: zoomScale
+	};
+	pad.update(0.016, mockContext);
+
+	assert.equal(pad.rocketRadius, rocket.baseRadiusM, 'Pad rocketRadius must match rocket baseRadiusM');
+
+	// Verify ratio between pad structure coordinate base and rocket nozzle position
+	const offsets = ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET;
+	assertClose(rocket.bottomOffsetM, rocket.baseRadiusM * offsets.TWO_STAGE, 1e-3);
+});
+
+test('PadEffectRenderer - Launch pad towers are grounded on the pad base without floating', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, x: 0, y: 0, vx: 0, vy: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const launcher = new RocketLauncher(universe);
+	launcher.hostId = earth.id;
+	launcher.mode = 'host';
+
+	const presetsToTest = [
+		{ id: 'H3', expectedLen: 63, mult: ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET.TWO_STAGE },
+		{ id: 'FALCON9', expectedLen: 70, mult: ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET.TWO_STAGE },
+		{ id: 'EPSILON', expectedLen: 26, mult: ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET.THREE_STAGE },
+		{ id: 'SSTO', expectedLen: 50, mult: ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET.SINGLE_STAGE }
+	];
+
+	for (const preset of presetsToTest) {
+		launcher.currentPresetId = preset.id;
+		launcher.rollout();
+		const rocket = universe.objects.find(o => o.id === launcher.rolloutedRocketId);
+		assert.ok(rocket, `Rocket for preset ${preset.id} should be rolled out`);
+
+		const pad = new PadEffectRenderer();
+		pad.start(rocket.id, earth.id);
+		const mockContext = {
+			rocket: rocket,
+			host: earth,
+			m2pix: (m) => UnitConvertUtils.m2pix(m),
+			zoomScale: 1.0
+		};
+		pad.update(0.016, mockContext);
+
+		const layout = pad.getTowerLayout(mockContext);
+		const expectedGroundXM = -preset.expectedLen * preset.mult;
+
+		// 1. Verify ground level matches nozzle bottom offset
+		assertClose(layout.groundXM, expectedGroundXM, 1e-3,
+			`[${preset.id}] groundXM (${layout.groundXM}) must equal -bottomOffsetM (${expectedGroundXM})`);
+
+		// 2. Tower 1 (Main Strongback) must be anchored at ground level
+		assertClose(layout.strongback.baseXM, layout.groundXM, 1e-3,
+			`[${preset.id}] Strongback baseXM (${layout.strongback.baseXM}) must reach groundXM (${layout.groundXM}), not float in mid-air`);
+		assert.ok(layout.strongback.isGrounded, `[${preset.id}] Strongback must be flagged as grounded`);
+		assert.ok(layout.strongback.heightM >= preset.expectedLen * 3.0,
+			`[${preset.id}] Strongback height (${layout.strongback.heightM}m) must span from ground to upper body`);
+
+		// 3. Tower 2 (Umbilical Tower) must be anchored at ground level
+		assertClose(layout.umbilicalTower.baseXM, layout.groundXM, 1e-3,
+			`[${preset.id}] Umbilical tower baseXM (${layout.umbilicalTower.baseXM}) must reach groundXM (${layout.groundXM}), not float in mid-air`);
+		assert.ok(layout.umbilicalTower.isGrounded, `[${preset.id}] Umbilical tower must be flagged as grounded`);
+		assert.ok(layout.umbilicalTower.heightM >= preset.expectedLen * 1.5,
+			`[${preset.id}] Umbilical tower height (${layout.umbilicalTower.heightM}m) must span from ground to umbilical swing arm`);
+
+		// 4. Regression check: ensure towers are NOT floating at old rocket-center offsets (-1.5 * rM or -0.6 * rM)
+		const oldFloatingStrongbackXM = -1.5 * preset.expectedLen;
+		const oldFloatingUmbilicalXM = -0.6 * preset.expectedLen;
+		assert.notEqual(layout.strongback.baseXM, oldFloatingStrongbackXM,
+			`[${preset.id}] Strongback must not float at old offset ${oldFloatingStrongbackXM}`);
+		assert.notEqual(layout.umbilicalTower.baseXM, oldFloatingUmbilicalXM,
+			`[${preset.id}] Umbilical tower must not float at old offset ${oldFloatingUmbilicalXM}`);
+
+		// 5. Verify drawing execution with grounded coordinates
+		const rectCalls = [];
+		const mockCtx = {
+			save: () => {},
+			restore: () => {},
+			translate: () => {},
+			rotate: () => {},
+			beginPath: () => {},
+			stroke: () => {},
+			fillRect: (x, y, w, h) => rectCalls.push({ x, y, w, h }),
+			moveTo: () => {},
+			lineTo: () => {}
+		};
+		const mockRc = {
+			zoomScale: 1.0,
+			basis: earth,
+			cameraOffset: { x: 0, y: 0 }
+		};
+		pad.drawBackground(mockCtx, mockRc, mockContext);
+		assert.ok(rectCalls.length >= 3, `[${preset.id}] drawBackground must render base, strongback, and umbilical tower`);
+
+		launcher.abortRollout();
+	}
+});
+
+test('RocketLauncher - Initial velocity includes planetary surface rotation speed in m/s', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, x: 0, y: 0, vx: 0, vy: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const launcher = new RocketLauncher(universe);
+	launcher.hostId = earth.id;
+	launcher.mode = 'host';
+	launcher.hostAngleDeg = 0; // Launch from North pole / zenith -90deg canvas (dx=0, dy=-R)
+
+	const t = launcher._calculateTransform();
+	assert.ok(t, 'Transform should be computed');
+
+	// Earth rotation period is 86164s. At radius ~6371200m, tangential velocity = omega * r approx 464.6 m/s
+	const hostParam = DEFAULT_OBJECT_PARAMS['Earth'];
+	const omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
+	const expectedSpeedMps = omega * (earth.radius + launcher.getBottomOffsetM() + launcher.hostAltitudeM);
+
+	// In main thread coordinates, velocity is in px/s. pix2m(t.vx) gives m/s.
+	const vxMps = UnitConvertUtils.pix2m(t.vx);
+	assertClose(vxMps, expectedSpeedMps, 1.0);
+	assert.ok(vxMps > 400, `t.vx in m/s (${vxMps} m/s) must include planetary rotation speed (~464.6 m/s)`);
+});
+
+test('Trajectory - Predicted line and actual flight path align with Earth rotation', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, x: 0, y: 0, vx: 0, vy: 0, rotationAngle: 0.5 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const launcher = new RocketLauncher(universe);
+	launcher.hostId = earth.id;
+	launcher.mode = 'host';
+	launcher.hostAngleDeg = 0;
+	launcher.currentPresetId = 'FALCON9';
+
+	// Compute prediction at rollout
+	const prediction = launcher.updatePredictionSync();
+	assert.ok(prediction && prediction.points.length > 0, 'Prediction should have points');
+
+	// Verify that at liftoff (simTime = 0), predicted point starts at the launch pad position
+	const p0 = prediction.points[0];
+	assert.equal(p0.time, 0);
+	const expectedR = UnitConvertUtils.m2pix(earth.radius + launcher.getBottomOffsetM());
+	assertClose(p0.r, expectedR, 1e-2);
+
+	// Verify that prediction points include surface-relative coordinates (phiSurf)
+	assert.ok(p0.phiSurf !== undefined, 'Prediction points must store phiSurf for surface-relative alignment');
+
+	// Verify that prediction initial tangential velocity in host-relative frame includes planetary rotation
+	const p1 = prediction.points[1];
+	assert.ok(p1, 'Should have point 1');
+	// In inertial frame, dx_m should advance by eastward motion due to Earth rotation
+	const dx_m = UnitConvertUtils.pix2m(p1.relX - p0.relX);
+	assert.ok(dx_m > 0, 'Rocket must move eastward in inertial frame due to Earth rotation');
+
+	// Verify pad-relative alignment: roll out rocket and test that actual path origin matches prediction origin
+	launcher.rollout();
+	const rocket = universe.objects.find(o => o.id === launcher.rolloutedRocketId);
+	assert.ok(rocket, 'Rocket should be placed on pad');
+
+	// When liftoff occurs, rocket adopts prediction
+	EventBus.emit('liftoff');
+	assert.ok(rocket.predictedTrajectory, 'Rocket should receive predicted trajectory');
+	assert.equal(rocket.predictedTrajectory.points[0].phiSurf, prediction.points[0].phiSurf, 'Surface angle must match without double-offset');
+
+	// Release hold-down and simulate first flight step with real Rocket to record actual flight path
+	const realRocket = new Rocket(rocket.id, rocket.name, rocket.x, rocket.y, rocket.vx, rocket.vy, 30, 400, 0, '#fff', 5, rocket.radius);
+	realRocket.hostId = earth.id;
+	realRocket.predictedTrajectory = rocket.predictedTrajectory;
+	realRocket.isHoldDown = false;
+	realRocket._recordActualFlightPath(universe.objects);
+	assert.ok(realRocket.actualFlightPath && realRocket.actualFlightPath.length > 0, 'Actual flight path must be recorded');
+	const a0 = realRocket.actualFlightPath[0];
+	assertClose(a0.phiSurf, p0.phiSurf, 1e-4);
+	assertClose(a0.r, p0.r, 1e-2);
+});
+
+test('StageDebris - Separated booster, fairing, and upper stage debris maintain 1:1 scale with rocket body', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, x: 0, y: 0, vx: 0, vy: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const launcher = new RocketLauncher(universe);
+	launcher.hostId = earth.id;
+	launcher.mode = 'host';
+
+	const presetsToTest = [
+		{ id: 'FALCON9', name: 'Falcon 9', expectedBaseM: 70, mult: ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET.TWO_STAGE },
+		{ id: 'H3', name: 'H3', expectedBaseM: 63, mult: ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET.TWO_STAGE },
+		{ id: 'EPSILON', name: 'Epsilon', expectedBaseM: 26, mult: ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET.THREE_STAGE }
+	];
+
+	for (const p of presetsToTest) {
+		launcher.currentPresetId = p.id;
+		const baseRadiusM = launcher.getBaseRadiusM();
+		const bottomOffsetM = launcher.getBottomOffsetM();
+		assert.equal(baseRadiusM, p.expectedBaseM, `[${p.id}] Base radius must be ${p.expectedBaseM}m`);
+		assertClose(bottomOffsetM, p.expectedBaseM * p.mult, 1e-3, `[${p.id}] Bottom offset must equal baseRadiusM * mult`);
+
+		// Instantiate CalcRocket simulating physics worker
+		const calcRocket = new CalcRocket(
+			100, p.name, 0, -6371000 - bottomOffsetM, 0, 0, 0, 0,
+			bottomOffsetM, 0, 25, 140, 280,
+			{
+				stages: launcher.stages,
+				payload: launcher.payload,
+				fairing: launcher.fairing,
+				baseRadiusM: baseRadiusM,
+				bottomOffsetM: bottomOffsetM,
+				thrustAngle: -Math.PI / 2,
+				isHoldDown: false,
+				isIgnited: true
+			}
+		);
+
+		assert.equal(calcRocket.baseRadiusM, p.expectedBaseM, `[${p.id}] CalcRocket baseRadiusM must be preserved`);
+		assert.equal(calcRocket.bottomOffsetM, bottomOffsetM, `[${p.id}] CalcRocket bottomOffsetM must be preserved`);
+
+		// 1. Separate Stage 1 (Booster)
+		calcRocket.separateCurrentStage();
+		const boosterData = calcRocket._pendingDebris.find(d => d.debrisSubType === 1);
+		assert.ok(boosterData, `[${p.id}] Booster debris must be queued upon stage 1 separation`);
+
+		// CRITICAL SCALE CHECK: Booster radius must match base body radius (1:1), NOT inflated to bottomOffsetM
+		assertClose(boosterData.radius, p.expectedBaseM, 1e-3,
+			`[${p.id}] Booster debris radius (${boosterData.radius}m) must equal rocket baseRadiusM (${p.expectedBaseM}m)`);
+		assert.notEqual(boosterData.radius, bottomOffsetM,
+			`[${p.id}] Booster debris radius must NOT be inflated to bottomOffsetM (${bottomOffsetM}m)`);
+		assert.ok(boosterData.radius < bottomOffsetM * 0.8,
+			`[${p.id}] Booster debris radius must be strictly less than bottomOffsetM`);
+
+		// 2. Separate Fairing
+		calcRocket.separateFairing(120000);
+		const fairingPieces = calcRocket._pendingDebris.filter(d => d.debrisSubType === 3);
+		assert.equal(fairingPieces.length, 2, `[${p.id}] Exactly 2 fairing halves must be queued`);
+		for (const fairingData of fairingPieces) {
+			assertClose(fairingData.radius, p.expectedBaseM, 1e-3,
+				`[${p.id}] Fairing debris radius (${fairingData.radius}m) must equal rocket baseRadiusM (${p.expectedBaseM}m)`);
+			assert.notEqual(fairingData.radius, bottomOffsetM,
+				`[${p.id}] Fairing debris radius must NOT be inflated to bottomOffsetM (${bottomOffsetM}m)`);
+		}
+
+		// 3. Separate Stage 2 (Upper Stage / Payload Release)
+		calcRocket.currentStageIndex = 1;
+		calcRocket.separateCurrentStage();
+		const upperStageData = calcRocket._pendingDebris.find(d => d.debrisSubType === 2);
+		assert.ok(upperStageData, `[${p.id}] Upper stage debris must be queued`);
+		assertClose(upperStageData.radius, p.expectedBaseM, 1e-3,
+			`[${p.id}] Upper stage debris radius (${upperStageData.radius}m) must equal rocket baseRadiusM (${p.expectedBaseM}m)`);
+		assert.notEqual(upperStageData.radius, bottomOffsetM,
+			`[${p.id}] Upper stage debris radius must NOT be inflated to bottomOffsetM (${bottomOffsetM}m)`);
+
+		// 4. Main-thread visual scale verification (1:1 ratio between rocket and debris)
+		const rocket = new Rocket(100, p.name, 0, 0, 0, 0, 25, 140, 280, '#fff', 5, bottomOffsetM);
+		rocket.baseRadiusM = baseRadiusM;
+		rocket.bottomOffsetM = bottomOffsetM;
+
+		const boosterDebris = new Debris(
+			201, `${p.name} - Stage 1 Booster`, 0, 0, 0, 0,
+			25, '#c85a1a', 1.8, boosterData.radius, 1, '#00ffcc', 0, 1
+		);
+
+		// At physical scale zoom levels, screen radius must match exactly
+		const testZoomLevels = [1.0, 50.0, 500.0, 2000.0];
+		for (const zoom of testZoomLevels) {
+			const rocketDrawR = rocket._getDrawRadius(zoom);
+			const debrisDrawR = boosterDebris._getDrawRadius(zoom);
+			if (rocketDrawR > 5.5) {
+				assertClose(debrisDrawR, rocketDrawR, 1e-3,
+					`[${p.id} @ zoom=${zoom}] Debris draw radius (${debrisDrawR}) must equal rocket draw radius (${rocketDrawR})`);
+			}
+		}
+
+		// Verify geometric ratios: Booster debris vs Rocket stage 1
+		const m = ROCKET_VISUAL.MODULES;
+		const hw = RENDER.DEBRIS_HARDWARE;
+		assert.equal(hw.STAGE1_LEN_RATIO, m.STAGE1_LENGTH_RATIO,
+			'Debris booster length ratio must match rocket stage 1 length ratio');
+		assert.equal(hw.STAGE1_WIDTH_RATIO, m.STAGE1_RADIUS_RATIO,
+			'Debris booster width ratio must match rocket stage 1 radius ratio');
+		assert.equal(hw.FAIRING_WIDTH_RATIO, m.STAGE2_RADIUS_RATIO,
+			'Debris fairing width ratio must match rocket fairing/stage2 radius ratio');
+		assert.equal(hw.STAGE2_WIDTH_RATIO, m.STAGE2_RADIUS_RATIO,
+			'Debris upper stage width ratio must match rocket stage 2 radius ratio');
+	}
+});
+
+test('PadEffectRenderer - Umbilical tower hinges at ground level, does not bend mid-tower, and umbilical cable attaches naturally to tower arm', () => {
+	const renderer = new PadEffectRenderer();
+	const rPx = 100;
+	const layout = renderer.getTowerLayout(rPx);
+
+	// 1. Both towers grounded firmly at ground base
+	assert.ok(layout.strongback.isGrounded, 'Strongback must be grounded');
+	assert.ok(layout.umbilicalTower.isGrounded, 'Umbilical tower must be grounded');
+	assertClose(layout.strongback.baseXM, layout.groundXM, 1e-4, 'Strongback base must be at ground');
+	assertClose(layout.umbilicalTower.baseXM, layout.groundXM, 1e-4, 'Umbilical tower base must be at ground');
+
+	// 2. Umbilical tower hinge must be at the base on the ground (no midpoint bending)
+	assertClose(layout.umbilicalTower.hingeXM, layout.groundXM, 1e-4,
+		'Umbilical tower hinge must be rooted at ground level, not bent mid-tower');
+
+	// 3. Proportions: Tower width vs Umbilical cable width
+	const conf = PAD_EFFECT.STRUCTURE;
+	assert.ok(conf.UMBILICAL_H_MULT >= 0.4, 'Umbilical tower width multiplier must be substantial (>= 0.4)');
+	assert.ok(conf.CABLE_WIDTH_MULT >= 0.08 && conf.CABLE_WIDTH_MULT <= 0.15, 'Umbilical cable width must be thick and substantial (0.08 - 0.15)');
+	assert.ok(conf.UMBILICAL_H_MULT / conf.CABLE_WIDTH_MULT >= 3.0,
+		'Umbilical tower must be thicker than the umbilical cable');
+
+	// 4. Umbilical cable attachment position attaches to tower arm and rocket port without floating in air
+	const cable = renderer.umbilicalCable;
+	const attachPos = cable.getAttachPos(conf, renderer.umbilicalAngle, 3.10);
+
+	// Tower arm tip attachment should be at high elevation near tower top
+	assert.ok(attachPos.x > 0, 'Tower attachment X must be elevated near tower top');
+	assert.ok(attachPos.y < 0, 'Tower attachment Y must be on umbilical side (< 0)');
+
+	// Cable nodes must stretch smoothly between the tower arm and rocket port (no floating in empty air)
+	cable.update(0.016, conf, renderer.umbilicalAngle, true, 3.10);
+	const firstNode = cable.nodes[0];
+	const lastNode = cable.nodes[cable.nodes.length - 1];
+	assertClose(firstNode.x, attachPos.x, 1e-3, 'Cable start node must match tower arm position');
+	assertClose(firstNode.y, attachPos.y, 1e-3, 'Cable start node must match tower arm position');
+	const expectedConnX = conf.CABLE_CONN_X_MULT !== undefined ? conf.CABLE_CONN_X_MULT : 0.8;
+	const expectedConnY = conf.CABLE_CONN_Y_MULT !== undefined ? conf.CABLE_CONN_Y_MULT : -0.7;
+	assertClose(lastNode.x, expectedConnX, 1e-3, 'Cable end node must match rocket port position');
+	assertClose(lastNode.y, expectedConnY, 1e-3, 'Cable end node must match rocket port position');
+
+	// 5. Cable length and sag: cable must have significant length and droop (slack)
+	const totalRestLen = cable.restLengths.reduce((sum, len) => sum + len, 0);
+	assert.ok(totalRestLen > 1.2, `Cable rest length should be long with realistic sag, got ${totalRestLen}`);
+	const midNode = cable.nodes[Math.floor(cable.nodes.length / 2)];
+	assert.ok(midNode.x < Math.min(firstNode.x, lastNode.x), 'Cable mid node must droop downward below attachments');
+});
+
+test('Telemetry & Predictor - Stage 2 burn telemetry remaining fuel reaches 0% at SECO and SECO-1 / 2-STG-SEP do not prematurely trigger passed', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, x: 0, y: 0, vx: 0, vy: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const launcher = new RocketLauncher(universe);
+	launcher.hostId = earth.id;
+	launcher.mode = 'host';
+	launcher.currentPresetId = 'FALCON9';
+
+	const preset = MULTISTAGE_PRESETS.FALCON9;
+	const mockRocket = new Rocket(100, 'Falcon 9', 0, 0, 0, 0, 25, 140, 280, '#fff', 5, 2.5);
+	mockRocket.stages = JSON.parse(JSON.stringify(preset.stages));
+	mockRocket.totalStages = preset.stages.length;
+	mockRocket.currentStageIndex = 0;
+	mockRocket.stageState = 'STG_BURNING';
+	mockRocket.fuelMass = 140.0;
+	mockRocket.oxidMass = 280.0;
+	mockRocket.burnTime = 162.0;
+	mockRocket.thrustRatio = 1.0;
+
+	// Set predicted trajectory events
+	mockRocket.predictedTrajectory = {
+		events: [
+			{ id: 'liftoff', name: 'LIFTOFF', type: 'liftoff', time: 0, passed: true },
+			{ id: 'meco_1', name: 'MECO-1', type: 'stg_meco', time: 162, passed: false },
+			{ id: 'stg_sep_1', name: 'STG-1 SEP', type: 'staging', time: 165, passed: false },
+			{ id: 'ses_1', name: 'SES-1', type: 'ignition', time: 167, passed: false },
+			{ id: 'seco_1', name: 'SECO-1', type: 'meco', time: 480, passed: false },
+			{ id: 'stg_sep_2', name: '2-STG-SEP', type: 'staging', time: 483, passed: false },
+			{ id: 'payload_sep', name: 'PAYLOAD SEP', type: 'staging', time: 483, passed: false }
+		]
+	};
+
+	// Mock UI container for PropulsionCard
+	const cardEl = document.createElement('div');
+	cardEl.innerHTML = `
+		<div class="tm-section-header"></div>
+		<div id="tm-rem-dv"></div><div id="tm-twr"></div><div id="tm-thrtl"></div>
+		<div id="tm-fuel-mass"></div><div id="tm-oxid-mass"></div>
+		<div id="tm-tank-pres-fuel"></div><div id="tm-tank-pres-oxid"></div>
+		<div id="tm-fuel-bar"></div><div id="tm-oxid-bar"></div>
+		<div id="tm-pres-fuel-bar"></div><div id="tm-pres-oxid-bar"></div>
+	`;
+	const propCard = new PropulsionCard('propulsion', 'Propulsion & Tanks', cardEl);
+	propCard.initElements();
+
+	// 1. PHASE 1: STAGE 1 MECO (t = 162s)
+	mockRocket.flightTime = 162;
+	mockRocket.stageState = 'STG_MECO';
+	mockRocket.fuelMass = 0;
+	mockRocket.oxidMass = 0;
+	mockRocket.burnTime = 0;
+	mockRocket.thrustRatio = 0;
+	mockRocket.telemetry = {
+		status: TELEMETRY.STATUS.MECO,
+		flightTime: 162,
+		stageIndex: 0,
+		totalStages: 2
+	};
+
+	// Detect passed events at Stage 1 MECO
+	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, { objectsMap: new Map([[1, earth]]) });
+
+	// MECO-1 should be passed
+	assert.ok(mockRocket.passedEventIds.has('meco_1'), 'MECO-1 must be passed at stage 1 cutoff');
+
+	// CRITICAL CHECK: SECO-1 and 2-STG-SEP must NOT be passed at Stage 1 MECO!
+	assert.equal(mockRocket.passedEventIds.has('seco_1'), false,
+		'SECO-1 must NOT be marked passed (●) prematurely during Stage 1 MECO!');
+	assert.equal(mockRocket.passedEventIds.has('stg_sep_2'), false,
+		'2-STG-SEP must NOT be marked passed (●) prematurely during Stage 1 MECO!');
+
+	// 2. PHASE 2: STAGE 1 SEPARATION (t = 165s)
+	mockRocket.flightTime = 165;
+	mockRocket.currentStageIndex = 1;
+	mockRocket.stageState = 'INTERSTAGE_COAST';
+	mockRocket.fuelMass = 32.0;
+	mockRocket.oxidMass = 64.0;
+	mockRocket.burnTime = 390.0;
+	mockRocket.telemetry.stageIndex = 1;
+	mockRocket.telemetry.flightTime = 165;
+
+	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, { objectsMap: new Map([[1, earth]]) });
+
+	// STG-1 SEP should be passed
+	assert.ok(mockRocket.passedEventIds.has('stg_sep_1'), 'STG-1 SEP must be passed upon stage 1 separation');
+
+	// CRITICAL CHECK: SECO-1 and 2-STG-SEP must NOT be passed upon Stage 1 Separation!
+	assert.equal(mockRocket.passedEventIds.has('seco_1'), false,
+		'SECO-1 must NOT be marked passed (●) prematurely when Stage 1 separates!');
+	assert.equal(mockRocket.passedEventIds.has('stg_sep_2'), false,
+		'2-STG-SEP must NOT be marked passed (●) prematurely when Stage 1 separates!');
+
+	// 3. PHASE 3: STAGE 2 BURNING (t = 300s, midway through burn)
+	mockRocket.flightTime = 300;
+	mockRocket.stageState = 'STG_BURNING';
+	mockRocket.thrustRatio = 1.0;
+	mockRocket.fuelMass = 20.0;
+	mockRocket.oxidMass = 40.0;
+	mockRocket.burnTime = 250.0;
+	mockRocket.telemetry.flightTime = 300;
+	mockRocket.telemetry.status = TELEMETRY.STATUS.ASCENT;
+
+	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, { objectsMap: new Map([[1, earth]]) });
+	assert.equal(mockRocket.passedEventIds.has('seco_1'), false, 'SECO-1 must still be unpassed (○) during stage 2 burn');
+	assert.equal(mockRocket.passedEventIds.has('stg_sep_2'), false, '2-STG-SEP must still be unpassed (○) during stage 2 burn');
+
+	// Update telemetry card during Stage 2 burn
+	propCard.update(mockRocket, mockRocket.telemetry);
+	const fuelPctDuring = parseFloat(propCard.ui.fuelBar.style.width);
+	assertClose(fuelPctDuring, (20.0 / 32.0) * 100, 1.0, 'Fuel bar must reflect remaining stage 2 fuel');
+
+	// 4. PHASE 4: STAGE 2 REACHES SECO (t = 480s, orbital cutoff)
+	mockRocket.flightTime = 480;
+	mockRocket.stageState = 'STG_MECO';
+	mockRocket.thrustRatio = 0.0;
+	mockRocket.burnTime = 0.0;
+	mockRocket.fuelMass = 0.0;
+	mockRocket.oxidMass = 0.0;
+	mockRocket.telemetry.flightTime = 480;
+	mockRocket.telemetry.status = TELEMETRY.STATUS.MECO;
+
+	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, { objectsMap: new Map([[1, earth]]) });
+
+	// SECO-1 must NOW be marked passed
+	assert.ok(mockRocket.passedEventIds.has('seco_1'), 'SECO-1 must be marked passed (●) when stage 2 cuts off');
+
+	// 2-STG-SEP must NOT yet be passed (until separation timer expires)
+	assert.equal(mockRocket.passedEventIds.has('stg_sep_2'), false,
+		'2-STG-SEP must not pass until upper stage physically separates');
+
+	// CRITICAL CHECK: Telemetry PropulsionCard remaining fuel at SECO must be 0%, NOT 20%!
+	propCard.update(mockRocket, mockRocket.telemetry);
+	const fuelMassText = propCard.ui.fuelMass.textContent.trim();
+	const oxidMassText = propCard.ui.oxidMass.textContent.trim();
+	const fuelBarWidth = parseFloat(propCard.ui.fuelBar.style.width);
+	const oxidBarWidth = parseFloat(propCard.ui.oxidBar.style.width);
+
+	assertClose(parseFloat(fuelMassText), 0.0, 0.01,
+		`Fuel mass display at SECO (${fuelMassText}t) must be 0.00t, not ~6.2t (20%)`);
+	assertClose(parseFloat(oxidMassText), 0.0, 0.01,
+		`Oxidizer mass display at SECO (${oxidMassText}t) must be 0.00t, not ~12.5t (20%)`);
+	assertClose(fuelBarWidth, 0.0, 0.1,
+		`Fuel bar at SECO (${fuelBarWidth}%) must display 0% remaining, NOT 20%`);
+	assertClose(oxidBarWidth, 0.0, 0.1,
+		`Oxidizer bar at SECO (${oxidBarWidth}%) must display 0% remaining, NOT 20%`);
+
+	// 5. PHASE 5: STAGE 2 SEPARATION (t = 483s, payload release)
+	mockRocket.flightTime = 483;
+	mockRocket.currentStageIndex = 2;
+	mockRocket.stageState = 'ORBITAL_COAST';
+	mockRocket.isPayloadSeparated = true;
+	mockRocket.telemetry.stageIndex = 2;
+	mockRocket.telemetry.flightTime = 483;
+	mockRocket.telemetry.isPayloadSeparated = true;
+
+	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, { objectsMap: new Map([[1, earth]]) });
+
+	// 2-STG-SEP and PAYLOAD SEP must NOW be marked passed
+	assert.ok(mockRocket.passedEventIds.has('stg_sep_2'), '2-STG-SEP must be marked passed (●) upon stage 2 separation');
+	assert.ok(mockRocket.passedEventIds.has('payload_sep'), 'PAYLOAD SEP must be marked passed (●) upon stage 2 separation');
+});
 

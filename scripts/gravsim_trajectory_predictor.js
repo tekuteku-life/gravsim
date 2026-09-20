@@ -154,7 +154,8 @@ export class TrajectoryPredictor {
 			y: rocketY_m,
 			vx: rocketVx_m,
 			vy: rocketVy_m,
-			radius: config.radius || 1,
+			radius: config.bottomOffsetM || config.radius || 31.5,
+			bottomOffsetM: config.bottomOffsetM || 31.5,
 			dryMassT: config.dryMassT !== undefined ? config.dryMassT : 7,
 			fuelMassT: config.fuelMassT !== undefined ? config.fuelMassT : 88,
 			oxidMassT: config.oxidMassT !== undefined ? config.oxidMassT : 220,
@@ -188,10 +189,24 @@ export class TrajectoryPredictor {
 						x: UnitConvertUtils.pix2m(obj.x),
 						y: UnitConvertUtils.pix2m(obj.y),
 						vx: UnitConvertUtils.pix2m(obj.vx),
-						vy: UnitConvertUtils.pix2m(obj.vy)
+						vy: UnitConvertUtils.pix2m(obj.vy),
+						rotationAngle: obj.rotationAngle || 0
 					});
 				}
 			}
+		}
+		if (!celestialBodies.some(b => b.id === host.id)) {
+			celestialBodies.push({
+				id: host.id,
+				name: host.name,
+				radius: host.radius,
+				massKg: UnitConvertUtils.ton2kg(host.mass || 0),
+				x: hostX_m,
+				y: hostY_m,
+				vx: hostVx_m,
+				vy: hostVy_m,
+				rotationAngle: host.rotationAngle || 0
+			});
 		}
 
 		return {
@@ -330,21 +345,50 @@ export class TrajectoryPredictor {
 						passed = true;
 					}
 					break;
-				case 'meco':
-					if (status >= TELEMETRY.STATUS.MECO || (rocket.totalStages === 1 && (rocket.fuelMass <= 0 || rocket.burnTime <= 0)) || (rocket.totalStages > 1 && rocket.currentStageIndex + 1 >= rocket.totalStages && rocket.burnTime <= 0)) {
+				case 'meco': {
+					const isSecoEvent = ev.id === 'seco_1' || (rocket.totalStages > 1 && ev.name?.includes('SECO'));
+					if (isSecoEvent) {
+						if ((rocket.currentStageIndex + 1 >= rocket.totalStages && (rocket.stageState === 'STG_MECO' || rocket.stageState === 'ORBITAL_COAST' || rocket.burnTime <= 0 || rocket.fuelMass <= 0.01)) || (ev.time && flightTime >= ev.time)) {
+							passed = true;
+						}
+					} else if (rocket.totalStages === 1) {
+						if (status >= TELEMETRY.STATUS.MECO || rocket.fuelMass <= 0 || rocket.burnTime <= 0 || (ev.time && flightTime >= ev.time)) {
+							passed = true;
+						}
+					} else {
+						if (status >= TELEMETRY.STATUS.MECO || rocket.currentStageIndex > 0 || (ev.time && flightTime >= ev.time)) {
+							passed = true;
+						}
+					}
+					break;
+				}
+				case 'stg_meco': {
+					let targetStg = 1;
+					if (ev.id && ev.id.startsWith('meco_')) {
+						targetStg = parseInt(ev.id.replace('meco_', ''), 10);
+					}
+					if (rocket.currentStageIndex >= targetStg || (rocket.currentStageIndex === targetStg - 1 && (rocket.stageState === 'STG_MECO' || rocket.burnTime <= 0)) || (ev.time && flightTime >= ev.time)) {
 						passed = true;
 					}
 					break;
-				case 'stg_meco':
-					if (flightTime >= ev.time || rocket.currentStageIndex > 0) {
-						passed = true;
+				}
+				case 'staging': {
+					if (ev.id === 'payload_sep') {
+						if (rocket.isPayloadSeparated || rocket.stageState === 'ORBITAL_COAST' || (ev.time && flightTime >= ev.time)) {
+							passed = true;
+						}
+					} else if (ev.id && ev.id.startsWith('stg_sep_')) {
+						const targetStg = parseInt(ev.id.replace('stg_sep_', ''), 10);
+						if (rocket.currentStageIndex >= targetStg || (targetStg >= rocket.totalStages && (rocket.isPayloadSeparated || rocket.stageState === 'ORBITAL_COAST')) || (ev.time && flightTime >= ev.time)) {
+							passed = true;
+						}
+					} else {
+						if (flightTime >= ev.time || rocket.currentStageIndex > 0) {
+							passed = true;
+						}
 					}
 					break;
-				case 'staging':
-					if (flightTime >= ev.time || rocket.currentStageIndex > 0) {
-						passed = true;
-					}
-					break;
+				}
 				case 'ignition':
 					if (flightTime >= ev.time || (rocket.currentStageIndex > 0 && rocket.isIgnited)) {
 						passed = true;
@@ -479,6 +523,8 @@ export class TrajectoryPredictor {
 		const minY = cy - maxExtent;
 		const maxY = cy + maxExtent;
 
+		const currentHostRot = hostObj.rotationAngle || 0;
+
 		// Screen-space decimation helper: avoids collapsing line dashes when sample density is high
 		const MIN_SCREEN_DIST_SQ = conf.MIN_SCREEN_DIST_SQ || 4.0;
 
@@ -490,13 +536,20 @@ export class TrajectoryPredictor {
 
 			for (let i = startIndex; i <= endIndex; i++) {
 				const pt = points[i];
-				let relX = pt.relX;
-				let relY = pt.relY;
-				if (hasRotation) {
-					const rx = relX * cosR - relY * sinR;
-					const ry = relX * sinR + relY * cosR;
-					relX = rx;
-					relY = ry;
+				let relX, relY;
+				if (pt.r !== undefined && pt.phiSurf !== undefined) {
+					const phiScreen = pt.phiSurf + currentHostRot;
+					relX = pt.r * Math.cos(phiScreen);
+					relY = pt.r * Math.sin(phiScreen);
+				} else {
+					relX = pt.relX;
+					relY = pt.relY;
+					if (hasRotation) {
+						const rx = relX * cosR - relY * sinR;
+						const ry = relX * sinR + relY * cosR;
+						relX = rx;
+						relY = ry;
+					}
 				}
 				const sx = hostScreenX + relX * zoomScale;
 				const sy = hostScreenY + relY * zoomScale;
@@ -513,18 +566,42 @@ export class TrajectoryPredictor {
 		};
 
 		// Helper to render only visible segments of polyline across screen viewport
-		const drawClippedPolyline = (pts) => {
+		const drawClippedPolyline = (pts, smooth = false) => {
 			if (!pts || pts.length < 2) return;
 
+			if (!smooth || pts.length < (conf.MIN_SMOOTH_SEGMENTS || 3)) {
+				let inSubpath = false;
+				let prev = pts[0];
+
+				for (let i = 1; i < pts.length; i++) {
+					const cur = pts[i];
+					const minPx = prev.x < cur.x ? prev.x : cur.x;
+					const maxPx = prev.x > cur.x ? prev.x : cur.x;
+					const minPy = prev.y < cur.y ? prev.y : cur.y;
+					const maxPy = prev.y > cur.y ? prev.y : cur.y;
+					const crosses = !(maxPx < minX || minPx > maxX || maxPy < minY || minPy > maxY);
+
+					if (crosses) {
+						if (!inSubpath) {
+							ctx.moveTo(prev.x, prev.y);
+							inSubpath = true;
+						}
+						ctx.lineTo(cur.x, cur.y);
+					} else {
+						inSubpath = false;
+					}
+
+					prev = cur;
+				}
+				return;
+			}
+
+			// Smooth rendering using midpoint quadratic Bezier curves (C1 continuity)
 			let inSubpath = false;
 			let prev = pts[0];
-			let prevIn = (prev.x >= minX && prev.x <= maxX && prev.y >= minY && prev.y <= maxY);
 
 			for (let i = 1; i < pts.length; i++) {
 				const cur = pts[i];
-				const curIn = (cur.x >= minX && cur.x <= maxX && cur.y >= minY && cur.y <= maxY);
-
-				// Check if line segment intersects or enters viewport bounding box
 				const minPx = prev.x < cur.x ? prev.x : cur.x;
 				const maxPx = prev.x > cur.x ? prev.x : cur.x;
 				const minPy = prev.y < cur.y ? prev.y : cur.y;
@@ -536,13 +613,19 @@ export class TrajectoryPredictor {
 						ctx.moveTo(prev.x, prev.y);
 						inSubpath = true;
 					}
-					ctx.lineTo(cur.x, cur.y);
+					if (i < pts.length - 1) {
+						const next = pts[i + 1];
+						const midX = (cur.x + next.x) * 0.5;
+						const midY = (cur.y + next.y) * 0.5;
+						ctx.quadraticCurveTo(cur.x, cur.y, midX, midY);
+					} else {
+						ctx.lineTo(cur.x, cur.y);
+					}
 				} else {
 					inSubpath = false;
 				}
 
 				prev = cur;
-				prevIn = curIn;
 			}
 		};
 
@@ -563,20 +646,27 @@ export class TrajectoryPredictor {
 			let lastAy = -999999;
 			for (let i = 0; i < options.actualFlightPath.length; i++) {
 				const pt = options.actualFlightPath[i];
-				let relX = pt.relX;
-				let relY = pt.relY;
-				if (hasRotation) {
-					const rx = relX * cosR - relY * sinR;
-					const ry = relX * sinR + relY * cosR;
-					relX = rx;
-					relY = ry;
+				let relX, relY;
+				if (pt.r !== undefined && pt.phiSurf !== undefined) {
+					const phiScreen = pt.phiSurf + currentHostRot;
+					relX = pt.r * Math.cos(phiScreen);
+					relY = pt.r * Math.sin(phiScreen);
+				} else {
+					relX = pt.relX;
+					relY = pt.relY;
+					if (hasRotation) {
+						const rx = relX * cosR - relY * sinR;
+						const ry = relX * sinR + relY * cosR;
+						relX = rx;
+						relY = ry;
+					}
 				}
 				const sx = hostScreenX + relX * zoomScale;
 				const sy = hostScreenY + relY * zoomScale;
 
 				const dx = sx - lastAx;
 				const dy = sy - lastAy;
-				if (i === 0 || (dx * dx + dy * dy) >= MIN_SCREEN_DIST_SQ) {
+				if (i === 0 || i === options.actualFlightPath.length - 1 || (dx * dx + dy * dy) >= MIN_SCREEN_DIST_SQ) {
 					actualPts.push({ x: sx, y: sy });
 					lastAx = sx;
 					lastAy = sy;
@@ -596,7 +686,7 @@ export class TrajectoryPredictor {
 				ctx.setLineDash([]); // Solid line for actual flight path
 				ctx.lineWidth = conf.LINE_WIDTH_FLIGHT || 2.2;
 				ctx.strokeStyle = conf.COLOR_SOLID || "rgba(0, 255, 204, 0.95)";
-				drawClippedPolyline(actualPts);
+				drawClippedPolyline(actualPts, conf.SMOOTH_CURVE_ENABLED);
 				ctx.stroke();
 			}
 		}
@@ -609,7 +699,7 @@ export class TrajectoryPredictor {
 				ctx.setLineDash(mode === 'flight' ? (conf.LINE_DASH_FLIGHT || [14, 10]) : (conf.LINE_DASH_PRE || [14, 10]));
 				ctx.lineWidth = conf.LINE_WIDTH_PRE || 2.0;
 				ctx.strokeStyle = (mode === 'flight' ? conf.COLOR_FLIGHT : conf.COLOR_PRE) || "rgba(0, 200, 160, 0.65)";
-				drawClippedPolyline(predPoints);
+				drawClippedPolyline(predPoints, conf.SMOOTH_CURVE_ENABLED);
 				ctx.stroke();
 			}
 		}
@@ -621,13 +711,20 @@ export class TrajectoryPredictor {
 			ctx.textBaseline = 'middle';
 
 			events.forEach(ev => {
-				let evRelX = ev.relX;
-				let evRelY = ev.relY;
-				if (hasRotation) {
-					const rx = evRelX * cosR - evRelY * sinR;
-					const ry = evRelX * sinR + evRelY * cosR;
-					evRelX = rx;
-					evRelY = ry;
+				let evRelX, evRelY;
+				if (ev.r !== undefined && ev.phiSurf !== undefined) {
+					const evPhi = ev.phiSurf + currentHostRot;
+					evRelX = ev.r * Math.cos(evPhi);
+					evRelY = ev.r * Math.sin(evPhi);
+				} else {
+					evRelX = ev.relX;
+					evRelY = ev.relY;
+					if (hasRotation) {
+						const rx = evRelX * cosR - evRelY * sinR;
+						const ry = evRelX * sinR + evRelY * cosR;
+						evRelX = rx;
+						evRelY = ry;
+					}
 				}
 				const evScreenX = hostScreenX + evRelX * zoomScale;
 				const evScreenY = hostScreenY + evRelY * zoomScale;
@@ -737,6 +834,8 @@ export class TrajectoryPredictor {
 			newPoints[i] = {
 				relX: p.relX * cosR - p.relY * sinR,
 				relY: p.relX * sinR + p.relY * cosR,
+				r: p.r,
+				phiSurf: p.phiSurf !== undefined ? p.phiSurf + rotationAngle : undefined,
 				altM: p.altM,
 				time: p.time
 			};
@@ -745,7 +844,9 @@ export class TrajectoryPredictor {
 		const newEvents = (prediction.events || []).map(ev => ({
 			...ev,
 			relX: ev.relX * cosR - ev.relY * sinR,
-			relY: ev.relX * sinR + ev.relY * cosR
+			relY: ev.relX * sinR + ev.relY * cosR,
+			r: ev.r,
+			phiSurf: ev.phiSurf !== undefined ? ev.phiSurf + rotationAngle : undefined
 		}));
 
 		return {

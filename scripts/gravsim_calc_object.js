@@ -243,6 +243,9 @@ export class CalcRocket extends GravSimCalcObject {
 		});
 
 		this.stages = normConfig.stages;
+		this.bottomOffsetM = thrustData?.bottomOffsetM !== undefined ? thrustData.bottomOffsetM : (radius > 10 ? radius : 31.5);
+		this.baseRadiusM = thrustData?.baseRadiusM || (normConfig.stages ? (this.bottomOffsetM ? this.bottomOffsetM / 3.10 : 63) : 63);
+		this.radius = this.bottomOffsetM;
 		this.payload = normConfig.payload;
 		this.fairing = {
 			enabled: !!normConfig.fairing?.enabled,
@@ -392,12 +395,13 @@ export class CalcRocket extends GravSimCalcObject {
 			}
 		}
 
-		// Scale physical radius with rocket body to unify zoom magnification
+		// Scale physical radius with rocket base body radius to unify zoom magnification (1:1 with rocket)
+		const baseRad = this.baseRadiusM || (this.radius > 100 ? this.radius / 3.10 : this.radius);
 		const debrisRadius = isFinalStage
-			? (this.radius * MULTISTAGE_ROCKET.STAGE2_RADIUS_RATIO)
-			: (this.radius * MULTISTAGE_ROCKET.STAGE1_RADIUS_RATIO);
+			? (baseRad * (MULTISTAGE_ROCKET.STAGE2_RADIUS_RATIO || 1.0))
+			: (baseRad * (MULTISTAGE_ROCKET.STAGE1_RADIUS_RATIO || 1.0));
 
-		const sepOffsetDist = this.radius * 1.5 + 20.0;
+		const sepOffsetDist = baseRad * 1.5 + 20.0;
 
 		// 2. Queue spent stage debris with parentRocketId to ignore self-collision
 		this._pendingDebris.push({
@@ -480,8 +484,9 @@ export class CalcRocket extends GravSimCalcObject {
 			const sepSpeedBack = MULTISTAGE_ROCKET.FAIRING_SEP_BACKWARD_SPEED_M_S;
 
 			const halfMass = this.fairing.massT / 2;
-			const offset = this.radius * 1.2 + 15.0;
-			const fairingRadius = this.radius * MULTISTAGE_ROCKET.FAIRING_RADIUS_RATIO;
+			const baseRad = this.baseRadiusM || (this.radius > 100 ? this.radius / 3.10 : this.radius);
+			const offset = baseRad * 1.2 + 15.0;
+			const fairingRadius = baseRad * (MULTISTAGE_ROCKET.FAIRING_RADIUS_RATIO || 1.0);
 
 			const vx1 = this.vx + Math.cos(latAngle1) * sepSpeedLat + Math.cos(this.thrustAngle) * sepSpeedBack;
 			const vy1 = this.vy + Math.sin(latAngle1) * sepSpeedLat + Math.sin(this.thrustAngle) * sepSpeedBack;
@@ -847,7 +852,7 @@ export class CalcRocket extends GravSimCalcObject {
 			const isFinalStage = (this.currentStageIndex + 1 >= this.totalStages);
 
 			// 1. Autonomous orbital insertion cutoff outside dense atmosphere
-			if (isFinalStage && this.currentStageIndex >= 1 && this.stageState === 'STG_BURNING' && refBody && distToRefM > 0) {
+			if (isFinalStage && (this.totalStages === 1 || this.currentStageIndex >= 1) && this.stageState === 'STG_BURNING' && refBody && distToRefM > 0) {
 				const curAltM = distToRefM - refBody.radius;
 				if (curAltM >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MIN_ALT_M) {
 					const GM = PHYSICS.G * refBody.mass;
@@ -868,6 +873,8 @@ export class CalcRocket extends GravSimCalcObject {
 						// Cutoff when safe perigee is reached or circularized near apogee
 						if (peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MAX_ECC && peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM)) {
 							this.burnTime = 0;
+							this.fuelMass = 0;
+							this.oxidMass = 0;
 							this.stageState = 'STG_MECO';
 							this.stgTimer = 0;
 							if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {

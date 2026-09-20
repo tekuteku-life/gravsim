@@ -80,6 +80,7 @@ export class Universe {
 		this.CalcWorkerManager = new CalcWorkerManager((data) => this.updateObjectParams(data));
 		this.InputManager = new InputManager(this.canvas);
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
+		this.ObjectManager.universe = this;
 		this.DestructionManager = new DestructionManager(this);
 		this.VisualEffectManager = new VisualEffectManager(this);
 		this.OverlayRenderer = new OverlayRenderer(this);

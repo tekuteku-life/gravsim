@@ -346,9 +346,6 @@ class SmokeEffectRenderer {
 		let smokeCount = 0;
 		const drawLen = Math.min(RENDER.SMOKE.DRAW_MAX_LEN, pointsToDraw.length);
 
-		// Distance culling to avoid drawing smoke over the rocket nozzle
-		const cullRadius = bodyScreenRadius * 1.2;
-
 		for (let i = 0; i < pointsToDraw.length; i++) {
 			const pt = pointsToDraw[i];
 
@@ -359,16 +356,6 @@ class SmokeEffectRenderer {
 			if (pt.relX < minX || pt.relX > maxX || pt.relY < minY || pt.relY > maxY) {
 				smokeCount++;
 				continue; 
-			}
-
-			// Skip drawing to avoid overlapping the rocket
-			const latestPt = pointsToDraw[0];
-			const dx = pt.relX - latestPt.relX;
-			const dy = pt.relY - latestPt.relY;
-			const distSq = dx * dx + dy * dy;
-			if (distSq <= cullRadius * cullRadius) {
-				smokeCount++;
-				continue;
 			}
 
 			const t = smokeCount / drawLen;

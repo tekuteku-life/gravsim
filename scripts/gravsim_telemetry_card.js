@@ -181,11 +181,12 @@ export class PropulsionCard extends TelemetryCard {
 		const thrtlPercent = (target.thrustRatio || 0) * 100;
 		DOMUtils.setText(this.ui.thrtl, FormatUtils.numFixPad(thrtlPercent, 1, 6));
 
-		const fuelRem = target.fuelMass;
+		const isStageCutoff = target.stageState === 'STG_MECO' || target.stageState === 'ORBITAL_COAST' || (target.burnTime !== undefined && target.burnTime <= 0);
+		const fuelRem = isStageCutoff ? 0 : (target.fuelMass || 0);
 		const displayFuel = fuelRem < 0.01 ? 0 : fuelRem;
 		DOMUtils.setText(this.ui.fuelMass, FormatUtils.numFixPad(displayFuel, 2, 6));
 
-		const oxidRem = target.oxidMass;
+		const oxidRem = isStageCutoff ? 0 : (target.oxidMass || 0);
 		const displayOxid = oxidRem < 0.01 ? 0 : oxidRem;
 		DOMUtils.setText(this.ui.oxidMass, FormatUtils.numFixPad(displayOxid, 2, 6));
 
@@ -195,11 +196,11 @@ export class PropulsionCard extends TelemetryCard {
 		DOMUtils.setText(this.ui.tankPresOxid, presOxid > 0 ? presOxid.toFixed(0) : "0");
 
 		if (!this.maxFuel[target.id] || fuelRem > this.maxFuel[target.id]) this.maxFuel[target.id] = fuelRem;
-		let pctF = this.maxFuel[target.id] > 0 ? (fuelRem / this.maxFuel[target.id]) * 100 : 0;
+		let pctF = (!isStageCutoff && this.maxFuel[target.id] > 0) ? (fuelRem / this.maxFuel[target.id]) * 100 : 0;
 		if (pctF < 0.5) { pctF = 0; }
 
 		if (!this.maxOxid[target.id] || oxidRem > this.maxOxid[target.id]) this.maxOxid[target.id] = oxidRem;
-		let pctO = this.maxOxid[target.id] > 0 ? (oxidRem / this.maxOxid[target.id]) * 100 : 0;
+		let pctO = (!isStageCutoff && this.maxOxid[target.id] > 0) ? (oxidRem / this.maxOxid[target.id]) * 100 : 0;
 		if (pctO < 0.5) { pctO = 0; }
 
 		const maxPresScale = TANK_PRESSURE_SIM.MAX_SCALE_KPA;

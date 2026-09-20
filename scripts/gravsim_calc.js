@@ -35,7 +35,7 @@ export class PhysicsEngine {
 				data.x, data.y,
 				data.vx || 0, data.vy || 0,
 				data.ax || 0, data.ay || 0,
-				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
+				data.bottomOffsetM || data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
 				data.mass || SIMULATION.DEFAULT_OBJECT_MASS, data.fuelMass || 0, data.oxidMass || 0,
 				{
 					ofRatio: data.ofRatio || 0,
@@ -49,6 +49,7 @@ export class PhysicsEngine {
 					hostId: data.hostId,
 					hostAngleRad: data.hostAngleRad,
 					hostAltM: data.hostAltM,
+					bottomOffsetM: data.bottomOffsetM,
 					isHoldDown: data.isHoldDown,
 					isIgnited: data.isIgnited,
 					stages: data.stages,
@@ -147,7 +148,8 @@ export class PhysicsEngine {
 
 					obj.hostAngleRad += omega * dt;
 
-					const r = host.radius + obj.radius + obj.hostAltM; // m
+					const bottomOffset = obj.bottomOffsetM !== undefined ? obj.bottomOffsetM : obj.radius;
+					const r = host.radius + bottomOffset + obj.hostAltM; // m
 					const dx = r * Math.cos(obj.hostAngleRad); // m
 					const dy = r * Math.sin(obj.hostAngleRad); // m
 
@@ -249,8 +251,11 @@ export class PhysicsEngine {
 					continue;
 				}
 
-				if (obj.isColliding(other, dt)) {
-					// Winner is bigger one, loser is smaller one
+				if (!obj.isColliding(other, dt)) {
+					continue;
+				}
+
+				// Winner is bigger one, loser is smaller one
 					let winner, loser;
 					if (obj.mass >= other.mass) {
 						winner = obj;
@@ -314,7 +319,6 @@ export class PhysicsEngine {
 						loser.impactWinnerY = winner.y;
 						loser.impactWinnerRadius = winner.radius;
 					}
-				}
 			}
 		}
 	}
@@ -740,7 +744,7 @@ export class PhysicsEngine {
 /*******************************************************************
  * Simulation Controller
  *******************************************************************/
-class SimulationController {
+export class SimulationController {
 	constructor() {
 		this.engine = new PhysicsEngine();
 		this.lastTime = Date.now(); // ms
@@ -748,9 +752,19 @@ class SimulationController {
 		this.isPaused = false;
 		this.profiler = new WorkerProfiler();
 		this.currentSubSteps = SIMULATION.SUB_STEPS?.BASE || 40;
+		this.timer = null;
 
-		self.onmessage = this.handleMessage.bind(this);
-		setInterval(() => this.update(), 1000 / SIMULATION.CALC_INTERVAL);
+		if (typeof self !== 'undefined' && typeof self.postMessage === 'function' && typeof document === 'undefined') {
+			self.onmessage = this.handleMessage.bind(this);
+			this.timer = setInterval(() => this.update(), 1000 / SIMULATION.CALC_INTERVAL);
+		}
+	}
+
+	destroy() {
+		if (this.timer) {
+			clearInterval(this.timer);
+			this.timer = null;
+		}
 	}
 
 	handleMessage(e) {
@@ -772,7 +786,7 @@ class SimulationController {
 				break;
 			case 'pause':
 				this.isPaused = data.value;
-				if (!this.isPaused) this.lastTime = Date.now();
+				this.lastTime = Date.now();
 				break;
 			case 'toggleProfiler':
 				this.profiler.enabled = data.value;
@@ -807,7 +821,10 @@ class SimulationController {
 	}
 
 	update() {
-		if (this.isPaused) { return; }
+		if (this.isPaused) {
+			this.lastTime = Date.now();
+			return;
+		}
 
 		const now = Date.now();
 		const elapsed = Math.min(now - this.lastTime, SIMULATION.MAX_FRAME_ELAPSED_MS);

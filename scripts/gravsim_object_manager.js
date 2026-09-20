@@ -88,6 +88,8 @@ export class ObjectManager {
 			hostId: obj.hostId !== undefined ? obj.hostId : null,
 			hostAngleRad: obj.hostAngleRad || 0,
 			hostAltM: obj.hostAltM || 0,
+			bottomOffsetM: obj.bottomOffsetM || 0,
+			baseRadiusM: obj.baseRadiusM || 0,
 			isHoldDown: obj.isHoldDown || false,
 			isIgnited: obj.isIgnited !== undefined ? obj.isIgnited : true,
 			stages: obj.stages,
@@ -135,6 +137,8 @@ export class ObjectManager {
 	updateObjectParams(data) {
 		this.physicsSequence++;
 
+		const isPaused = Boolean(this.universe && this.universe.isPaused);
+
 		const applyOneObject = (objData) => {
 			const target = this.objects.find(t => t.id === objData.id);
 			if (target) {
@@ -144,7 +148,7 @@ export class ObjectManager {
 					this._applyRocketState(target, objData);
 				}
 
-				target.updateHistory(this.physicsSequence, this.objects);
+				target.updateHistory(this.physicsSequence, this.objects, isPaused);
 
 				if (objData.isCollided) {
 					if (objData.isImpact && target.state === OBJECT_STATE.ACTIVE) {
@@ -189,6 +193,8 @@ export class ObjectManager {
 					debColor = theme.fairingGrad[0] || '#e8ebed';
 				}
 
+				const debRadius = objData.radius || activeRocket?.baseRadiusM || MULTISTAGE_ROCKET.DEFAULT_STAGE_RADIUS_M;
+
 				const deb = new Debris(
 					objData.id,
 					spec.name,
@@ -196,7 +202,7 @@ export class ObjectManager {
 					massT,
 					debColor,
 					spec.size,
-					objData.radius || MULTISTAGE_ROCKET.DEFAULT_STAGE_RADIUS_M,
+					debRadius,
 					objData.generation || 1,
 					'#00ffcc',
 					0,
@@ -239,6 +245,9 @@ export class ObjectManager {
 		}
 		
 		target.radius = objData.radius;
+		if (objData.type === OBJECT_TYPES.DEBRIS) {
+			target.baseRadiusM = objData.radius;
+		}
 		target.inAtmosphere = objData.inAtmosphere;
 		target.isEscaping = objData.isEscaping;
 		target.dominantBodyId = objData.dominantBodyId;

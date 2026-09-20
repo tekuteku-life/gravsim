@@ -3,7 +3,7 @@
 // Inherits and reuses PhysicsEngine to ensure 100% consistent physics behavior without duplicate code.
 
 import {
-	PHYSICS, DEFAULT_FLIGHT_EVENTS, TRAJECTORY_PREDICTION
+	PHYSICS, DEFAULT_FLIGHT_EVENTS, TRAJECTORY_PREDICTION, DEFAULT_OBJECT_PARAMS
 } from './gravsim_const.js';
 import { PhysicsEngine } from './gravsim_calc.js';
 import { CalcCelestialBody, CalcRocket } from './gravsim_calc_object.js';
@@ -167,14 +167,18 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 	const nearBodyTimeThreshold = Math.max(TRAJECTORY_PREDICTION.SAMPLING.TIME_NEAR_BODY_S || 30.0, Math.min(scaledCoastSampleTime / 10, 1800.0));
 
 	// Instantiate celestial body objects in world coordinates
-	const bodies = celestialBodies.map(b => new CalcCelestialBody(
-		b.id, b.name,
-		b.x, b.y,
-		b.vx, b.vy,
-		0, 0,
-		b.radius, 0,
-		b.massKg !== undefined ? b.massKg : UnitConvertUtils.ton2kg(b.mass || 0)
-	));
+	const bodies = celestialBodies.map(b => {
+		const cb = new CalcCelestialBody(
+			b.id, b.name,
+			b.x, b.y,
+			b.vx, b.vy,
+			0, 0,
+			b.radius, 0,
+			b.massKg !== undefined ? b.massKg : UnitConvertUtils.ton2kg(b.mass || 0)
+		);
+		cb.rotationAngle = b.rotationAngle || 0;
+		return cb;
+	});
 
 	const hostBody = bodies.find(b => b.id === hostId);
 	if (!hostBody) {
@@ -191,7 +195,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 		rocketConfig.x, rocketConfig.y,
 		rocketConfig.vx, rocketConfig.vy,
 		0, 0,
-		rocketConfig.radius || 1, 0,
+		rocketConfig.bottomOffsetM || rocketConfig.radius || 31.5, 0,
 		dryMassT, fuelMassT, oxidMassT,
 		{
 			ofRatio: rocketConfig.ofRatio || 0,
@@ -203,13 +207,15 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			massLossRate: rocketConfig.massLossRateKg || 0,
 			autoControl: true,
 			hostId: hostId,
+			bottomOffsetM: rocketConfig.bottomOffsetM || 31.5,
 			hostAngleRad: rocketConfig.hostAngleRad || 0,
 			hostAltM: rocketConfig.hostAltM || 0,
 			isHoldDown: false,
 			isIgnited: true,
 			stages: rocketConfig.stages,
 			payload: rocketConfig.payload,
-			fairing: rocketConfig.fairing
+			fairing: rocketConfig.fairing,
+			baseRadiusM: rocketConfig.baseRadiusM
 		}
 	);
 
@@ -249,26 +255,41 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 	const recordedStageMeco = new Set();
 	const recordedStageSep = new Set();
 	const recordedStageSes = new Set();
+	const hostParam = DEFAULT_OBJECT_PARAMS[hostBody.name];
+	const hostOmega = (hostParam && hostParam.ROTATION_PERIOD) ? (2 * Math.PI) / hostParam.ROTATION_PERIOD : 0;
+	const hostInitRot = hostBody.rotationAngle || 0;
+	const initDistHostPx = UnitConvertUtils.m2pix(initDistHostM);
+
+	let curRelX_m = initRelX_m;
+	let curRelY_m = initRelY_m;
+	let curDistHostM = initDistHostM;
+	let curDistHostPx = initDistHostPx;
+	let curRotAngle = 0;
+	let curInertialPhi = initialZenith;
+	let curPhiSurf = initialZenith - hostInitRot;
+	let simTime = 0;
+	let stepCount = 0;
+
+	const makeEvent = (ruleId, ruleName, ruleType, alt) => ({
+		id: ruleId,
+		name: ruleName,
+		type: ruleType,
+		worldX: UnitConvertUtils.m2pix(rocket.x),
+		worldY: UnitConvertUtils.m2pix(rocket.y),
+		relX: UnitConvertUtils.m2pix(curRelX_m),
+		relY: UnitConvertUtils.m2pix(curRelY_m),
+		r: curDistHostPx,
+		phiSurf: curPhiSurf,
+		time: simTime,
+		altM: alt,
+		passed: false
+	});
 
 	// Initial Liftoff Event
 	const liftoffRule = eventRules.find(r => r.type === 'liftoff');
 	if (liftoffRule) {
-		detectedEventsMap.set(liftoffRule.id, {
-			id: liftoffRule.id,
-			name: liftoffRule.name,
-			type: liftoffRule.type,
-			worldX: UnitConvertUtils.m2pix(rocket.x),
-			worldY: UnitConvertUtils.m2pix(rocket.y),
-			relX: UnitConvertUtils.m2pix(initRelX_m),
-			relY: UnitConvertUtils.m2pix(initRelY_m),
-			time: 0,
-			altM: initDistHostM - hostBody.radius,
-			passed: false
-		});
+		detectedEventsMap.set(liftoffRule.id, makeEvent(liftoffRule.id, liftoffRule.name, liftoffRule.type, initDistHostM - hostBody.radius));
 	}
-
-	let simTime = 0;
-	let stepCount = 0;
 
 	// Initial sample point
 	points.push({
@@ -276,6 +297,8 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 		worldY: UnitConvertUtils.m2pix(rocket.y),
 		relX: UnitConvertUtils.m2pix(initRelX_m),
 		relY: UnitConvertUtils.m2pix(initRelY_m),
+		r: initDistHostPx,
+		phiSurf: curPhiSurf,
 		altM: initDistHostM - hostBody.radius,
 		time: 0,
 		domId: hostBody.id
@@ -307,9 +330,13 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 		simTime += dt;
 
 		// Recompute host-relative position after step
-		const curRelX_m = rocket.x - hostBody.x;
-		const curRelY_m = rocket.y - hostBody.y;
-		const curDistHostM = Math.hypot(curRelX_m, curRelY_m);
+		curRelX_m = rocket.x - hostBody.x;
+		curRelY_m = rocket.y - hostBody.y;
+		curDistHostM = Math.hypot(curRelX_m, curRelY_m);
+		curDistHostPx = UnitConvertUtils.m2pix(curDistHostM);
+		curRotAngle = hostOmega * simTime;
+		curInertialPhi = Math.atan2(curRelY_m, curRelX_m);
+		curPhiSurf = curInertialPhi - (hostInitRot + curRotAngle);
 		const curAltM = curDistHostM - hostBody.radius;
 
 		// Unit radial and horizontal vectors relative to host
@@ -331,18 +358,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			const impactId = isHostImpact ? (impactRule ? impactRule.id : 'impact') : `impact_${closestBody?.id}`;
 
 			if (!detectedEventsMap.has(impactId)) {
-				detectedEventsMap.set(impactId, {
-					id: impactId,
-					name: impactName,
-					type: 'impact',
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: Math.max(0, curAltM),
-					passed: false
-				});
+				detectedEventsMap.set(impactId, makeEvent(impactId, impactName, 'impact', Math.max(0, curAltM)));
 			}
 
 			points.push({
@@ -350,6 +366,8 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 				worldY: UnitConvertUtils.m2pix(rocket.y),
 				relX: UnitConvertUtils.m2pix(curRelX_m),
 				relY: UnitConvertUtils.m2pix(curRelY_m),
+				r: curDistHostPx,
+				phiSurf: curPhiSurf,
 				altM: Math.max(0, curAltM),
 				time: simTime,
 				domId: closestBody ? closestBody.id : hostBody.id
@@ -366,18 +384,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			if (angleDiff > TRAJECTORY_PREDICTION.EVENTS.PITCH_ANGLE_RAD || (pitchRule && (pitchRule.minAngleDeg ? UnitConvertUtils.rad2deg(angleDiff) >= pitchRule.minAngleDeg : curAltM >= TRAJECTORY_PREDICTION.EVENTS.PITCH_MIN_ALT_M))) {
 				hasPitched = true;
 				if (pitchRule && !detectedEventsMap.has(pitchRule.id)) {
-					detectedEventsMap.set(pitchRule.id, {
-						id: pitchRule.id,
-						name: pitchRule.name,
-						type: pitchRule.type,
-						worldX: UnitConvertUtils.m2pix(rocket.x),
-						worldY: UnitConvertUtils.m2pix(rocket.y),
-						relX: UnitConvertUtils.m2pix(curRelX_m),
-						relY: UnitConvertUtils.m2pix(curRelY_m),
-						time: simTime,
-						altM: curAltM,
-						passed: false
-					});
+					detectedEventsMap.set(pitchRule.id, makeEvent(pitchRule.id, pitchRule.name, pitchRule.type, curAltM));
 				}
 			}
 		}
@@ -388,18 +395,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			maxQPa = currentQ;
 			const maxqRule = eventRules.find(r => r.type === 'maxq');
 			if (maxqRule) {
-				maxQSnapshot = {
-					id: maxqRule.id,
-					name: maxqRule.name,
-					type: maxqRule.type,
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: curAltM,
-					passed: false
-				};
+				maxQSnapshot = makeEvent(maxqRule.id, maxqRule.name, maxqRule.type, curAltM);
 			}
 		}
 
@@ -416,18 +412,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 				const eventName = isFinalStage ? (rocket.totalStages > 1 ? 'SECO-1' : 'MECO') : `MECO-${stgIdx + 1}`;
 				
 				if (!detectedEventsMap.has(eventId)) {
-					detectedEventsMap.set(eventId, {
-						id: eventId,
-						name: eventName,
-						type: isFinalStage ? 'meco' : 'stg_meco',
-						worldX: UnitConvertUtils.m2pix(rocket.x),
-						worldY: UnitConvertUtils.m2pix(rocket.y),
-						relX: UnitConvertUtils.m2pix(curRelX_m),
-						relY: UnitConvertUtils.m2pix(curRelY_m),
-						time: simTime,
-						altM: curAltM,
-						passed: false
-					});
+					detectedEventsMap.set(eventId, makeEvent(eventId, eventName, isFinalStage ? 'meco' : 'stg_meco', curAltM));
 				}
 			}
 		}
@@ -440,18 +425,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 				const eventId = `stg_sep_${sepStageNum}`;
 				const eventName = `STG-${sepStageNum} SEP`;
 				if (!detectedEventsMap.has(eventId)) {
-					detectedEventsMap.set(eventId, {
-						id: eventId,
-						name: eventName,
-						type: 'staging',
-						worldX: UnitConvertUtils.m2pix(rocket.x),
-						worldY: UnitConvertUtils.m2pix(rocket.y),
-						relX: UnitConvertUtils.m2pix(curRelX_m),
-						relY: UnitConvertUtils.m2pix(curRelY_m),
-						time: simTime,
-						altM: curAltM,
-						passed: false
-					});
+					detectedEventsMap.set(eventId, makeEvent(eventId, eventName, 'staging', curAltM));
 				}
 			}
 		} else if (lastStageState === 'STG_MECO' && rocket.stageState === 'ORBITAL_COAST') {
@@ -459,33 +433,11 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			const sepStageNum = rocket.totalStages;
 			const stgEventId = `stg_sep_${sepStageNum}`;
 			if (!detectedEventsMap.has(stgEventId)) {
-				detectedEventsMap.set(stgEventId, {
-					id: stgEventId,
-					name: `${sepStageNum}-STG-SEP`,
-					type: 'staging',
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: curAltM,
-					passed: false
-				});
+				detectedEventsMap.set(stgEventId, makeEvent(stgEventId, `${sepStageNum}-STG-SEP`, 'staging', curAltM));
 			}
 			const payloadEventId = 'payload_sep';
 			if (!detectedEventsMap.has(payloadEventId)) {
-				detectedEventsMap.set(payloadEventId, {
-					id: payloadEventId,
-					name: 'PAYLOAD SEP',
-					type: 'staging',
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: curAltM,
-					passed: false
-				});
+				detectedEventsMap.set(payloadEventId, makeEvent(payloadEventId, 'PAYLOAD SEP', 'staging', curAltM));
 			}
 		}
 
@@ -497,18 +449,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 				const eventId = `ses_${stgNum - 1}`;
 				const eventName = `SES-${stgNum - 1}`;
 				if (!detectedEventsMap.has(eventId)) {
-					detectedEventsMap.set(eventId, {
-						id: eventId,
-						name: eventName,
-						type: 'ignition',
-						worldX: UnitConvertUtils.m2pix(rocket.x),
-						worldY: UnitConvertUtils.m2pix(rocket.y),
-						relX: UnitConvertUtils.m2pix(curRelX_m),
-						relY: UnitConvertUtils.m2pix(curRelY_m),
-						time: simTime,
-						altM: curAltM,
-						passed: false
-					});
+					detectedEventsMap.set(eventId, makeEvent(eventId, eventName, 'ignition', curAltM));
 				}
 			}
 		}
@@ -518,18 +459,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			hasSeparatedFairing = true;
 			const eventId = 'fairing_sep';
 			if (!detectedEventsMap.has(eventId)) {
-				detectedEventsMap.set(eventId, {
-					id: eventId,
-					name: 'FAIRING JETTISON',
-					type: 'fairing',
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: curAltM,
-					passed: false
-				});
+				detectedEventsMap.set(eventId, makeEvent(eventId, 'FAIRING JETTISON', 'fairing', curAltM));
 			}
 		}
 
@@ -539,18 +469,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 		if (simTime > TRAJECTORY_PREDICTION.EVENTS.APOAPSIS_MIN_TIME_S && prevVv >= 0 && vV < 0 && curAltM > TRAJECTORY_PREDICTION.EVENTS.APOAPSIS_MIN_ALT_M) {
 			const apRule = eventRules.find(r => r.type === 'apoapsis' || r.type === 'ap');
 			if (apRule && !detectedEventsMap.has(apRule.id)) {
-				detectedEventsMap.set(apRule.id, {
-					id: apRule.id,
-					name: apRule.name,
-					type: apRule.type,
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: curAltM,
-					passed: false
-				});
+				detectedEventsMap.set(apRule.id, makeEvent(apRule.id, apRule.name, apRule.type, curAltM));
 			}
 		}
 		prevVv = vV;
@@ -562,31 +481,9 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			const targetTime = rule.value !== undefined ? rule.value : rule.time;
 
 			if (rule.type === 'alt' && targetAlt !== undefined && curAltM >= targetAlt) {
-				detectedEventsMap.set(rule.id, {
-					id: rule.id,
-					name: rule.name,
-					type: rule.type,
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: curAltM,
-					passed: false
-				});
+				detectedEventsMap.set(rule.id, makeEvent(rule.id, rule.name, rule.type, curAltM));
 			} else if (rule.type === 'time' && targetTime !== undefined && simTime >= targetTime) {
-				detectedEventsMap.set(rule.id, {
-					id: rule.id,
-					name: rule.name,
-					type: rule.type,
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: curAltM,
-					passed: false
-				});
+				detectedEventsMap.set(rule.id, makeEvent(rule.id, rule.name, rule.type, curAltM));
 			}
 		}
 
@@ -599,18 +496,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			isOrbital = true;
 			const orbitRule = eventRules.find(r => r.type === 'orbit');
 			if (orbitRule && !detectedEventsMap.has(orbitRule.id)) {
-				detectedEventsMap.set(orbitRule.id, {
-					id: orbitRule.id,
-					name: orbitRule.name,
-					type: orbitRule.type,
-					worldX: UnitConvertUtils.m2pix(rocket.x),
-					worldY: UnitConvertUtils.m2pix(rocket.y),
-					relX: UnitConvertUtils.m2pix(curRelX_m),
-					relY: UnitConvertUtils.m2pix(curRelY_m),
-					time: simTime,
-					altM: curAltM,
-					passed: false
-				});
+				detectedEventsMap.set(orbitRule.id, makeEvent(orbitRule.id, orbitRule.name, orbitRule.type, curAltM));
 			}
 		}
 
@@ -638,6 +524,8 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 				worldY: UnitConvertUtils.m2pix(rocket.y),
 				relX: UnitConvertUtils.m2pix(curRelX_m),
 				relY: UnitConvertUtils.m2pix(curRelY_m),
+				r: curDistHostPx,
+				phiSurf: curPhiSurf,
 				altM: curAltM,
 				time: simTime,
 				domId: rocket.dominantBody ? rocket.dominantBody.id : hostBody.id
@@ -650,12 +538,19 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 	// Always ensure the final position is included
 	const finalRelX_m = rocket.x - hostBody.x;
 	const finalRelY_m = rocket.y - hostBody.y;
+	const finalDistHostM = Math.hypot(finalRelX_m, finalRelY_m);
+	const finalDistHostPx = UnitConvertUtils.m2pix(finalDistHostM);
+	const finalRotAngle = hostOmega * simTime;
+	const finalInertialPhi = Math.atan2(finalRelY_m, finalRelX_m);
+	const finalPhiSurf = finalInertialPhi - (hostInitRot + finalRotAngle);
 	points.push({
 		worldX: UnitConvertUtils.m2pix(rocket.x),
 		worldY: UnitConvertUtils.m2pix(rocket.y),
 		relX: UnitConvertUtils.m2pix(finalRelX_m),
 		relY: UnitConvertUtils.m2pix(finalRelY_m),
-		altM: Math.hypot(finalRelX_m, finalRelY_m) - hostBody.radius,
+		r: finalDistHostPx,
+		phiSurf: finalPhiSurf,
+		altM: finalDistHostM - hostBody.radius,
 		time: simTime,
 		domId: rocket.dominantBody ? rocket.dominantBody.id : hostBody.id
 	});

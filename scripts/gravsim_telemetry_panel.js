@@ -656,7 +656,7 @@ export class TelemetryPanel {
 		// 14. SECO (Second Engine Cutoff)
 		const isSeco = isLaunched && totalStages > 1 && (
 			(curStage > 1) ||
-			(curStage === 1 && (!isEngThrusting && (tm.status === TELEMETRY.STATUS.MECO || tm.status === TELEMETRY.STATUS.COASTING || target.fuelMass <= 0.01 || target.burnTime <= 0)))
+			(curStage === 1 && (target.stageState === 'STG_MECO' || target.stageState === 'ORBITAL_COAST' || (target.burnTime !== undefined && target.burnTime <= 0) || (target.fuelMass !== undefined && target.fuelMass <= 0.01 && !isEngThrusting)))
 		);
 		this._setLamp('seco', isSeco, false);
 

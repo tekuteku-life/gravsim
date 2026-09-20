@@ -5,7 +5,7 @@ import {
 	PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS,
 	ROCKET_FUELS, LAUNCH_SEQUENCES, EVENT_PRIORITY,
 	TRAJECTORY_PREDICTION, OBJECT_TYPES, OBJECT_STATE,
-	MULTISTAGE_PRESETS
+	MULTISTAGE_PRESETS, ROCKET_VISUAL
 } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
@@ -89,13 +89,18 @@ export class RocketLauncher {
 					}
 					const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.camera.trackingTarget;
 					if (this.currentPrediction && host) {
-						// Zero simulation cost: geometrically bake rotation difference from rollout to liftoff (0.05ms)
-						const currentAngle = Math.atan2(rocket.y - host.y, rocket.x - host.x);
-						const baseAngle = this.currentPrediction.baseHostAngleRad !== undefined
-							? this.currentPrediction.baseHostAngleRad
-							: currentAngle;
-						const rotOffset = currentAngle - baseAngle;
-						rocket.predictedTrajectory = TrajectoryPredictor.rotatePrediction(this.currentPrediction, rotOffset);
+						const hasPhiSurf = this.currentPrediction.points?.[0]?.phiSurf !== undefined;
+						if (hasPhiSurf) {
+							rocket.predictedTrajectory = this.currentPrediction;
+						} else {
+							// Legacy fallback: geometrically bake rotation difference from rollout to liftoff
+							const currentAngle = Math.atan2(rocket.y - host.y, rocket.x - host.x);
+							const baseAngle = this.currentPrediction.baseHostAngleRad !== undefined
+								? this.currentPrediction.baseHostAngleRad
+								: currentAngle;
+							const rotOffset = currentAngle - baseAngle;
+							rocket.predictedTrajectory = TrajectoryPredictor.rotatePrediction(this.currentPrediction, rotOffset);
+						}
 					}
 				}
 				// Release pad for next launch
@@ -162,6 +167,35 @@ export class RocketLauncher {
 		this.freeY = y;
 	}
 
+	getBaseRadiusM() {
+		const preset = MULTISTAGE_PRESETS[this.currentPresetId];
+		if (preset?.lengthM) {
+			return preset.lengthM;
+		}
+		if (this.stages && this.stages[0]?.rocketLengthM) {
+			return this.stages[0].rocketLengthM;
+		}
+		const param = DEFAULT_OBJECT_PARAMS['Rocket'];
+		return param?.RADIUS || 63;
+	}
+
+	getRocketLengthM() {
+		return this.getBaseRadiusM();
+	}
+
+	getBottomOffsetM() {
+		const preset = MULTISTAGE_PRESETS[this.currentPresetId];
+		const totalStg = preset?.stages?.length || this.stages?.length || 2;
+		const offsets = ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET;
+		let mult = offsets.TWO_STAGE;
+		if (totalStg === 1) {
+			mult = offsets.SINGLE_STAGE;
+		} else if (totalStg >= 3) {
+			mult = offsets.THREE_STAGE;
+		}
+		return this.getBaseRadiusM() * mult;
+	}
+
 	// Calculate absolute position and base velocity
 	_calculateTransform() {
 		let posX = this.freeX;
@@ -177,10 +211,14 @@ export class RocketLauncher {
 		const m0 = UnitConvertUtils.ton2kg(this.dryMassT + this.fuelMassT + this.oxidMassT); // Initial mass in kg
 		const mf = UnitConvertUtils.ton2kg(this.dryMassT); // Final mass in kg
 
-		// Calculate Max Burn Time based on Thrust and Isp
-		const massFlowRateKgS = UnitConvertUtils.kn2n(this.thrustKN) / ve;
-		const totalPropellantT = this.fuelMassT + this.oxidMassT;
-		this.calculatedBurnTime = massFlowRateKgS > 0 ? UnitConvertUtils.ton2kg(totalPropellantT) / massFlowRateKgS : 0;
+		// Calculate Max Burn Time: preserve stage designed burnTime if configured, otherwise compute from thrust and Isp
+		if (this.stages && this.stages[0] && this.stages[0].burnTime > 0) {
+			this.calculatedBurnTime = this.stages[0].burnTime;
+		} else {
+			const massFlowRateKgS = UnitConvertUtils.kn2n(this.thrustKN) / ve;
+			const totalPropellantT = this.fuelMassT + this.oxidMassT;
+			this.calculatedBurnTime = massFlowRateKgS > 0 ? UnitConvertUtils.ton2kg(totalPropellantT) / massFlowRateKgS : 0;
+		}
 		
 		if (this.calculatedBurnTime > 0 && this.thrustKN > 0) {
 			deltaVM = ve * Math.log(m0 / mf);
@@ -192,7 +230,8 @@ export class RocketLauncher {
 				// Canvas 0 deg is right, -90 deg is up. Convert user zenith(0) to canvas(-90).
 				const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
 				const angleRad = UnitConvertUtils.deg2rad(hAngleCanvas);
-				const distance = host.radius + (param.RADIUS || 1) + this.hostAltitudeM;
+				const bottomOffsetM = this.getBottomOffsetM();
+				const distance = host.radius + bottomOffsetM + Math.max(0.01, this.hostAltitudeM);
 				
 				const distPx = UnitConvertUtils.m2pix(distance);
 				const dxPx = Math.cos(angleRad) * distPx;
@@ -204,7 +243,7 @@ export class RocketLauncher {
 				baseVx = host.vx;
 				baseVy = host.vy;
 
-				// Add host's rotation speed to rocket initial speed
+				// Add host's rotation speed to rocket initial speed (tangential velocity in px/s)
 				const hostParam = DEFAULT_OBJECT_PARAMS[host.name];
 				if (hostParam && hostParam.ROTATION_PERIOD) {
 					const omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
@@ -340,7 +379,9 @@ export class RocketLauncher {
 			maxSimTime: this.maxSimTimeSec,
 			stages: this.stages,
 			payload: this.payload,
-			fairing: this.fairing
+			fairing: this.fairing,
+			baseRadiusM: this.getBaseRadiusM(),
+			bottomOffsetM: this.getBottomOffsetM()
 		};
 
 		return { host, hostAngleRad, config };
@@ -438,12 +479,12 @@ export class RocketLauncher {
 				const rolloutedRocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
 				const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.camera.trackingTarget;
 				if (rolloutedRocket && rolloutedRocket.isHoldDown && this.currentPrediction && renderContext && host) {
-					// Geometrically rotate cached prediction to match current rotating pad position
+					const hasPhiSurf = this.currentPrediction.points?.[0]?.phiSurf !== undefined;
 					const currentAngle = Math.atan2(rolloutedRocket.y - host.y, rolloutedRocket.x - host.x);
 					const baseAngle = this.currentPrediction.baseHostAngleRad !== undefined
 						? this.currentPrediction.baseHostAngleRad
 						: currentAngle;
-					const rotOffset = currentAngle - baseAngle;
+					const rotOffset = hasPhiSurf ? 0 : (currentAngle - baseAngle);
 					this.predictor.render(ctx, renderContext, {
 						mode: 'preview',
 						rotationOffset: rotOffset
@@ -486,22 +527,25 @@ export class RocketLauncher {
 		const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
 		const initialAngleRad = UnitConvertUtils.deg2rad(hAngleCanvas);
 
+		const t = this._calculateTransform();
+		if (!t) { return; }
+
+		if (this.stages && this.stages[0] && this.calculatedBurnTime > 0) {
+			this.stages[0].burnTime = this.calculatedBurnTime;
+		}
+
 		const prediction = this.updatePredictionSync() || this.updatePrediction();
 		if (prediction) {
 			prediction.baseHostAngleRad = initialAngleRad;
 			this.currentPrediction = prediction;
 		}
-		const t = this._calculateTransform();
 		const massName = 'Rocket';
 
 		const fuelDef = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
 		const initialMassTon = this.dryMassT + this.fuelMassT + this.oxidMassT;
 		const finalMassTon = this.dryMassT;
 		const massLossRateTon = this.calculatedBurnTime > 0 ? (initialMassTon - finalMassTon) / this.calculatedBurnTime : 0;
-
-		if (this.stages && this.stages[0] && this.calculatedBurnTime > 0) {
-			this.stages[0].burnTime = this.calculatedBurnTime;
-		}
+		const bottomOffsetM = this.getBottomOffsetM();
 
 		const optParams = {
 			force: UnitConvertUtils.kn2n(this.thrustKN),
@@ -519,6 +563,8 @@ export class RocketLauncher {
 			hostId: this.hostId,
 			hostAngleRad: UnitConvertUtils.deg2rad(hAngleCanvas),
 			hostAltM: this.hostAltitudeM,
+			baseRadiusM: this.getBaseRadiusM(),
+			bottomOffsetM: bottomOffsetM,
 			isHoldDown: true,
 			isIgnited: false,
 			stages: this.stages,

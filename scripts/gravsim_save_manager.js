@@ -61,7 +61,9 @@ export class SaveManager {
 				}
 			} catch (err) {
 				console.error("Failed to load state:", err);
-				alert("Invalid save file.");
+				if (typeof alert === 'function') {
+					alert("Invalid save file.");
+				}
 			}
 			e.target.value = '';
 		};

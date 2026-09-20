@@ -256,6 +256,8 @@ export class Rocket extends GravSimObject {
 		this.hostId = null;
 		this.hostAngleRad = 0;
 		this.hostAltM = 0;
+		this.bottomOffsetM = 0;
+		this.baseRadiusM = 0;
 		this.isHoldDown = false;
 		this.isIgnited = true;
 		this.isInternalPower = false;
@@ -309,7 +311,7 @@ export class Rocket extends GravSimObject {
 	 * and maintain balanced visual scale across all zoom levels.
 	 */
 	_getDrawRadius(zoomScale) {
-		const baseRadiusM = DEFAULT_OBJECT_PARAMS['Rocket']?.RADIUS || 63;
+		const baseRadiusM = this.baseRadiusM || DEFAULT_OBJECT_PARAMS['Rocket']?.RADIUS || 63;
 		const realRadiusPx = (baseRadiusM / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 		const physicalScreenRadius = realRadiusPx * zoomScale;
 		const minSize = ROCKET_VISUAL.MIN_SCREEN_RADIUS || 5.5;
@@ -331,7 +333,7 @@ export class Rocket extends GravSimObject {
 	}
 
 	// Override updateHistory exclusively for Rocket logic
-	updateHistory(currentFrame, objects) {
+	updateHistory(currentFrame, objects, isPaused = false) {
 		if (this.isHoldDown && !this.isIgnited) {
 			return;
 		}
@@ -344,7 +346,9 @@ export class Rocket extends GravSimObject {
 		}
 
 		this.trajectory.addPoint(this.x, this.y, currentFrame, mode);
-		this._recordActualFlightPath(objects);
+		if (!isPaused) {
+			this._recordActualFlightPath(objects);
+		}
 
 		const isBurning = this.isIgnited && this.burnTime > 0;
 
@@ -368,22 +372,61 @@ export class Rocket extends GravSimObject {
 				}
 			}
 
-			// Offset to nozzle
+			// Offset to nozzle & flame tip
 			const curStgIdx = this.telemetry?.stageIndex !== undefined ? this.telemetry.stageIndex : (this.currentStageIndex || 0);
-			const hasStage1 = (curStgIdx === 0);
-			const nozzleMult = hasStage1 ? RENDER.ROCKET.SMOKE_NOZZLE_OFFSET_STAGE1 : RENDER.ROCKET.SMOKE_NOZZLE_OFFSET_STAGE2;
-			let totalOffsetMult = nozzleMult;
+			const totalStg = this.telemetry?.totalStages || this.stages?.length || 2;
+			const align = ROCKET_VISUAL.ALIGNMENT;
+			const offsets = align.NOZZLE_BOTTOM_OFFSET;
+			let mult = offsets.TWO_STAGE;
+			if (totalStg === 1) {
+				mult = offsets.SINGLE_STAGE;
+			} else if (totalStg >= 3) {
+				mult = offsets.THREE_STAGE;
+			}
+
+			const baseRadiusM = this.baseRadiusM || (this.bottomOffsetM ? this.bottomOffsetM / mult : (DEFAULT_OBJECT_PARAMS['Rocket']?.RADIUS || 63));
+
+			// Determine nozzle offset ratio and plume scale for current active stage
+			let stageNozzleRatio = mult;
+			let plumeScale = align.MAIN_PLUME_SCALE ?? 1.0;
+
+			if (totalStg === 1) {
+				stageNozzleRatio = offsets.SINGLE_STAGE;
+				plumeScale = align.MAIN_PLUME_SCALE ?? 1.0;
+			} else if (totalStg === 2) {
+				if (curStgIdx === 0) {
+					stageNozzleRatio = offsets.TWO_STAGE;
+					plumeScale = align.MAIN_PLUME_SCALE ?? 1.0;
+				} else {
+					stageNozzleRatio = Math.abs(align.BASE_X_UPPER_RATIO - ROCKET_VISUAL.MODULES.NOZZLE2_LENGTH_RATIO);
+					plumeScale = align.UPPER_PLUME_SCALE ?? 0.65;
+				}
+			} else if (totalStg >= 3) {
+				if (curStgIdx === 0) {
+					stageNozzleRatio = offsets.THREE_STAGE;
+					plumeScale = align.MAIN_PLUME_SCALE ?? 1.0;
+				} else if (curStgIdx === 1) {
+					stageNozzleRatio = Math.abs((align.BASE_X_3STG_STAGE2_RATIO ?? -1.6) - ROCKET_VISUAL.MODULES.NOZZLE2_LENGTH_RATIO);
+					plumeScale = align.UPPER_PLUME_SCALE ?? 0.65;
+				} else {
+					stageNozzleRatio = Math.abs((align.BASE_X_3STG_STAGE3_RATIO ?? -0.9) - (ROCKET_VISUAL.MODULES.NOZZLE3_LENGTH_RATIO || 0.28));
+					plumeScale = align.STAGE3_PLUME_SCALE ?? 0.50;
+				}
+			}
+
+			const nozzleDistM = baseRadiusM * stageNozzleRatio;
+			let flameLenM = 0;
 
 			if (isBurning) {
 				const curFuel = (this.stages && this.stages[curStgIdx]?.fuelType) || this.fuelType || 'liquid';
 				const cfg = ROCKET_VISUAL.PLUMES[curFuel] || ROCKET_VISUAL.PLUMES.liquid;
-				const scale = hasStage1 ? 1.0 : 0.65;
 				const throttle = this.thrustRatio || 1.0;
-				const flameLenMult = cfg.lenMult * scale * throttle;
-				totalOffsetMult += flameLenMult;
+				flameLenM = baseRadiusM * cfg.lenMult * plumeScale * throttle;
 			}
 
-			const offsetDistPx = UnitConvertUtils.m2pix(this.radius * totalOffsetMult);
+			// Emit smoke directly at the tip of the flame (or nozzle if engine is not firing)
+			const tipDistM = nozzleDistM + flameLenM;
+			const offsetDistPx = UnitConvertUtils.m2pix(tipDistM);
 			const offsetX = -Math.cos(this.thrustAngle) * offsetDistPx;
 			const offsetY = -Math.sin(this.thrustAngle) * offsetDistPx;
 
@@ -427,6 +470,10 @@ export class Rocket extends GravSimObject {
 
 		const relX_px = this.x - host.x;
 		const relY_px = this.y - host.y;
+		const r_px = Math.hypot(relX_px, relY_px);
+		const phi_inertial = Math.atan2(relY_px, relX_px);
+		const hostRot = host.rotationAngle || 0;
+		const phi_surf = phi_inertial - hostRot;
 
 		if (!this.actualFlightPath) {
 			this.actualFlightPath = [];
@@ -438,25 +485,39 @@ export class Rocket extends GravSimObject {
 				worldX: this.x,
 				worldY: this.y,
 				relX: relX_px,
-				relY: relY_px
+				relY: relY_px,
+				r: r_px,
+				phiSurf: phi_surf
 			});
 		} else {
 			const last = this.actualFlightPath[len - 1];
-			const dx_m = UnitConvertUtils.pix2m(relX_px - last.relX);
-			const dy_m = UnitConvertUtils.pix2m(relY_px - last.relY);
+			const lastSurfX = (last.r !== undefined && last.phiSurf !== undefined)
+				? last.r * Math.cos(last.phiSurf)
+				: last.relX;
+			const lastSurfY = (last.r !== undefined && last.phiSurf !== undefined)
+				? last.r * Math.sin(last.phiSurf)
+				: last.relY;
+			const curSurfX = r_px * Math.cos(phi_surf);
+			const curSurfY = r_px * Math.sin(phi_surf);
+			const dx_m = UnitConvertUtils.pix2m(curSurfX - lastSurfX);
+			const dy_m = UnitConvertUtils.pix2m(curSurfY - lastSurfY);
 
-			// Sample points when moved at least 10m relative to host
-			if ((dx_m * dx_m + dy_m * dy_m) >= 100) {
+			// Sample points when moved at least configured threshold relative to host
+			const minSampleDistM = RENDER.PREDICTED_TRAJECTORY.ACTUAL_SAMPLE_MIN_DIST_M || 5.0;
+			if ((dx_m * dx_m + dy_m * dy_m) >= (minSampleDistM * minSampleDistM)) {
 				this.actualFlightPath.push({
 					worldX: this.x,
 					worldY: this.y,
 					relX: relX_px,
-					relY: relY_px
+					relY: relY_px,
+					r: r_px,
+					phiSurf: phi_surf
 				});
 			}
 		}
 
-		if (this.actualFlightPath.length > 6000) {
+		const maxActualPoints = RENDER.PREDICTED_TRAJECTORY.ACTUAL_MAX_POINTS || 6000;
+		if (this.actualFlightPath.length > maxActualPoints) {
 			this.actualFlightPath = this.actualFlightPath.filter((_, idx) => idx % 2 === 0 || idx === len - 1);
 		}
 	}
@@ -519,6 +580,7 @@ export class Debris extends GravSimObject {
 		this._mass = mass; // t
 		this.debrisSubType = debrisSubType; // 0: Rock, 1: Booster, 2: Upper Stage, 3: Fairing
 		this.colorTheme = colorTheme || 'orange';
+		this.baseRadiusM = radius;
 		this.polygonVertices = [];
 
 		if (this.debrisSubType === 0) {
@@ -538,7 +600,8 @@ export class Debris extends GravSimObject {
 	set mass(val) { this._mass = val; }
 
 	_getDrawRadius(zoomScale) {
-		const realRadiusPx = (this.radius / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
+		const baseRad = this.baseRadiusM || this.radius;
+		const realRadiusPx = (baseRad / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 		const screenRadiusPx = realRadiusPx * zoomScale;
 
 		// Match exactly with base GravSimObject scaling

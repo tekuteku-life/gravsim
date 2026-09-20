@@ -11,9 +11,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { QuadTreePool, Rectangle } from '../../scripts/gravsim_calc_quadtree.js';
-import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
+import { PhysicsEngine, SimulationController } from '../../scripts/gravsim_calc.js';
 import { WorkerBridge } from '../../scripts/gravsim_worker_bridge.js';
-import { MathUtils, UnitConvertUtils, FormatUtils, DOMUtils } from '../../scripts/gravsim_utils.js';
+import { MathUtils, UnitConvertUtils, FormatUtils, DOMUtils, normalizeRocketConfig } from '../../scripts/gravsim_utils.js';
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
 import { WorkerProfiler } from '../../scripts/gravsim_profiler.js';
 import { runMultiBodySimulation } from '../../scripts/gravsim_calc_predictor.js';
@@ -687,6 +687,222 @@ describe('Unit 01: Core Physics, QuadTree, Buffer Interop & Utilities', () => {
 		assert.ok(result.events.some(e => e.id === 'liftoff'));
 		assert.ok(result.events.some(e => e.id === 'alt_pass'));
 		assert.ok(result.events.some(e => e.id === 'time_pass'));
+	});
+
+	it('should verify PhysicsEngine collision filtering between rocket and jettisoned stages/debris', () => {
+		const engine = new PhysicsEngine();
+		// Rocket
+		engine.addObject({
+			id: 10,
+			name: 'Falcon 9',
+			type: OBJECT_TYPES.ROCKET,
+			x: 0,
+			y: 0,
+			vx: 0,
+			vy: 0,
+			mass: 50000,
+			radius: 20
+		});
+		// Separated stage with parentRocketId = 10
+		engine.addObject({
+			id: 11,
+			name: 'Stage 1 Booster',
+			type: OBJECT_TYPES.DEBRIS,
+			x: 5,
+			y: 5,
+			vx: 0,
+			vy: 0,
+			mass: 25000,
+			radius: 15,
+			parentRocketId: 10
+		});
+		// Separated fairing with parentRocketId = 10
+		engine.addObject({
+			id: 12,
+			name: 'Fairing Half',
+			type: OBJECT_TYPES.DEBRIS,
+			x: -5,
+			y: -5,
+			vx: 0,
+			vy: 0,
+			mass: 1000,
+			radius: 10,
+			parentRocketId: 10
+		});
+
+		engine._categorizeBodies();
+		engine._buildQuadTree(0.016);
+		engine._checkCollisions(0.016);
+
+		// No collisions should occur between rocket and its debris, nor between debris of same rocket
+		const rocket = engine.objects.find(o => o.id === 10);
+		const booster = engine.objects.find(o => o.id === 11);
+		const fairing = engine.objects.find(o => o.id === 12);
+		assert.equal(rocket.collided, false);
+		assert.equal(booster.collided, false);
+		assert.equal(fairing.collided, false);
+	});
+
+	it('should evaluate optimal sub-steps across multiple massive bodies, atmospheric tiny bodies, and high body counts', () => {
+		const engine = new PhysicsEngine();
+		// Two massive bodies
+		engine.addObject({
+			id: 1,
+			name: 'Sun',
+			type: OBJECT_TYPES.CELESTIAL,
+			x: 0,
+			y: 0,
+			vx: 0,
+			vy: 0,
+			mass: 1.989e30,
+			radius: 6.96e8
+		});
+		engine.addObject({
+			id: 2,
+			name: 'Earth',
+			type: OBJECT_TYPES.CELESTIAL,
+			x: 1.496e11,
+			y: 0,
+			vx: 0,
+			vy: 29780,
+			mass: 5.972e24,
+			radius: 6.371e6
+		});
+
+		// Tiny body in atmosphere
+		engine.addObject({
+			id: 3,
+			name: 'Rocket',
+			type: OBJECT_TYPES.ROCKET,
+			x: 1.496e11 + 6.371e6 + 5000,
+			y: 0,
+			vx: 0,
+			vy: 29780 + 1000,
+			mass: 500000,
+			radius: 20,
+			isIgnited: true,
+			isHoldDown: false,
+			thrustForce: 7600000,
+			burnTime: 100
+		});
+
+		engine._categorizeBodies();
+		const rocket = engine.objects.find(o => o.id === 3);
+		rocket.inAtmosphere = true;
+		rocket._nearestAtmBody = engine.objects.find(o => o.id === 2);
+
+		const steps1 = engine.determineOptimalSubSteps(1.0, 1.0);
+		assert.ok(steps1 >= 20);
+
+		// Stress condition with body count > BODY_COUNT_THRESHOLD
+		for (let i = 10; i < 70; i++) {
+			engine.addObject({
+				id: i,
+				name: `Debris_${i}`,
+				type: OBJECT_TYPES.DEBRIS,
+				x: 0, y: 0, vx: 0, vy: 0, mass: 10, radius: 1
+			});
+		}
+		engine._categorizeBodies();
+		const stepsStress = engine.determineOptimalSubSteps(1.0, 1.0);
+		assert.ok(stepsStress >= 20);
+	});
+
+	it('should verify SimulationController lifecycle, message handling, and worker updates', () => {
+		const origSelf = globalThis.self;
+		let postedMessages = [];
+		globalThis.self = {
+			postMessage: (msg, transfers) => {
+				postedMessages.push(msg);
+			}
+		};
+
+		const controller = new SimulationController();
+		assert.equal(controller.isPaused, false);
+
+		// Test handleMessage commands
+		controller.handleMessage({ data: { cmd: 'setTimeScale', timeScale: 2.5 } });
+		assert.equal(controller.timeScale, 2.5);
+
+		controller.handleMessage({ data: { cmd: 'pause', value: true } });
+		assert.equal(controller.isPaused, true);
+		controller.update(); // early return on pause
+
+		controller.handleMessage({ data: { cmd: 'pause', value: false } });
+		assert.equal(controller.isPaused, false);
+
+		controller.handleMessage({ data: { cmd: 'toggleProfiler', value: true } });
+		assert.equal(controller.profiler.enabled, true);
+		controller.handleMessage({ data: { cmd: 'toggleProfiler', value: false } });
+		assert.equal(controller.profiler.enabled, false);
+
+		// Add celestial body and rocket
+		controller.handleMessage({
+			data: {
+				cmd: 'add',
+				id: 1,
+				name: 'Earth',
+				type: OBJECT_TYPES.CELESTIAL,
+				x: 0, y: 0, vx: 0, vy: 0, mass: 5.972e24, radius: 6.371e6
+			}
+		});
+		controller.handleMessage({
+			data: {
+				cmd: 'add',
+				id: 2,
+				name: 'Rocket',
+				type: OBJECT_TYPES.ROCKET,
+				x: 0, y: 6.371e6 + 10, vx: 0, vy: 0, mass: 50000, radius: 20,
+				isIgnited: false, isHoldDown: true
+			}
+		});
+
+		controller.handleMessage({
+			data: { cmd: 'setRocketState', id: 2, isIgnited: true, isHoldDown: false }
+		});
+		const rocket = controller.engine.objects.find(o => o.id === 2);
+		assert.equal(rocket.isIgnited, true);
+		assert.equal(rocket.isHoldDown, false);
+
+		controller.handleMessage({
+			data: { cmd: 'rocketCommand', id: 2, command: 'PRESSURIZE_TANK' }
+		});
+
+		controller.handleMessage({
+			data: { cmd: 'update', id: 2, x: 0, y: 6.371e6 + 50, vx: 0, vy: 10, ax: 0, ay: 5, mass: 49000, radius: 20 }
+		});
+
+		// Trigger update
+		controller.lastTime = Date.now() - 50;
+		controller.update();
+		assert.ok(postedMessages.length > 0);
+		assert.equal(postedMessages[0].cmd, 'update');
+
+		// Return buffer
+		controller.handleMessage({
+			data: { cmd: 'returnBuffer', buffer: postedMessages[0].objectsData }
+		});
+
+		// Remove object
+		controller.handleMessage({ data: { cmd: 'remove', id: 2 } });
+		assert.ok(!controller.engine.objects.some(o => o.id === 2));
+
+		controller.destroy();
+		globalThis.self = origSelf;
+	});
+
+	it('should verify DOMUtils.verifyElements error reporting and normalizeRocketConfig null handling', () => {
+		// DOMUtils.verifyElements with missing element
+		const origErr = console.error;
+		let loggedErr = null;
+		console.error = (msg) => { loggedErr = msg; };
+		DOMUtils.verifyElements({ validKey: {}, missingKey: null }, 'TestPanel');
+		console.error = origErr;
+		assert.ok(loggedErr && loggedErr.includes('missingKey'));
+
+		// normalizeRocketConfig null input
+		const result = normalizeRocketConfig(null);
+		assert.equal(result, null);
 	});
 });
 

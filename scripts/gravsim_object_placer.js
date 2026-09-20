@@ -79,6 +79,7 @@ export class ObjectPlacer {
 		const nextId = this.universe.ObjectManager.getNextId();
 
 		if (param.NAME === 'Rocket' || objName === 'Rocket') {
+			const rocketRadius = options.bottomOffsetM || options.radius || 31.5;
 			obj = new Rocket(
 				nextId, param.NAME,
 				x, y,
@@ -88,12 +89,14 @@ export class ObjectPlacer {
 				options.oxidMass || 0,
 				param.COLOR,
 				minDrawSize,
-				param.RADIUS || 1,
+				rocketRadius,
 				0,
 				param.BORDER_COLOR || null,
 				param.BORDER_WIDTH || 0,
 				options.colorTheme || 'orange'
 			);
+			obj.bottomOffsetM = rocketRadius;
+			obj.baseRadiusM = options.baseRadiusM || DEFAULT_OBJECT_PARAMS['Rocket']?.RADIUS || 63;
 
 			if (options.ofRatio !== undefined) {
 				obj.ofRatio = options.ofRatio;
@@ -122,6 +125,8 @@ export class ObjectPlacer {
 			if (options.hostId !== undefined) { obj.hostId = options.hostId; }
 			if (options.hostAngleRad !== undefined) { obj.hostAngleRad = options.hostAngleRad; }
 			if (options.hostAltM !== undefined) { obj.hostAltM = options.hostAltM; }
+			if (options.bottomOffsetM !== undefined) { obj.bottomOffsetM = options.bottomOffsetM; }
+			if (options.baseRadiusM !== undefined) { obj.baseRadiusM = options.baseRadiusM; }
 			if (options.isHoldDown !== undefined) { obj.isHoldDown = options.isHoldDown; }
 			if (options.isIgnited !== undefined) { obj.isIgnited = options.isIgnited; }
 			if (options.stages !== undefined) { obj.stages = options.stages; }

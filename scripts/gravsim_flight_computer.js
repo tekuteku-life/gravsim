@@ -351,33 +351,6 @@ export class FlightComputer {
 			}
 		}
 
-		// Orbital Insertion Cutoff (SECO)
-		// When upper stage reaches safe, sustainable orbit (bound energy and perigee above atmosphere)
-		if (sensor.stageIndex !== undefined && sensor.stages && (sensor.stageIndex + 1 >= sensor.stages.length) && sensor.refBody && sensor.distToRefM > 0) {
-			const altM = sensor.distToRefM - sensor.refBody.radius;
-			if (altM >= FLIGHT_COMPUTER_CONFIG.ORBITAL_CUTOFF_MIN_ALT_M) {
-				const GM = PHYSICS.G * sensor.refBody.mass;
-				const r = sensor.distToRefM;
-				const dvx = sensor.vx - sensor.refBody.vx;
-				const dvy = sensor.vy - sensor.refBody.vy;
-				const v = Math.hypot(dvx, dvy);
-				const E = 0.5 * v * v - GM / r;
-
-				if (E < 0) {
-					const dx = sensor.x - sensor.refBody.x;
-					const dy = sensor.y - sensor.refBody.y;
-					const h = dx * dvy - dy * dvx;
-					const ecc = Math.sqrt(Math.max(0, 1 + (2 * E * h * h) / (GM * GM)));
-					const a = -GM / (2 * E);
-					const peKm = (a * (1 - ecc) - sensor.refBody.radius) / 1000;
-
-					if (peKm >= FLIGHT_COMPUTER_CONFIG.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= FLIGHT_COMPUTER_CONFIG.ORBITAL_CUTOFF_MAX_ECC && peKm >= FLIGHT_COMPUTER_CONFIG.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM)) {
-						return 0.0;
-					}
-				}
-			}
-		}
-
 		return throttle;
 	}
 

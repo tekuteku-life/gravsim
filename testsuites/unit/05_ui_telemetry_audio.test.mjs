@@ -5,7 +5,7 @@ import { setupMockDOM, createMockUniverse, createMockCelestialBody, createMockRo
 // Setup DOM mocks before module imports
 setupMockDOM();
 
-import { FlightDynamicsCard, AeroGuidanceCard, PropulsionCard, NavigationCameraCard } from '../../scripts/gravsim_telemetry_card.js';
+import { TelemetryCard, FlightDynamicsCard, AeroGuidanceCard, PropulsionCard, NavigationCameraCard } from '../../scripts/gravsim_telemetry_card.js';
 import { TelemetryPanel } from '../../scripts/gravsim_telemetry_panel.js';
 import { ControlPanel } from '../../scripts/gravsim_control_panel.js';
 import { InputManager } from '../../scripts/gravsim_input_manager.js';
@@ -15,6 +15,7 @@ import { AudioManager } from '../../scripts/gravsim_audio_manager.js';
 import { MainProfiler } from '../../scripts/gravsim_profiler.js';
 import { InfoPanel } from '../../scripts/gravsim_info_panel.js';
 import { SaveManager } from '../../scripts/gravsim_save_manager.js';
+import { RocketTab } from '../../scripts/gravsim_tab_rocket.js';
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
 import { TELEMETRY, SOUND } from '../../scripts/gravsim_const.js';
 
@@ -1806,5 +1807,327 @@ test('TelemetryPanel - Column layout, null target, celestial body target, wheel 
 	// Reset mock
 	window.getComputedStyle = origGetComputedStyle;
 });
+
+test('ControlPanel, SaveManager, LaunchSequencer, and TelemetryCard comprehensive coverage', async () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+	
+	// 1. ControlPanel tab navigation clicks & locked state
+	const tabBtn = createMockElement('button');
+	tabBtn.className = 'tab-btn';
+	tabBtn.setAttribute('data-target', 'tab-rocket');
+
+	const origQSA = document.querySelectorAll;
+	document.querySelectorAll = (sel) => sel === '.tab-btn' ? [tabBtn] : [];
+	const cp = new ControlPanel(universe);
+	document.querySelectorAll = origQSA;
+
+	tabBtn.click();
+
+	EventBus.emit('ui:set-tabs-locked', true);
+	assert.equal(tabBtn.disabled, true);
+	EventBus.emit('ui:set-tabs-locked', false);
+	assert.equal(tabBtn.disabled, false);
+
+	// 2. SaveManager load invalid file & click load
+	const sm = new SaveManager(universe);
+	sm.loadBtn.dispatchEvent({ type: 'click' });
+	
+	// FileReader mock for invalid JSON
+	const origFileReader = globalThis.FileReader;
+	const origAlert = globalThis.alert;
+	globalThis.alert = () => {};
+	globalThis.FileReader = class MockFileReader {
+		readAsText(file) {
+			setTimeout(() => {
+				if (this.onload) {
+					this.onload({ target: { result: 'INVALID JSON STRING' } });
+				}
+			}, 0);
+		}
+	};
+	const fakeInput = { target: { files: [new Blob(['test'])], value: 'dummy' } };
+	sm.loadFileInput.dispatchEvent({ type: 'change', target: fakeInput.target });
+	await new Promise(r => setTimeout(r, 10));
+	globalThis.FileReader = origFileReader;
+	globalThis.alert = origAlert;
+
+	// Empty file load
+	sm.load({ target: { files: [] } });
+
+	// 3. LaunchSequencer abort while active and EventBus update hook
+	const seq = new LaunchSequencer();
+	EventBus.emitUpdate(0.1, 0.1);
+	seq.start({ events: [{ time: 10, name: 'IGN', command: 'IGNITE_ENGINE' }], tMinusOffset: 10 }, 100);
+	assert.equal(seq.isActive, true);
+	seq.abort();
+	assert.equal(seq.isActive, false);
+
+	// 4. TelemetryCard edge cases
+	const baseCard = new TelemetryCard(0, 'Base', createMockElement('div'));
+	baseCard.initElements();
+	baseCard.draw(universe);
+	baseCard.onBecameVisible(earth, null); // calls resetUI(earth)
+
+	// AeroGuidanceCard resetUI and boundary angle diff
+	const aeroCard = new AeroGuidanceCard(2, 'Aero', createMockElement('div'));
+	aeroCard.initElements();
+	aeroCard.resetUI(earth);
+	// Diff near PI
+	const rocket = createMockRocket({ thrustAngle: 0 });
+	aeroCard.update(rocket, {
+		altM: 1000,
+		aoaDeg: 0,
+		structRatio: 0.1,
+		qAxialKpa: 10,
+		qLateralKpa: 0,
+		progradeAngle: Math.PI - 0.001, // diff > Math.PI - 0.005
+		gravityAngle: 0
+	});
+
+	// PropulsionCard rAF transition reset callback
+	const propCard = new PropulsionCard(3, 'Prop', createMockElement('div'));
+	propCard.initElements();
+	const origRAF = globalThis.requestAnimationFrame;
+	globalThis.requestAnimationFrame = (cb) => { cb(); };
+	propCard.onBecameVisible(rocket, { stageIndex: 0 });
+	globalThis.requestAnimationFrame = origRAF;
+
+	// NavigationCameraCard draw and resetUI
+	const subRenderer = {
+		canvas: createMockElement('canvas'),
+		rotation: 0,
+		renderContext: { m2pix: () => 10 },
+		setRotation() {},
+		setZoomScale() {},
+		draw() {}
+	};
+	subRenderer.canvas.clientWidth = 200;
+	subRenderer.canvas.clientHeight = 150;
+	const navCard = new NavigationCameraCard(4, 'Nav', createMockElement('div'), subRenderer);
+	navCard.initElements();
+	navCard.isVisible = true;
+	navCard.draw(universe, rocket.id);
+	navCard.resetUI(earth);
+});
+
+test('SystemTab, RocketTab, and SoundSequencer deep branch coverage', async () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0 });
+	const universe = createMockUniverse({ objects: [earth] });
+	const cp = new ControlPanel(universe);
+	const sysTab = cp.systemTab;
+	const rTab = cp.rocketTab;
+
+	// 1. SystemTab input events
+	sysTab.ui.timeScale.value = '1';
+	sysTab.ui.timeScale.dispatchEvent({ type: 'input' });
+	sysTab.ui.zoomScale.value = '2';
+	sysTab.ui.zoomScale.dispatchEvent({ type: 'input', target: sysTab.ui.zoomScale });
+
+	// PauseResume when universe isPaused is true
+	universe.isPaused = true;
+	sysTab.ui.pauseResumeBtn.dispatchEvent({ type: 'click' });
+
+	// formatSimDuration with months < 12
+	sysTab.ui.predDuration.value = '6';
+	sysTab.ui.predDuration.dispatchEvent({ type: 'input', target: sysTab.ui.predDuration });
+
+	// camera:zoom-changed EventBus
+	EventBus.emit('camera:zoom-changed', 3.5);
+
+	// Developer debug mode via 7 rapid clicks
+	const sysTabBtn = document.querySelector('.tab-btn[data-target="tab-sys"]');
+	if (sysTabBtn) {
+		for (let i = 0; i < 8; i++) {
+			sysTabBtn.dispatchEvent({ type: 'click' });
+		}
+	}
+	sysTab.ui.enableMainProfilerChk.checked = true;
+	await sysTab.ui.enableMainProfilerChk.dispatchEvent({ type: 'change', target: sysTab.ui.enableMainProfilerChk });
+	sysTab.ui.enableMainProfilerChk.checked = false;
+	await sysTab.ui.enableMainProfilerChk.dispatchEvent({ type: 'change', target: sysTab.ui.enableMainProfilerChk });
+	sysTab.ui.enableWorkerProfilerChk.checked = true;
+	await sysTab.ui.enableWorkerProfilerChk.dispatchEvent({ type: 'change', target: sysTab.ui.enableWorkerProfilerChk });
+
+	// Center select change
+	sysTab.ui.centerSelect.value = '1';
+	sysTab._onCenterChanged({ target: sysTab.ui.centerSelect });
+
+	// getZoomScale and hr/sec updateTimeScaleIndicator
+	assert.ok(sysTab.getZoomScale() > 0);
+	sysTab.updateTimeScaleIndicator(1e-4);
+
+	// 2. RocketTab fuel type variations & rollout states
+	rTab.currentTab = 0;
+	rTab.ui.rlFuelType.value = 'solid';
+	rTab.ui.rlFuelType.dispatchEvent({ type: 'change', target: rTab.ui.rlFuelType });
+	assert.equal(rTab.ui.rlOxidMass.disabled, true);
+
+	rTab.ui.rlFuelType.value = 'ion';
+	rTab.ui.rlFuelType.dispatchEvent({ type: 'change', target: rTab.ui.rlFuelType });
+
+	rTab.ui.rlFuelType.value = 'hydrolox';
+	rTab.ui.rlFuelType.dispatchEvent({ type: 'change', target: rTab.ui.rlFuelType });
+
+	rTab.ui.rlFuelType.value = 'methalox';
+	rTab.ui.rlFuelType.dispatchEvent({ type: 'change', target: rTab.ui.rlFuelType });
+
+	rTab.setRolloutState(true);
+	rTab.setRolloutState(false);
+
+	// 3. SoundSequencer condition operators and edge cases
+	const ss = new SoundSequencer(universe);
+	EventBus.emit('sequencer-start', {}); // empty sequenceData (no audioProfile)
+
+	ss.audioProfile = {
+		conditions: [
+			{ id: 'c1', type: 'unknown_type', operator: '!=', value: 10, audio: 'alert' },
+			{ id: 'c2', type: 'met', operator: '!=', value: 5, audio: 'chime' },
+			{ id: 'c3', type: 'met', operator: 'unknown_op', value: 5, audio: 'chime' }
+		]
+	};
+	ss._checkConditions(-5); // MET < 0 returns early
+	ss._checkConditions(10); // evaluates != and unknown operator
+});
+
+test('RocketTab - Full UI event coverage, profile editing, and lifecycle edge cases', () => {
+	const earth = createMockCelestialBody({ id: 1, name: 'Earth', radius: 6371000, mass: 5.972e24 });
+	const moon = createMockCelestialBody({ id: 2, name: 'Moon', radius: 1737000, mass: 7.342e22 });
+	const universe = createMockUniverse({ objects: [earth, moon] });
+	universe.timeScale = 1.0;
+	universe.camera.targetZoomExp = 1.0;
+	universe.camera.trackingTarget = earth;
+	universe.camera.targetOffset = { x: 0, y: 0 };
+	universe.RocketLauncher = {
+		hostId: 1,
+		stages: [
+			{ fuelType: 'liquid', fuelMassT: 100, oxidMassT: 200, dryMassT: 20, thrustKN: 7600, burnTime: 120, name: 'Booster' },
+			{ fuelType: 'liquid', fuelMassT: 30, oxidMassT: 60, dryMassT: 5, thrustKN: 1000, burnTime: 200, name: 'Upper' }
+		],
+		flightProfile: [
+			{ type: 'alt', value: 1000, thrust: 100, angle: 10 },
+			{ type: 'alt', value: 5000, thrust: 100, angle: 25 }
+		],
+		colorTheme: 'classic',
+		mode: 'host',
+		hostAngleDeg: 0,
+		hostAltitudeM: 10,
+		maxGLimit: 4.0,
+		autoControl: true,
+		rolloutedRocketId: null,
+		togglePreview: () => {},
+		requestPreviewUpdate: () => {},
+		rollout: () => {},
+		ignite: () => {},
+		abortRollout: () => {}
+	};
+
+	const rTab = new RocketTab(universe);
+
+	// 1. Inputs on stage sliders: fuel, oxid, dry mass, thrust, delays
+	rTab.currentTab = 0;
+	rTab.ui.rlFuelMass.dispatchEvent({ type: 'input', target: { value: '150' } });
+	assert.equal(rTab.universe.RocketLauncher.stages[0].fuelMassT, 150);
+
+	rTab.ui.rlOxidMass.dispatchEvent({ type: 'input', target: { value: '300' } });
+	assert.equal(rTab.universe.RocketLauncher.stages[0].oxidMassT, 300);
+
+	rTab.ui.rlLaunchMass.dispatchEvent({ type: 'input', target: { value: '25' } });
+	assert.equal(rTab.universe.RocketLauncher.stages[0].dryMassT, 25);
+
+	rTab.ui.rlLaunchThrust.dispatchEvent({ type: 'input', target: { value: '8000' } });
+	assert.equal(rTab.universe.RocketLauncher.stages[0].thrustKN, 8000);
+
+	rTab.ui.rlSepDelay.dispatchEvent({ type: 'input', target: { value: '4.0' } });
+	assert.equal(rTab.universe.RocketLauncher.stages[0].separationDelaySec, 4.0);
+
+	rTab.ui.rlIgnDelay.dispatchEvent({ type: 'input', target: { value: '2.5' } });
+	assert.equal(rTab.universe.RocketLauncher.stages[0].ignitionDelaySec, 2.5);
+
+	// 2. Payload and Fairing inputs
+	rTab.ui.rlPayloadMass.dispatchEvent({ type: 'input', target: { value: '10.5' } });
+	rTab.ui.rlFairingEnabled.dispatchEvent({ type: 'change', target: { checked: true } });
+	assert.equal(rTab.universe.RocketLauncher.fairing.enabled, true);
+	rTab.ui.rlFairingEnabled.dispatchEvent({ type: 'change', target: { checked: false } });
+	assert.equal(rTab.universe.RocketLauncher.fairing.enabled, false);
+	rTab.ui.rlFairingMass.dispatchEvent({ type: 'input', target: { value: '2.2' } });
+	rTab.ui.rlFairingAlt.dispatchEvent({ type: 'input', target: { value: '110' } });
+
+	// 3. Global parameters: host angle, host alt, maxG, autoControl, theme
+	rTab.ui.rlHostAngle.dispatchEvent({ type: 'input', target: { value: '45' } });
+	rTab.ui.rlHostAlt.dispatchEvent({ type: 'input', target: { value: '25' } });
+	rTab.ui.rlLaunchMaxG.dispatchEvent({ type: 'input', target: { value: '3.8' } });
+	rTab.ui.rlAutoControl.dispatchEvent({ type: 'change', target: { checked: false } });
+	assert.equal(rTab.universe.RocketLauncher.autoControl, false);
+
+	rTab.ui.rlColorTheme.dispatchEvent({ type: 'change', target: { value: 'blue' } });
+	assert.equal(rTab.universe.RocketLauncher.colorTheme, 'blue');
+
+	rTab.ui.rlModeSelect.dispatchEvent({ type: 'change', target: { value: 'free' } });
+	assert.equal(rTab.universe.RocketLauncher.mode, 'free');
+	rTab.ui.rlModeSelect.dispatchEvent({ type: 'change', target: { value: 'host' } });
+
+	rTab.ui.rlHostSelect.dispatchEvent({ type: 'change', target: { value: '2' } });
+	assert.equal(rTab.universe.RocketLauncher.hostId, 2);
+	rTab.ui.rlHostSelect.dispatchEvent({ type: 'focus' });
+
+	// 4. Flight profile dynamic rows and edits
+	rTab.ui.rlAddProfileBtn.click();
+	const trs = rTab.ui.rlFlightProfileBody.querySelectorAll('tr');
+	assert.ok(trs.length >= 3);
+	const lastTr = trs[trs.length - 1];
+	const sel = lastTr.querySelector('select');
+	if (sel && sel.onchange) sel.onchange({ target: { value: 'time' } });
+	const inps = lastTr.querySelectorAll('input');
+	if (inps[0] && inps[0].onchange) inps[0].onchange({ target: { value: '60' } });
+	if (inps[1] && inps[1].onchange) inps[1].onchange({ target: { value: '75' } });
+	if (inps[2] && inps[2].onchange) inps[2].onchange({ target: { value: '55' } });
+	const delBtn = lastTr.querySelector('button');
+	if (delBtn && delBtn.onclick) delBtn.onclick();
+
+	// 5. selectTab payload and invalid tab
+	rTab.selectTab('payload');
+	assert.equal(rTab.currentTab, 'payload');
+	rTab.selectTab(0);
+	assert.equal(rTab.currentTab, 0);
+	rTab.selectTab(1); // upper stage (isFirstStage false, isLastStage true)
+	assert.equal(rTab.currentTab, 1);
+	rTab.selectTab(99); // non-existent stage index
+
+	// 6. open() and close() lifecycle with autoTrackHost and rollout states
+	rTab.universe.RocketLauncher.hostId = null;
+	rTab.open(); // selects from nonSunObjects
+	assert.ok(rTab.universe.RocketLauncher.hostId !== null);
+
+	// Close when autoTrackHost is active
+	universe.camera.autoTrackHost = true;
+	rTab.close();
+
+	// Close when rolloutedRocketId is present
+	rTab.isOpened = true;
+	universe.camera.autoTrackHost = false;
+	rTab.universe.RocketLauncher.rolloutedRocketId = 55;
+	rTab.close();
+
+	// Normal close
+	rTab.isOpened = true;
+	rTab.universe.RocketLauncher.rolloutedRocketId = null;
+	rTab.close();
+
+	// 7. loadState angle normalization loops (>180 and <=-180)
+	rTab.loadState(null);
+	rTab.loadState({
+		hostAngleDeg: 540, // 540 -> 180
+		mode: 'host',
+		colorTheme: 'orange'
+	});
+	assert.equal(rTab.universe.RocketLauncher.hostAngleDeg, 180);
+
+	rTab.loadState({
+		hostAngleDeg: -540 // -540 + 360 = -180 -> -180 + 360 = 180
+	});
+	assert.equal(rTab.universe.RocketLauncher.hostAngleDeg, 180);
+});
+
 
 
