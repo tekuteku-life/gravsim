@@ -215,6 +215,7 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			stages: rocketConfig.stages,
 			payload: rocketConfig.payload,
 			fairing: rocketConfig.fairing,
+			boosters: rocketConfig.boosters,
 			baseRadiusM: rocketConfig.baseRadiusM
 		}
 	);
@@ -252,6 +253,8 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 
 	let lastStageState = rocket.stageState;
 	let hasSeparatedFairing = false;
+	let hasBoosterBurnout = false;
+	let hasBoosterSep = false;
 	const recordedStageMeco = new Set();
 	const recordedStageSep = new Set();
 	const recordedStageSes = new Set();
@@ -480,6 +483,24 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			const eventId = 'fairing_sep';
 			if (!detectedEventsMap.has(eventId)) {
 				detectedEventsMap.set(eventId, makeEvent(eventId, 'FAIRING JETTISON', 'fairing', curAltM));
+			}
+		}
+
+		// (e) Booster Burnout & Separation detection
+		if (rocket.hasBoosters) {
+			if (!hasBoosterBurnout && rocket.isBoosterBurnout) {
+				hasBoosterBurnout = true;
+				const eventId = 'booster_burnout';
+				if (!detectedEventsMap.has(eventId)) {
+					detectedEventsMap.set(eventId, makeEvent(eventId, 'BOOSTER BURNOUT', 'meco', curAltM));
+				}
+			}
+			if (!hasBoosterSep && rocket.isBoosterSeparated) {
+				hasBoosterSep = true;
+				const eventId = 'booster_sep';
+				if (!detectedEventsMap.has(eventId)) {
+					detectedEventsMap.set(eventId, makeEvent(eventId, 'BOOSTER SEP', 'staging', curAltM));
+				}
 			}
 		}
 

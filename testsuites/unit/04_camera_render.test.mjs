@@ -957,6 +957,18 @@ test('RocketRenderer - Low detail and High detail rendering across flight phases
 	h3_24Rocket.isIgnited = false;
 	RocketRenderer.draw(ctx, h3_24Rocket, 200, 200, 60, 1.0); // high detail non-firing with 4 boosters
 
+	// Booster burnout test (attached, but plume extinguished)
+	h3_24Rocket.isIgnited = true;
+	h3_24Rocket.isBoosterBurnout = true;
+	h3_24Rocket.isBoosterSeparated = false;
+	RocketRenderer.draw(ctx, h3_24Rocket, 200, 200, 60, 1.0); // high detail booster burnout
+	RocketRenderer.draw(ctx, h3_24Rocket, 200, 200, 12, 1.0); // low detail booster burnout
+
+	// Booster separated test (boosters removed from body)
+	h3_24Rocket.isBoosterSeparated = true;
+	RocketRenderer.draw(ctx, h3_24Rocket, 200, 200, 60, 1.0); // high detail booster separated
+	RocketRenderer.draw(ctx, h3_24Rocket, 200, 200, 12, 1.0); // low detail booster separated
+
 	// Direct _drawBoosters test for edge cases (N boosters > 4, empty boosters, null boosters)
 	RocketRenderer._drawBoosters(ctx, {}, 0, 10, 50, -5, 5, ROCKET_VISUAL.THEMES.orange, false, 0, 20);
 	RocketRenderer._drawBoosters(ctx, { boosters: { count: 0 } }, 0, 10, 50, -5, 5, ROCKET_VISUAL.THEMES.orange, false, 0, 20);
@@ -1002,15 +1014,25 @@ test('Debris - Stage debris LOD rendering, theme colors, and minimum drawing rad
 	);
 	assert.ok(debFairing._getDrawRadius(0.0001) <= 1.2, 'Fairing min radius must be <= 1.2');
 
+	// Create SRB-3 Booster Debris with orange theme
+	const debSRB = new Debris(
+		1004, 'SRB-3 Booster', 400, 400, 0, 0,
+		10.0, '#f0f2f5', 1.2, 0.6, 1, '#00ffcc', 0,
+		4, 'orange'
+	);
+	assert.ok(debSRB._getDrawRadius(0.0001) <= 1.5, 'SRB min radius must be <= 1.5');
+
 	// 1. Zoomed out LOD rendering (screenRadius < LOD_RADIUS_THRESHOLD)
 	debBooster._drawBody(ctx, 100, 100, 1.8);
 	debUpper._drawBody(ctx, 200, 200, 1.4);
 	debFairing._drawBody(ctx, 300, 300, 1.0);
+	debSRB._drawBody(ctx, 400, 400, 1.2);
 
 	// 2. Zoomed in High Detail hardware rendering (screenRadius >= LOD_RADIUS_THRESHOLD)
 	debBooster._drawBody(ctx, 100, 100, 15.0);
 	debUpper._drawBody(ctx, 200, 200, 12.0);
 	debFairing._drawBody(ctx, 300, 300, 10.0);
+	debSRB._drawBody(ctx, 400, 400, 10.0);
 });
 
 test('PadEffectRenderer, RocketRenderer, and TrajectoryPredictor deep branch coverage', () => {
@@ -1375,6 +1397,17 @@ test('TrajectoryPredictor - Worker events, flight event detection, and rendering
 	const invalidSync = predictor.calculateSync({ host: null });
 	assert.equal(invalidSync, null);
 
+	// Test _buildSimulationParams with relative coordinates and velocities
+	const relParams = predictor._buildSimulationParams({
+		host: earth,
+		relX: 100,
+		relY: 200,
+		relVx: 5,
+		relVy: 10
+	});
+	assert.ok(relParams);
+	assert.equal(relParams.rocketConfig.x !== undefined, true);
+
 	// 5. updateRocketFlightEvents: test all unpassed branches
 	const mockRocket = createMockRocket({
 		id: 99,
@@ -1408,7 +1441,9 @@ test('TrajectoryPredictor - Worker events, flight event detection, and rendering
 				{ id: 'no_val_time', type: 'time', passed: false },
 				{ id: 'apoapsis', type: 'apoapsis', passed: false },
 				{ id: 'orbit_evt', type: 'orbit', time: 800, passed: false },
-				{ id: 'impact_evt', type: 'impact', passed: false }
+				{ id: 'impact_evt', type: 'impact', passed: false },
+				{ id: 'booster_burnout', type: 'booster_burnout', time: 105, passed: false },
+				{ id: 'booster_sep', type: 'booster_sep', time: 106.5, passed: false }
 			]
 		}
 	});
@@ -1419,6 +1454,21 @@ test('TrajectoryPredictor - Worker events, flight event detection, and rendering
 	mockRocket.isIgnited = false;
 	mockRocket.state = OBJECT_STATE.ACTIVE;
 	mockRocket.passedEventIds = new Set();
+
+	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, {
+		objectsMap: new Map([[earth.id, earth]]),
+		basis: earth
+	});
+
+	// Check booster event pass transition
+	mockRocket.isBoosterBurnout = true;
+	mockRocket.isBoosterSeparated = true;
+	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, {
+		objectsMap: new Map([[earth.id, earth]]),
+		basis: earth
+	});
+	assert.ok(mockRocket.passedEventIds.has('booster_burnout'));
+	assert.ok(mockRocket.passedEventIds.has('booster_sep'));
 
 	TrajectoryPredictor.updateRocketFlightEvents(mockRocket, {
 		objectsMap: new Map([[earth.id, earth]]),

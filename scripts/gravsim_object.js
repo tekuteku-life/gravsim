@@ -281,6 +281,8 @@ export class Rocket extends GravSimObject {
 		this.payload = null;
 		this.fairing = null;
 		this.boosters = null;
+		this.isBoosterBurnout = false;
+		this.isBoosterSeparated = false;
 		this.rendering = null;
 
 		this.predictedTrajectory = null;
@@ -606,8 +608,9 @@ export class Debris extends GravSimObject {
 		const realRadiusPx = (baseRad / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 		const screenRadiusPx = realRadiusPx * zoomScale;
 
-		// Match exactly with base GravSimObject scaling
-		return Math.max(this.size, screenRadiusPx);
+		// Ensure jettisoned hardware components maintain clear visual presence
+		const minSize = this.debrisSubType > 0 ? Math.max(this.size, 4.0) : this.size;
+		return Math.max(minSize, screenRadiusPx);
 	}
 
 	_generatePolygonVertices() {
@@ -648,12 +651,12 @@ export class Debris extends GravSimObject {
 			const theme = ROCKET_VISUAL.THEMES[this.colorTheme] || ROCKET_VISUAL.THEMES.orange;
 
 			if (R < hw.LOD_RADIUS_THRESHOLD) {
-				const len = (this.debrisSubType === 1) ? R * hw.STAGE1_LEN_RATIO : (this.debrisSubType === 2 ? R * hw.STAGE2_LEN_RATIO : R * hw.FAIRING_LEN_RATIO);
-				const w = (this.debrisSubType === 1) ? R * hw.STAGE1_WIDTH_RATIO : (this.debrisSubType === 2 ? R * hw.STAGE2_WIDTH_RATIO : R * hw.FAIRING_WIDTH_RATIO);
-				const fill = (this.debrisSubType === 1) ? theme.stg1Grad[1] : (this.debrisSubType === 2 ? theme.stg2Grad[0] : theme.fairingGrad[0]);
+				const len = (this.debrisSubType === 1) ? R * hw.STAGE1_LEN_RATIO : (this.debrisSubType === 2 ? R * hw.STAGE2_LEN_RATIO : (this.debrisSubType === 4 ? R * (hw.BOOSTER_LEN_RATIO || 2.20) : R * hw.FAIRING_LEN_RATIO));
+				const w = (this.debrisSubType === 1) ? R * hw.STAGE1_WIDTH_RATIO : (this.debrisSubType === 2 ? R * hw.STAGE2_WIDTH_RATIO : (this.debrisSubType === 4 ? R * (hw.BOOSTER_WIDTH_RATIO || 0.45) : R * hw.FAIRING_WIDTH_RATIO));
+				const fill = (this.debrisSubType === 1) ? theme.stg1Grad[1] : (this.debrisSubType === 2 ? theme.stg2Grad[0] : (this.debrisSubType === 4 ? '#f0f2f5' : theme.fairingGrad[0]));
 				ctx.fillStyle = fill;
 				ctx.beginPath();
-				ctx.ellipse(0, 0, len * 0.5, Math.max(0.75, w * 0.5), 0, 0, Math.PI * 2);
+				ctx.ellipse(0, 0, len * 0.5, Math.max(1.0, w * 0.5), 0, 0, Math.PI * 2);
 				ctx.fill();
 				ctx.restore();
 				return;
@@ -743,6 +746,45 @@ export class Debris extends GravSimObject {
 				ctx.moveTo(-len * 0.45, 0);
 				ctx.quadraticCurveTo(len * 0.2, -w * 0.7, len * 0.45, 0);
 				ctx.lineTo(-len * 0.45, 0);
+				ctx.closePath();
+				ctx.fill();
+			} else if (this.debrisSubType === 4) {
+				const len = R * (hw.BOOSTER_LEN_RATIO || 2.20);
+				const w = R * (hw.BOOSTER_WIDTH_RATIO || 0.45);
+				const lNose = R * (hw.BOOSTER_NOSE_RATIO || 0.40);
+				const lNozzle = R * (hw.BOOSTER_NOZZLE_RATIO || 0.25);
+				const xBodyStart = -len * 0.5;
+				const xBodyEnd = len * 0.5;
+
+				// 1. Cylindrical Casing
+				const grad = ctx.createLinearGradient(0, -w, 0, w);
+				grad.addColorStop(0, '#ffffff');
+				grad.addColorStop(0.5, '#f0f2f5');
+				grad.addColorStop(1, '#d8dce2');
+				ctx.fillStyle = grad;
+				ctx.fillRect(xBodyStart, -w, len, w * 2);
+
+				// 2. Conical Nose Cone (+x direction)
+				ctx.fillStyle = '#22262c';
+				ctx.beginPath();
+				ctx.moveTo(xBodyEnd, -w);
+				ctx.lineTo(xBodyEnd + lNose, 0);
+				ctx.lineTo(xBodyEnd, w);
+				ctx.closePath();
+				ctx.fill();
+
+				// 3. Orange Accent Band
+				ctx.fillStyle = '#c85a1a';
+				const bandW = len * 0.08;
+				ctx.fillRect(xBodyEnd - bandW * 1.5, -w, bandW, w * 2);
+
+				// 4. Nozzle (-x direction)
+				ctx.fillStyle = '#1c2024';
+				ctx.beginPath();
+				ctx.moveTo(xBodyStart, -w * 0.7);
+				ctx.lineTo(xBodyStart - lNozzle, -w * 1.1);
+				ctx.lineTo(xBodyStart - lNozzle, w * 1.1);
+				ctx.lineTo(xBodyStart, w * 0.7);
 				ctx.closePath();
 				ctx.fill();
 			}

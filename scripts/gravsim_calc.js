@@ -55,6 +55,7 @@ export class PhysicsEngine {
 					stages: data.stages,
 					payload: data.payload,
 					fairing: data.fairing,
+					boosters: data.boosters,
 					disableStaging: data.disableStaging
 				}
 			);

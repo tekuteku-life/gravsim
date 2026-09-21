@@ -670,6 +670,11 @@ export class RocketTab {
 		rl.stages = JSON.parse(JSON.stringify(preset.stages));
 		rl.payload = JSON.parse(JSON.stringify(preset.payload || { massT: 0 }));
 		rl.fairing = JSON.parse(JSON.stringify(preset.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }));
+		rl.boosters = (preset.boosters || preset.rendering?.boosters) ? {
+			...(preset.rendering?.boosters || {}),
+			...(preset.boosters || {})
+		} : null;
+		rl.rendering = preset.rendering ? JSON.parse(JSON.stringify(preset.rendering)) : null;
 		if (rl.stages?.[0]) {
 			rl.calculatedBurnTime = rl.stages[0].burnTime;
 		}

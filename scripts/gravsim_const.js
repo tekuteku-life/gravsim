@@ -221,8 +221,12 @@ export const RENDER = {
 		STAGE2_NOZZLE_RATIO: 0.35,
 		FAIRING_LEN_RATIO: 1.3,
 		FAIRING_WIDTH_RATIO: 0.65,
+		BOOSTER_LEN_RATIO: 2.20,
+		BOOSTER_WIDTH_RATIO: 0.45,
+		BOOSTER_NOZZLE_RATIO: 0.25,
+		BOOSTER_NOSE_RATIO: 0.40,
 		DEFAULT_ROTATION_SPEED: 0.0015,
-		LOD_RADIUS_THRESHOLD: 3.5,
+		LOD_RADIUS_THRESHOLD: 2.0,
 		LOD_LEN_RATIO: 2.0,
 		LOD_WIDTH_RATIO: 0.7
 	},
@@ -662,7 +666,7 @@ export const FLIGHT_COMPUTER_CONFIG = {
 
 // Communication buffer structure
 export const CALC_BUFFER_CONFIG = {
-	OBJ_ATTR_COUNT: 47
+	OBJ_ATTR_COUNT: 49
 };
 
 export const BUFFER_INDEX = {
@@ -677,7 +681,9 @@ export const BUFFER_INDEX = {
 	DOMINANT_BODY_ID: 37, DIST_TO_DOMINANT: 38, OXID_MASS: 39,
 	TM_TANK_PRES_FUEL: 40, TM_TANK_PRES_OXID: 41,
 	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, TM_STG_SEP_ACTIVE: 44, TM_FAIRING_SEPARATED: 45,
-	DEBRIS_SUB_TYPE: 46
+	DEBRIS_SUB_TYPE: 46,
+	TM_BOOSTER_SEPARATED: 47,
+	TM_BOOSTER_BURNOUT: 48
 };
 
 export const OBJECT_STATE = {
@@ -1254,9 +1260,8 @@ export const MULTISTAGE_ROCKET = {
 	STAGE_SEP_FORWARD_PUSH_M_S: 1.5,
 	FAIRING_SEP_LATERAL_SPEED_M_S: 8.0,
 	FAIRING_SEP_BACKWARD_SPEED_M_S: -2.0,
-	STAGE1_RADIUS_RATIO: 0.85,
-	STAGE2_RADIUS_RATIO: 0.70,
-	FAIRING_RADIUS_RATIO: 0.75,
+	BOOSTER_SEP_LATERAL_SPEED_M_S: 12.0,
+	BOOSTER_SEP_BACKWARD_SPEED_M_S: -1.0,
 	STAGE1_RADIUS_RATIO: 1.0,
 	STAGE2_RADIUS_RATIO: 1.0,
 	FAIRING_RADIUS_RATIO: 1.0,
@@ -1266,22 +1271,28 @@ export const MULTISTAGE_ROCKET = {
 		1: {
 			name: 'Stage 1 Booster',
 			color: '#c85a1a',
-			size: 1.8,
+			size: 5.5,
 			rotationSpeedRand: 0.0015
 		},
 		2: {
 			name: 'Stage 2 Upper Stage',
 			color: '#e2e6ea',
-			size: 1.4,
+			size: 4.5,
 			rotationSpeedRand: 0.0015
 		},
 		3: {
 			name: 'Fairing Half',
 			color: '#e8ebed',
-			size: 1.0,
+			size: 4.0,
 			rotationSpeedRand: 0.0015
+		},
+		4: {
+			name: 'SRB-3 Booster',
+			color: '#f0f2f5',
+			size: 4.8,
+			rotationSpeedRand: 0.002
 		}
-	}
+	},
 };
 
 // Legacy presets delegated dynamically to PresetManager via Proxy
@@ -1308,71 +1319,6 @@ export const MULTISTAGE_PRESETS = new Proxy({}, {
 		return undefined;
 	}
 });
-
-
-/**
- * Normalizes any rocket config (legacy single-stage or new multi-stage)
- * into a valid multi-stage configuration structure.
- */
-export function normalizeRocketConfig(config) {
-	if (!config) { return null; }
-
-	if (config.stages && Array.isArray(config.stages) && config.stages.length > 0) {
-		return {
-			...config,
-			colorTheme: config.colorTheme || 'orange',
-			stages: config.stages.map((stg, idx) => ({
-				stageNumber: stg.stageNumber || (idx + 1),
-				name: stg.name || `Stage ${idx + 1}`,
-				fuelType: stg.fuelType || 'liquid',
-				thrustKN: stg.thrustKN !== undefined ? stg.thrustKN : 7600,
-				dryMassT: stg.dryMassT !== undefined ? stg.dryMassT : 7,
-				fuelMassT: stg.fuelMassT !== undefined ? stg.fuelMassT : 88,
-				oxidMassT: stg.oxidMassT !== undefined ? stg.oxidMassT : 220,
-				burnTime: stg.burnTime !== undefined ? stg.burnTime : 160,
-				ofRatio: stg.ofRatio !== undefined ? stg.ofRatio : 2.5,
-				radius: stg.radius !== undefined ? stg.radius : 2.5,
-				separationDelaySec: stg.separationDelaySec !== undefined ? stg.separationDelaySec : MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC,
-				ignitionDelaySec: stg.ignitionDelaySec !== undefined ? stg.ignitionDelaySec : MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC,
-				jettisonSpeedM_S: stg.jettisonSpeedM_S !== undefined ? stg.jettisonSpeedM_S : MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S,
-			})),
-			payload: config.payload || { name: 'Payload', massT: 0, radius: 1.0 },
-			fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }
-		};
-	}
-
-	// Convert legacy single-stage config to 1-stage multistage config
-	const dryMassT = config.dryMassT !== undefined ? config.dryMassT : (config.emptyMass !== undefined ? config.emptyMass : 7);
-	const fuelMassT = config.fuelMassT !== undefined ? config.fuelMassT : (config.fuelMass !== undefined ? config.fuelMass : 88);
-	const oxidMassT = config.oxidMassT !== undefined ? config.oxidMassT : (config.oxidMass !== undefined ? config.oxidMass : 220);
-	const thrustKN = config.thrustKN !== undefined ? config.thrustKN : (config.thrustForce ? config.thrustForce / 1000 : 7600);
-	const burnTime = config.burnTime !== undefined ? config.burnTime : (config.time !== undefined ? config.time : 160);
-	const ofRatio = config.ofRatio !== undefined ? config.ofRatio : 2.5;
-
-	return {
-		...config,
-		colorTheme: config.colorTheme || 'orange',
-		stages: [
-			{
-				stageNumber: 1,
-				name: 'Core Stage',
-				fuelType: config.fuelType || 'liquid',
-				thrustKN: thrustKN,
-				dryMassT: dryMassT,
-				fuelMassT: fuelMassT,
-				oxidMassT: oxidMassT,
-				burnTime: burnTime,
-				ofRatio: ofRatio,
-				radius: config.radius || 2.5,
-				separationDelaySec: MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC,
-				ignitionDelaySec: MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC,
-				jettisonSpeedM_S: MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S
-			}
-		],
-		payload: config.payload || { name: 'Payload', massT: 0, radius: 1.0 },
-		fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }
-	};
-}
 
 // Pad Effect Constants
 export const PAD_EFFECT = {

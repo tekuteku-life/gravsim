@@ -324,7 +324,10 @@ export class PresetManager {
 				launcher.lengthM = vehicle.lengthM || 60.0;
 				launcher.stages = JSON.parse(JSON.stringify(vehicle.stages || []));
 				launcher.rendering = vehicle.rendering ? JSON.parse(JSON.stringify(vehicle.rendering)) : null;
-				launcher.boosters = (vehicle.boosters || vehicle.rendering?.boosters) ? JSON.parse(JSON.stringify(vehicle.boosters || vehicle.rendering.boosters)) : null;
+				launcher.boosters = (vehicle.boosters || vehicle.rendering?.boosters) ? {
+					...(vehicle.rendering?.boosters || {}),
+					...(vehicle.boosters || {})
+				} : null;
 				if (!payloadId && vehicle.defaultFairing) {
 					launcher.fairing = JSON.parse(JSON.stringify(vehicle.defaultFairing));
 				}
@@ -450,7 +453,10 @@ export class PresetManager {
 				fairing: { enabled: true, massT: 2.0, separationAltKm: 115 },
 				flightProfile: JSON.parse(JSON.stringify(issMission.flightProfile || [])),
 				rendering: h3Vehicle.rendering ? JSON.parse(JSON.stringify(h3Vehicle.rendering)) : null,
-				boosters: h3Vehicle.boosters || h3Vehicle.rendering?.boosters || null
+				boosters: (h3Vehicle.boosters || h3Vehicle.rendering?.boosters) ? {
+					...(h3Vehicle.rendering?.boosters || {}),
+					...(h3Vehicle.boosters || {})
+				} : null
 			},
 			H3_30: {
 				id: "H3_30",
@@ -476,7 +482,10 @@ export class PresetManager {
 				fairing: { enabled: true, massT: 2.2, separationAltKm: 115 },
 				flightProfile: JSON.parse(JSON.stringify(issMission.flightProfile || [])),
 				rendering: h3Vehicle.rendering ? JSON.parse(JSON.stringify(h3Vehicle.rendering)) : null,
-				boosters: h3Vehicle.boosters || h3Vehicle.rendering?.boosters || null
+				boosters: (h3Vehicle.boosters || h3Vehicle.rendering?.boosters) ? {
+					...(h3Vehicle.rendering?.boosters || {}),
+					...(h3Vehicle.boosters || {})
+				} : null
 			},
 			H3_24: {
 				id: "H3_24",
@@ -489,7 +498,10 @@ export class PresetManager {
 				fairing: { enabled: true, massT: 2.5, separationAltKm: 120 },
 				flightProfile: JSON.parse(JSON.stringify(marsMission.flightProfile || [])),
 				rendering: h324Vehicle.rendering ? JSON.parse(JSON.stringify(h324Vehicle.rendering)) : null,
-				boosters: h324Vehicle.boosters || h324Vehicle.rendering?.boosters || null
+				boosters: (h324Vehicle.boosters || h324Vehicle.rendering?.boosters) ? {
+					...(h324Vehicle.rendering?.boosters || {}),
+					...(h324Vehicle.boosters || {})
+				} : null
 			},
 			SSTO: {
 				id: "SSTO",

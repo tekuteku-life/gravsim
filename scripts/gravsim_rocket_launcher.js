@@ -388,6 +388,7 @@ export class RocketLauncher {
 			stages: this.stages,
 			payload: this.payload,
 			fairing: this.fairing,
+			boosters: this.boosters,
 			baseRadiusM: this.getBaseRadiusM(),
 			bottomOffsetM: this.getBottomOffsetM()
 		};

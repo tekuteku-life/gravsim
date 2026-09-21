@@ -20,7 +20,9 @@ import { EventBus } from '../../scripts/gravsim_event_bus.js';
 import { Universe } from '../../scripts/gravsim_universe.js';
 import { PresetManager, presetManager } from '../../scripts/gravsim_preset_manager.js';
 import { RocketTab } from '../../scripts/gravsim_tab_rocket.js';
+import { TelemetryPanel } from '../../scripts/gravsim_telemetry_panel.js';
 import { CalcRocket, CalcDebris } from '../../scripts/gravsim_calc_object.js';
+import { TrajectoryPredictor } from '../../scripts/gravsim_trajectory_predictor.js';
 import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
 import { OBJECT_TYPES, PHYSICS, MULTISTAGE_ROCKET } from '../../scripts/gravsim_const.js';
 import { setupMockDOM, createMockUniverse, assertClose } from '../test_helpers.mjs';
@@ -567,6 +569,277 @@ describe('Integration 06: External Presets & Payload On-Board Propulsion', () =>
 		assert.equal(fallbackPm.getPayload('geo_sat'), null, 'Geo Sat must not be in fallback');
 		assert.equal(fallbackPm.getPayload('lunar_orbiter'), null, 'Lunar Orbiter must not be in fallback');
 		assert.equal(fallbackPm.getPayload('mmx'), null, 'MMX must not be in fallback');
+	});
+
+	it('12. should execute booster burnout at 105s, drop thrust to core LE-9, separate boosters at 106.5s, generate SRB debris, and reduce craft dry mass', () => {
+		const pm = new PresetManager();
+		const h3_22 = pm.getVehicle('h3_22');
+
+		assert.ok(h3_22.boosters, 'H3-22 must have booster configuration');
+		assert.equal(h3_22.boosters.count, 2, 'H3-22 must have 2 boosters');
+		assert.equal(h3_22.boosters.burnTimeSec, 105.0);
+		assert.equal(h3_22.boosters.dryMassT, 20.0);
+		assert.equal(h3_22.boosters.coreThrustKN, 2940.0);
+
+		// 1. Create H3-22 CalcRocket
+		const rocket = new CalcRocket(
+			201, 'H3-22 Mission', 0, 6371000, 0, 0, 0, 0, 2.6, 0,
+			h3_22.stages[0].dryMassT, h3_22.stages[0].fuelMassT, h3_22.stages[0].oxidMassT,
+			{
+				stages: h3_22.stages,
+				boosters: h3_22.boosters,
+				isHoldDown: false,
+				isIgnited: true,
+				autoControl: true,
+				disableOrbitalCutoff: true
+			}
+		);
+
+		assert.equal(rocket.hasBoosters, true);
+		assert.equal(rocket.isBoosterBurnout, false);
+		assert.equal(rocket.isBoosterSeparated, false);
+		assert.equal(rocket.dryMass, 45.0);
+		assert.equal(rocket.thrustForce, 7250000);
+
+		// Advance simulation to t = 104 seconds (just before booster burnout)
+		for (let s = 0; s < 104; s++) {
+			rocket.flightControl(1.0);
+		}
+		assert.equal(rocket.isBoosterBurnout, false, 'Boosters must still be burning at t=104s');
+		assert.equal(rocket.isBoosterSeparated, false, 'Boosters must not be separated at t=104s');
+		assert.equal(rocket.thrustForce, 7250000, 'Combined thrust must remain 7250 kN');
+		assert.equal(rocket.stages[0].dryMassT, 45.0);
+
+		// Advance 1 second to t = 105 seconds (booster burnout)
+		rocket.flightControl(1.0);
+		assert.equal(rocket.isBoosterBurnout, true, 'Boosters must burn out at t=105s');
+		assert.equal(rocket.isBoosterSeparated, false, 'Boosters must stay attached right at burnout');
+		assert.equal(rocket.thrustForce, 2940000, 'Thrust must immediately drop to 2940 kN core thrust');
+
+		// Advance 1 second to t = 106 seconds (separation delay in progress)
+		rocket.flightControl(1.0);
+		assert.equal(rocket.isBoosterSeparated, false, 'Boosters not yet separated before separationDelaySec (1.5s)');
+
+		const preSepMass = rocket.mass;
+		// Advance 1 second to t = 107 seconds (exceeds separationDelaySec 1.5s)
+		rocket.flightControl(1.0);
+		assert.equal(rocket.isBoosterSeparated, true, 'Boosters must be separated after delay');
+		assert.equal(rocket.dryMass, 25.0, 'Stage 1 dry mass must drop by 20t to 25t');
+		assert.equal(rocket.stages[0].dryMassT, 25.0);
+		assertClose(rocket.mass, preSepMass - 20.0 - rocket.massLossRate * 1.0, 0.5, 'Total craft mass must drop by booster dry mass');
+
+		// Check pending debris
+		assert.equal(rocket._pendingDebris.length, 2, '2 booster debris objects must be queued');
+		const deb1 = rocket._pendingDebris[0];
+		const deb2 = rocket._pendingDebris[1];
+		assert.equal(deb1.debrisSubType, 4, 'Debris must be booster subtype (4)');
+		assert.equal(deb2.debrisSubType, 4);
+		assert.equal(deb1.mass, 10.0, 'Each SRB-3 casing must be 10t');
+		assert.equal(deb2.mass, 10.0);
+		assert.ok(deb1.name.includes('SRB-3 Booster'));
+		assert.ok(deb2.name.includes('SRB-3 Booster'));
+
+		// 2. Repeat for H3-24L (4 boosters)
+		const h3_24 = pm.getVehicle('h3_24');
+		assert.equal(h3_24.boosters.count, 4);
+		assert.equal(h3_24.boosters.dryMassT, 40.0);
+
+		const rocket24 = new CalcRocket(
+			202, 'H3-24L Heavy Mission', 0, 6371000, 0, 0, 0, 0, 2.7, 0,
+			h3_24.stages[0].dryMassT, h3_24.stages[0].fuelMassT, h3_24.stages[0].oxidMassT,
+			{
+				stages: h3_24.stages,
+				boosters: h3_24.boosters,
+				isHoldDown: false,
+				isIgnited: true,
+				autoControl: true,
+				disableOrbitalCutoff: true
+			}
+		);
+
+		assert.equal(rocket24.dryMass, 65.0);
+		assert.equal(rocket24.thrustForce, 11500000);
+
+		// Advance past 105s and 106.5s
+		for (let s = 0; s < 107; s++) {
+			rocket24.flightControl(1.0);
+		}
+		assert.equal(rocket24.isBoosterBurnout, true);
+		assert.equal(rocket24.isBoosterSeparated, true);
+		assert.equal(rocket24.thrustForce, 2940000);
+		assert.equal(rocket24.dryMass, 25.0, 'Core dry mass must drop by 40t to 25t');
+		assert.equal(rocket24._pendingDebris.length, 4, '4 booster debris items must be queued for H3-24');
+		rocket24._pendingDebris.forEach(deb => {
+			assert.equal(deb.debrisSubType, 4);
+			assert.equal(deb.mass, 10.0);
+		});
+
+		// 3. Verify Trajectory Prediction detects booster_burnout and booster_sep
+		const predictor = new TrajectoryPredictor(universe);
+		const earthHost = {
+			id: 1,
+			name: 'Earth',
+			radius: 6371000,
+			mass: 5.972e24 / 1000,
+			x: 0,
+			y: 0,
+			vx: 0,
+			vy: 0,
+			rotationAngle: 0
+		};
+		const predConfig = {
+			host: earthHost,
+			dryMassT: h3_22.stages[0].dryMassT,
+			fuelMassT: h3_22.stages[0].fuelMassT,
+			oxidMassT: h3_22.stages[0].oxidMassT,
+			thrustKN: h3_22.stages[0].thrustKN,
+			stages: h3_22.stages,
+			boosters: h3_22.boosters,
+			flightProfile: [{ type: 'alt', value: 0, thrust: 100, angle: 0 }],
+			hostAngleRad: -Math.PI / 2,
+			hostAltitudeM: 0
+		};
+		const pred = predictor.calculateSync(predConfig);
+		assert.ok(pred, 'Prediction must be generated for H3-22');
+		const boosterBurnoutEvent = pred.events.find(e => e.id === 'booster_burnout');
+		const boosterSepEvent = pred.events.find(e => e.id === 'booster_sep');
+		assert.ok(boosterBurnoutEvent, 'Prediction must include booster_burnout event');
+		assert.ok(boosterSepEvent, 'Prediction must include booster_sep event');
+		assertClose(boosterBurnoutEvent.time, 105.0, 2.0, 'Booster burnout must be predicted at ~105s');
+		assertClose(boosterSepEvent.time, 106.5, 2.0, 'Booster sep must be predicted at ~106.5s');
+
+		// Also test updateRocketFlightEvents with booster events
+		const mockRocket = {
+			isHoldDown: false,
+			isBoosterBurnout: true,
+			isBoosterSeparated: true,
+			telemetry: { flightTime: 110, isBoosterBurnout: true, isBoosterSeparated: true },
+			predictedTrajectory: pred,
+			passedEventIds: new Set()
+		};
+		TrajectoryPredictor.updateRocketFlightEvents(mockRocket);
+		assert.ok(mockRocket.passedEventIds.has('booster_burnout'), 'booster_burnout must be marked passed');
+		assert.ok(mockRocket.passedEventIds.has('booster_sep'), 'booster_sep must be marked passed');
+	});
+
+	it('13. should physically simulate SRB-3 booster burnout at 105s, separation delay, debris generation, and UI/renderer sync for H3-22 and H3-24', () => {
+		const pm = new PresetManager();
+		const h3_22 = pm.getVehicle('h3_22');
+		const h3_24 = pm.getVehicle('h3_24');
+
+		// 1. Physical Simulation of H3-22 (2 SRB-3 boosters)
+		const rocket22 = new CalcRocket(
+			301, 'H3-22 Test', 0, 0, 0, 0, 0, 0, 2.6, 0,
+			h3_22.stages[0].dryMassT, h3_22.stages[0].fuelMassT, h3_22.stages[0].oxidMassT,
+			{
+				stages: h3_22.stages,
+				boosters: h3_22.boosters,
+				isHoldDown: false,
+				isIgnited: true,
+				autoControl: true,
+				flightProfile: [{ type: 'time', value: 0, thrust: 100, angle: 0 }]
+			}
+		);
+
+		assert.equal(rocket22.hasBoosters, true, 'H3-22 must have boosters enabled');
+		assert.equal(rocket22.isBoosterBurnout, false);
+		assert.equal(rocket22.isBoosterSeparated, false);
+		assert.equal(rocket22.dryMass, 45.0, 'Stage 1 dry mass must include 2x SRB dry mass (20t + 25t)');
+
+		// Burn for 104 seconds: boosters still firing
+		for (let s = 0; s < 104; s++) {
+			rocket22.flightControl(1.0);
+		}
+		assert.equal(rocket22.isBoosterBurnout, false, 'Boosters should still be burning at 104s');
+		assert.equal(rocket22.isBoosterSeparated, false);
+
+		// Advance 1 second to reach 105s: booster burnout occurs!
+		rocket22.flightControl(1.0);
+		assert.equal(rocket22.isBoosterBurnout, true, 'Booster burnout must occur at 105s');
+		assert.equal(rocket22.isBoosterSeparated, false, 'Boosters remain attached during separation delay');
+		assertClose(rocket22.thrustForce, 2940000, 100, 'Thrust must decrease to core-only thrust (2940 kN)');
+
+		// Advance past separation delay (1.5s): booster separation occurs!
+		rocket22.flightControl(1.5);
+		assert.equal(rocket22.isBoosterSeparated, true, 'Boosters must separate after separation delay');
+		assertClose(rocket22.dryMass, 25.0, 0.1, 'Booster dry mass (20t) must be deducted from core stage dry mass');
+		assert.equal(rocket22._pendingDebris.length, 2, '2 SRB-3 booster debris objects must be spawned');
+		assert.equal(rocket22._pendingDebris[0].debrisSubType, 4, 'Debris must have subtype 4 (SRB booster)');
+		assert.equal(rocket22._pendingDebris[1].debrisSubType, 4, 'Debris must have subtype 4 (SRB booster)');
+		assert.ok(rocket22._pendingDebris[0].name.includes('SRB-3 Booster 1'));
+		assert.ok(rocket22._pendingDebris[1].name.includes('SRB-3 Booster 2'));
+
+		// 2. Physical Simulation of H3-24 (4 SRB-3 boosters)
+		const rocket24 = new CalcRocket(
+			302, 'H3-24 Test', 0, 0, 0, 0, 0, 0, 2.7, 0,
+			h3_24.stages[0].dryMassT, h3_24.stages[0].fuelMassT, h3_24.stages[0].oxidMassT,
+			{
+				stages: h3_24.stages,
+				boosters: h3_24.boosters,
+				isHoldDown: false,
+				isIgnited: true,
+				autoControl: true,
+				flightProfile: [{ type: 'time', value: 0, thrust: 100, angle: 0 }]
+			}
+		);
+
+		assert.equal(rocket24.hasBoosters, true);
+		assert.equal(rocket24.dryMass, 65.0, 'Stage 1 dry mass must include 4x SRB dry mass (40t + 25t)');
+
+		// Burn to burnout and separation
+		for (let s = 0; s < 105; s++) {
+			rocket24.flightControl(1.0);
+		}
+		assert.equal(rocket24.isBoosterBurnout, true);
+		rocket24.flightControl(1.5);
+		assert.equal(rocket24.isBoosterSeparated, true);
+		assertClose(rocket24.dryMass, 25.0, 0.1, '40t booster dry mass must be deducted');
+		assert.equal(rocket24._pendingDebris.length, 4, '4 SRB-3 booster debris objects must be spawned');
+		for (let i = 0; i < 4; i++) {
+			assert.equal(rocket24._pendingDebris[i].debrisSubType, 4);
+		}
+
+		// 3. RocketTab loadPreset integration
+		const rl = universe.RocketLauncher;
+		const rTab = new RocketTab(universe);
+		rTab.loadPreset('H3_22');
+		assert.ok(rl.boosters, 'RocketLauncher must receive boosters on loadPreset H3_22');
+		assert.equal(rl.boosters.count, 2);
+		assert.ok(rl.rendering, 'RocketLauncher must receive rendering on loadPreset H3_22');
+
+		rTab.loadPreset('H3_24');
+		assert.ok(rl.boosters, 'RocketLauncher must receive boosters on loadPreset H3_24');
+		assert.equal(rl.boosters.count, 4);
+		assert.ok(rl.rendering, 'RocketLauncher must receive rendering on loadPreset H3_24');
+
+		// 4. TelemetryPanel header SRB indication
+		const tp = new TelemetryPanel(universe);
+		const targetRocket = {
+			type: OBJECT_TYPES.ROCKET,
+			id: 301,
+			stages: [{ name: '1st Stage' }, { name: '2nd Stage' }],
+			currentStageIndex: 0,
+			boosters: { count: 2, burnTimeSec: 105 },
+			telemetry: {
+				status: 1,
+				flightTime: 50,
+				totalStages: 2,
+				stageIndex: 0,
+				isBoosterBurnout: false,
+				isBoosterSeparated: false
+			}
+		};
+
+		tp._updatePinnedHeader(targetRocket);
+		assert.ok(tp.ui.stageInfo.textContent.includes('[+SRB]'), 'Header must show [+SRB] while firing');
+
+		targetRocket.telemetry.isBoosterBurnout = true;
+		tp._updatePinnedHeader(targetRocket);
+		assert.ok(tp.ui.stageInfo.textContent.includes('[SRB BURNOUT]'), 'Header must show [SRB BURNOUT] upon burnout');
+
+		targetRocket.telemetry.isBoosterSeparated = true;
+		tp._updatePinnedHeader(targetRocket);
+		assert.ok(tp.ui.stageInfo.textContent.includes('[SRB SEP]'), 'Header must show [SRB SEP] upon separation');
 	});
 });
 

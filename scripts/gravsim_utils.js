@@ -208,7 +208,8 @@ export function normalizeRocketConfig(config) {
 				jettisonSpeedM_S: stg.jettisonSpeedM_S !== undefined ? stg.jettisonSpeedM_S : MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S,
 			})),
 			payload: config.payload || { name: 'Payload', massT: 0, radius: 1.0 },
-			fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }
+			fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM },
+			boosters: config.boosters ? JSON.parse(JSON.stringify(config.boosters)) : null
 		};
 	}
 

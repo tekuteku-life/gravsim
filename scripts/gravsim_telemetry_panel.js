@@ -499,7 +499,18 @@ export class TelemetryPanel {
 		const stageNum = curStg + 1;
 		const curStageObj = target.stages && target.stages[curStg];
 		const stageName = curStageObj?.name ? curStageObj.name : (totalStg > 1 ? (stageNum === 1 ? 'BOOSTER' : 'UPPER') : 'CORE');
-		DOMUtils.setText(this.ui.stageInfo, `${stageNum} / ${totalStg} (${stageName})`);
+		const hasBoosters = Boolean(target.boosters && (target.boosters.count > 0 || target.boosters.burnTimeSec > 0));
+		let srbTag = '';
+		if (hasBoosters && curStg === 0) {
+			if (tm.isBoosterSeparated) {
+				srbTag = ' [SRB SEP]';
+			} else if (tm.isBoosterBurnout) {
+				srbTag = ' [SRB BURNOUT]';
+			} else {
+				srbTag = ' [+SRB]';
+			}
+		}
+		DOMUtils.setText(this.ui.stageInfo, `${stageNum} / ${totalStg} (${stageName})${srbTag}`);
 	}
 
 	_resetPinnedHeader(target) {

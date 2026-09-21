@@ -52,7 +52,15 @@ export class RocketRenderer {
 		const len = hasStage1 ? R * lod.STAGE1_LEN_RATIO : R * lod.STAGE2_LEN_RATIO;
 		let width = R * lod.WIDTH_RATIO;
 
-		const boosterCount = hasStage1 ? (rocket.boosters?.count || rocket.rendering?.boosters?.count || 0) : 0;
+		const isBoosterSeparated = Boolean(
+			rocket.isBoosterSeparated ||
+			rocket.telemetry?.isBoosterSeparated
+		);
+		const isBoosterBurnout = Boolean(
+			rocket.isBoosterBurnout ||
+			rocket.telemetry?.isBoosterBurnout
+		);
+		const boosterCount = (hasStage1 && !isBoosterSeparated) ? (rocket.boosters?.count || rocket.rendering?.boosters?.count || 0) : 0;
 		if (boosterCount === 2) {
 			width *= 1.35;
 		} else if (boosterCount >= 4) {
@@ -67,7 +75,8 @@ export class RocketRenderer {
 		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
 		if (isFiring) {
 			const plumeLen = R * lod.PLUME_LEN_RATIO * (rocket.thrustRatio || 1.0);
-			const plumeWidthMult = boosterCount >= 4 ? 1.5 : (boosterCount === 2 ? 1.25 : 1.0);
+			const isBoosterFiring = !isBoosterBurnout;
+			const plumeWidthMult = (isBoosterFiring && boosterCount >= 4) ? 1.5 : ((isBoosterFiring && boosterCount === 2) ? 1.25 : 1.0);
 			ctx.fillStyle = lod.PLUME_COLOR;
 			ctx.beginPath();
 			ctx.moveTo(-len * 0.5, -width * lod.PLUME_WIDTH_RATIO * plumeWidthMult);
@@ -586,6 +595,19 @@ export class RocketRenderer {
 	}
 
 	static _drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R) {
+		const isBoosterSeparated = Boolean(
+			rocket.isBoosterSeparated ||
+			rocket.telemetry?.isBoosterSeparated
+		);
+		if (isBoosterSeparated) {
+			return;
+		}
+
+		const isBoosterBurnout = Boolean(
+			rocket.isBoosterBurnout ||
+			rocket.telemetry?.isBoosterBurnout
+		);
+
 		const boosters = rocket.boosters ||
 			rocket.rendering?.boosters ||
 			(rocket.stages && rocket.stages[0]?.boosters);
@@ -680,8 +702,8 @@ export class RocketRenderer {
 			ctx.closePath();
 			ctx.fill();
 
-			// 5. Solid Booster Exhaust Plume (when firing)
-			if (isFiring && throttle > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD) {
+			// 5. Solid Booster Exhaust Plume (when firing and not burnt out)
+			if (isFiring && !isBoosterBurnout && throttle > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD) {
 				this._drawPlume(ctx, xBase - lNozzleB, yPos, plumeScale, throttle, plumeFuel, R);
 			}
 		}

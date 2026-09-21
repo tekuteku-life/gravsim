@@ -232,6 +232,7 @@ export class CalcRocket extends GravSimCalcObject {
 			stages: thrustData?.stages,
 			payload: thrustData?.payload,
 			fairing: thrustData?.fairing,
+			boosters: thrustData?.boosters,
 			dryMassT: dryMass,
 			fuelMassT: fuelMass,
 			oxidMassT: oxidMass,
@@ -243,6 +244,12 @@ export class CalcRocket extends GravSimCalcObject {
 		});
 
 		this.stages = normConfig.stages;
+		this.boosters = normConfig.boosters || thrustData?.boosters || null;
+		this.hasBoosters = !!(this.boosters && ((this.boosters.count > 0) || (this.boosters.burnTimeSec > 0)));
+		this.isBoosterBurnout = false;
+		this.isBoosterSeparated = false;
+		this.boosterBurnTimer = 0;
+		this.boosterSepTimer = 0;
 		this.bottomOffsetM = thrustData?.bottomOffsetM !== undefined ? thrustData.bottomOffsetM : (radius > 10 ? radius : 31.5);
 		this.baseRadiusM = thrustData?.baseRadiusM || (normConfig.stages ? (this.bottomOffsetM ? this.bottomOffsetM / 3.10 : 63) : 63);
 		this.radius = this.bottomOffsetM;
@@ -377,7 +384,7 @@ export class CalcRocket extends GravSimCalcObject {
 		const sepSpeedM = stage.jettisonSpeedM_S || MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S;
 		let sepVx = this.vx + Math.cos(sepAngle) * sepSpeedM;
 		let sepVy = this.vy + Math.sin(sepAngle) * sepSpeedM;
-		
+
 		const isFinalStage = (this.currentStageIndex + 1 >= this.totalStages);
 
 		// If final stage (Upper stage releasing payload), apply automated deorbit burn to upper stage debris
@@ -438,6 +445,11 @@ export class CalcRocket extends GravSimCalcObject {
 				curAltM = Math.hypot(this.x - this._lastDominantBody.x, this.y - this._lastDominantBody.y) - this._lastDominantBody.radius;
 			}
 			this.separateFairing(curAltM, true);
+		}
+
+		// If boosters were not yet separated from Stage 1, mark separated to prevent orphan booster separation later
+		if (this.hasBoosters && !this.isBoosterSeparated) {
+			this.isBoosterSeparated = true;
 		}
 
 		// 4. Advance to next stage or finish with payload separation
@@ -552,6 +564,92 @@ export class CalcRocket extends GravSimCalcObject {
 				color: '#e0e0e0',
 				parentRocketId: this.id
 			});
+		}
+	}
+
+	separateBoosters() {
+		if (this.disableStaging || this.isBoosterSeparated || !this.hasBoosters) { return; }
+		this.isBoosterSeparated = true;
+
+		const boosterDryMass = this.boosters.dryMassT || (this.boosters.count === 4 ? 40.0 : 20.0);
+		if (this.stages && this.stages[0]) {
+			this.stages[0].dryMassT = Math.max(0, (this.stages[0].dryMassT || 0) - boosterDryMass);
+			this.dryMass = Math.max(0, this.dryMass - boosterDryMass);
+			this.updateTotalMass();
+		}
+
+		const count = this.boosters.count || 2;
+		const baseRad = this.baseRadiusM || (this.radius > 100 ? this.radius / 3.10 : this.radius);
+		const boosterRadius = baseRad * 0.65;
+		const massPerBooster = boosterDryMass / count;
+		const sepSpeedLat = this.boosters.jettisonSpeedM_S || MULTISTAGE_ROCKET.BOOSTER_SEP_LATERAL_SPEED_M_S || 12.0;
+		const sepSpeedBack = MULTISTAGE_ROCKET.BOOSTER_SEP_BACKWARD_SPEED_M_S || -1.0;
+		const offsetDist = baseRad * 1.5 + 8.0;
+
+		const latAngle1 = this.thrustAngle + Math.PI / 2;
+		const latAngle2 = this.thrustAngle - Math.PI / 2;
+
+		if (count === 2) {
+			const angles = [latAngle1, latAngle2];
+			for (let i = 0; i < 2; i++) {
+				const ang = angles[i];
+				const vx = this.vx + Math.cos(ang) * sepSpeedLat + Math.cos(this.thrustAngle) * sepSpeedBack;
+				const vy = this.vy + Math.sin(ang) * sepSpeedLat + Math.sin(this.thrustAngle) * sepSpeedBack;
+				this._pendingDebris.push({
+					name: `${this.name} - SRB-3 Booster ${i + 1}`,
+					debrisSubType: 4,
+					x: this.x + Math.cos(ang) * offsetDist,
+					y: this.y + Math.sin(ang) * offsetDist,
+					vx: vx,
+					vy: vy,
+					mass: massPerBooster,
+					radius: boosterRadius,
+					color: '#f0f2f5',
+					parentRocketId: this.id
+				});
+			}
+		} else if (count === 4) {
+			const pairs = [
+				{ lat: latAngle1, axialOffset: baseRad * 0.4 },
+				{ lat: latAngle1, axialOffset: -baseRad * 0.4 },
+				{ lat: latAngle2, axialOffset: baseRad * 0.4 },
+				{ lat: latAngle2, axialOffset: -baseRad * 0.4 },
+			];
+			for (let i = 0; i < 4; i++) {
+				const p = pairs[i];
+				const vx = this.vx + Math.cos(p.lat) * sepSpeedLat + Math.cos(this.thrustAngle) * (sepSpeedBack + (p.axialOffset > 0 ? 0.5 : -0.5));
+				const vy = this.vy + Math.sin(p.lat) * sepSpeedLat + Math.sin(this.thrustAngle) * (sepSpeedBack + (p.axialOffset > 0 ? 0.5 : -0.5));
+				this._pendingDebris.push({
+					name: `${this.name} - SRB-3 Booster ${i + 1}`,
+					debrisSubType: 4,
+					x: this.x + Math.cos(p.lat) * offsetDist + Math.cos(this.thrustAngle) * p.axialOffset,
+					y: this.y + Math.sin(p.lat) * offsetDist + Math.sin(this.thrustAngle) * p.axialOffset,
+					vx: vx,
+					vy: vy,
+					mass: massPerBooster,
+					radius: boosterRadius,
+					color: '#f0f2f5',
+					parentRocketId: this.id
+				});
+			}
+		} else {
+			for (let i = 0; i < count; i++) {
+				const ang = (i % 2 === 0) ? latAngle1 : latAngle2;
+				const vx = this.vx + Math.cos(ang) * sepSpeedLat + Math.cos(this.thrustAngle) * sepSpeedBack;
+				const vy = this.vy + Math.sin(ang) * sepSpeedLat + Math.sin(this.thrustAngle) * sepSpeedBack;
+				this._pendingDebris.push({
+					name: `${this.name} - SRB-3 Booster ${i + 1}`,
+					debrisSubType: 4,
+					x: this.x + Math.cos(ang) * offsetDist,
+					y: this.y + Math.sin(ang) * offsetDist,
+					vx: vx,
+					vy: vy,
+					mass: massPerBooster,
+					radius: boosterRadius,
+					color: '#f0f2f5',
+					parentRocketId: this.id
+				});
+			}
 		}
 	}
 
@@ -1067,6 +1165,32 @@ export class CalcRocket extends GravSimCalcObject {
 						this.stageState = 'STG_MECO';
 						this.stgTimer = 0;
 					}
+				}
+			}
+		}
+
+		// Booster Burnout and Separation State Machine
+		if (this.hasBoosters && !this.isBoosterSeparated && this.currentStageIndex === 0) {
+			if (!this.isBoosterBurnout) {
+				if (this.stageState === 'STG_BURNING' || (!this.isHoldDown && this.isIgnited)) {
+					this.boosterBurnTimer += dt;
+					const boosterBurnTime = this.boosters.burnTimeSec || 105.0;
+					const flightTime = this.flightComputer?.flightTime ?? this.boosterBurnTimer;
+					if (this.boosterBurnTimer >= boosterBurnTime || flightTime >= boosterBurnTime) {
+						this.isBoosterBurnout = true;
+						const coreKN = this.boosters.coreThrustKN || 2940.0;
+						this.thrustForce = UnitConvertUtils.kn2n(coreKN);
+						if (this.burnTime > 0) {
+							const remPropT = this.fuelMass + this.oxidMass;
+							this.massLossRate = remPropT / this.burnTime;
+						}
+					}
+				}
+			} else {
+				this.boosterSepTimer += dt;
+				const sepDelay = this.boosters.separationDelaySec !== undefined ? this.boosters.separationDelaySec : 1.5;
+				if (this.boosterSepTimer >= sepDelay) {
+					this.separateBoosters();
 				}
 			}
 		}

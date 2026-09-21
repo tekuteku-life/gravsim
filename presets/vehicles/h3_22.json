@@ -11,9 +11,9 @@
 			"fuelType": "hydro",
 			"thrustKN": 7250,
 			"dryMassT": 45.0,
-			"fuelMassT": 42.0,
-			"oxidMassT": 252.0,
-			"burnTime": 178.0,
+			"fuelMassT": 34.0,
+			"oxidMassT": 204.0,
+			"burnTime": 290.0,
 			"ofRatio": 6.0,
 			"radius": 2.6,
 			"separationDelaySec": 3.0,
@@ -40,6 +40,16 @@
 		"enabled": true,
 		"massT": 2.2,
 		"separationAltKm": 115
+	},
+	"boosters": {
+		"count": 2,
+		"name": "SRB-3",
+		"burnTimeSec": 105.0,
+		"thrustKN": 4310.0,
+		"dryMassT": 20.0,
+		"separationDelaySec": 1.5,
+		"jettisonSpeedM_S": 12.0,
+		"coreThrustKN": 2940.0
 	},
 	"rendering": {
 		"colorTheme": "orange",

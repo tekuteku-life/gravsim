@@ -77,6 +77,8 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = obj.totalStages !== undefined ? obj.totalStages : 1;
 				buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] = (obj.stgSepLampTimer && obj.stgSepLampTimer > 0) ? 1 : 0;
 				buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] = (obj.fairing && obj.fairing.isSeparated) ? 1 : 0;
+				buffer[offset + BUFFER_INDEX.TM_BOOSTER_SEPARATED] = (obj.isBoosterSeparated) ? 1 : 0;
+				buffer[offset + BUFFER_INDEX.TM_BOOSTER_BURNOUT] = (obj.isBoosterBurnout) ? 1 : 0;
 			} else {
 				buffer[offset + BUFFER_INDEX.MASS] = obj.mass;
 				buffer[offset + BUFFER_INDEX.FUEL_MASS] = 0;
@@ -89,6 +91,8 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = 1;
 				buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] = 0;
 				buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] = 0;
+				buffer[offset + BUFFER_INDEX.TM_BOOSTER_SEPARATED] = 0;
+				buffer[offset + BUFFER_INDEX.TM_BOOSTER_BURNOUT] = 0;
 				if (obj.type === OBJECT_TYPES.DEBRIS) {
 					buffer[offset + BUFFER_INDEX.TM_STATUS] = obj.debrisSubType || 0;
 				}
@@ -193,6 +197,8 @@ export class WorkerBridge {
 				this._cache.tmTotalStages = buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES];
 				this._cache.tmStgSepActive = buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] > 0.5;
 				this._cache.tmFairingSeparated = buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] > 0.5;
+				this._cache.isBoosterSeparated = buffer[offset + BUFFER_INDEX.TM_BOOSTER_SEPARATED] > 0.5;
+				this._cache.isBoosterBurnout = buffer[offset + BUFFER_INDEX.TM_BOOSTER_BURNOUT] > 0.5;
 			} else if (this._cache.type === OBJECT_TYPES.DEBRIS) {
 				this._cache.debrisSubType = buffer[offset + BUFFER_INDEX.TM_STATUS];
 			}

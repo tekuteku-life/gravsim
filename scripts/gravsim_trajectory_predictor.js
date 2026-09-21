@@ -119,6 +119,14 @@ export class TrajectoryPredictor {
 		if (config.x !== undefined && config.y !== undefined) {
 			rocketX_m = UnitConvertUtils.pix2m(config.x);
 			rocketY_m = UnitConvertUtils.pix2m(config.y);
+		} else if (config.relX !== undefined && config.relY !== undefined) {
+			rocketX_m = hostX_m + UnitConvertUtils.pix2m(config.relX);
+			rocketY_m = hostY_m + UnitConvertUtils.pix2m(config.relY);
+		} else if (config.hostAngleRad !== undefined) {
+			const hostRadiusM = host.radius || (hostParam ? hostParam.RADIUS : 6371000);
+			const launchAltM = hostRadiusM + (config.bottomOffsetM || 31.5) + (config.hostAltitudeM || 0);
+			rocketX_m = hostX_m + Math.cos(config.hostAngleRad) * launchAltM;
+			rocketY_m = hostY_m + Math.sin(config.hostAngleRad) * launchAltM;
 		} else {
 			const relX_px = config.relX !== undefined ? config.relX : 0;
 			const relY_px = config.relY !== undefined ? config.relY : 0;
@@ -173,7 +181,8 @@ export class TrajectoryPredictor {
 			hostAltM: config.hostAltitudeM || 0,
 			stages: config.stages,
 			payload: config.payload,
-			fairing: config.fairing
+			fairing: config.fairing,
+			boosters: config.boosters
 		};
 
 		// Collect all celestial bodies with full inertial coordinates and velocities
@@ -355,6 +364,10 @@ export class TrajectoryPredictor {
 						if (status >= TELEMETRY.STATUS.MECO || rocket.fuelMass <= 0 || rocket.burnTime <= 0 || (ev.time && flightTime >= ev.time)) {
 							passed = true;
 						}
+					} else if (ev.id === 'booster_burnout') {
+						if (rocket.isBoosterBurnout || rocket.telemetry?.isBoosterBurnout || (ev.time && flightTime >= ev.time)) {
+							passed = true;
+						}
 					} else {
 						if (status >= TELEMETRY.STATUS.MECO || rocket.currentStageIndex > 0 || (ev.time && flightTime >= ev.time)) {
 							passed = true;
@@ -362,6 +375,16 @@ export class TrajectoryPredictor {
 					}
 					break;
 				}
+				case 'booster_burnout':
+					if (rocket.isBoosterBurnout || rocket.telemetry?.isBoosterBurnout || (ev.time && flightTime >= ev.time)) {
+						passed = true;
+					}
+					break;
+				case 'booster_sep':
+					if (rocket.isBoosterSeparated || rocket.telemetry?.isBoosterSeparated || (ev.time && flightTime >= ev.time)) {
+						passed = true;
+					}
+					break;
 				case 'stg_meco': {
 					let targetStg = 1;
 					if (ev.id && ev.id.startsWith('meco_')) {
@@ -373,7 +396,11 @@ export class TrajectoryPredictor {
 					break;
 				}
 				case 'staging': {
-					if (ev.id === 'payload_sep') {
+					if (ev.id === 'booster_sep') {
+						if (rocket.isBoosterSeparated || rocket.telemetry?.isBoosterSeparated || (ev.time && flightTime >= ev.time)) {
+							passed = true;
+						}
+					} else if (ev.id === 'payload_sep') {
 						if (rocket.isPayloadSeparated || rocket.stageState === 'ORBITAL_COAST' || (ev.time && flightTime >= ev.time)) {
 							passed = true;
 						}

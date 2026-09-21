@@ -95,6 +95,7 @@ export class ObjectManager {
 			stages: obj.stages,
 			payload: obj.payload,
 			fairing: obj.fairing,
+			boosters: obj.boosters ? JSON.parse(JSON.stringify(obj.boosters)) : null,
 			disableStaging: !!obj.disableStaging,
 			colorTheme: obj.colorTheme || 'orange'
 		};
@@ -191,6 +192,8 @@ export class ObjectManager {
 					debColor = theme.stg2Grad[0] || theme.accentBand;
 				} else if (objData.debrisSubType === 3) {
 					debColor = theme.fairingGrad[0] || '#e8ebed';
+				} else if (objData.debrisSubType === 4) {
+					debColor = '#f0f2f5';
 				}
 
 				const debRadius = objData.radius || activeRocket?.baseRadiusM || MULTISTAGE_ROCKET.DEFAULT_STAGE_RADIUS_M;
@@ -263,6 +266,9 @@ export class ObjectManager {
 		target.isHoldDown = objData.isHoldDown;
 		target.isIgnited = objData.isIgnited;
 		target.isPayloadSeparated = !!objData.isPayloadSeparated;
+		target.isBoosterBurnout = !!objData.isBoosterBurnout;
+		target.isBoosterSeparated = !!objData.isBoosterSeparated;
+
 		target.radius = objData.radius;
 		target.tankPresFuel = objData.tmTankPresFuel;
 		target.tankPresOxid = objData.tmTankPresOxid;
@@ -301,7 +307,9 @@ export class ObjectManager {
 			totalStages: objData.tmTotalStages !== undefined ? objData.tmTotalStages : 1,
 			isStgSepActive: !!objData.tmStgSepActive,
 			isFairingSeparated: !!objData.tmFairingSeparated,
-			isPayloadSeparated: !!objData.isPayloadSeparated
+			isPayloadSeparated: !!objData.isPayloadSeparated,
+			isBoosterBurnout: !!objData.isBoosterBurnout,
+			isBoosterSeparated: !!objData.isBoosterSeparated
 		};
 
 		target.currentStageIndex = target.telemetry.stageIndex;
