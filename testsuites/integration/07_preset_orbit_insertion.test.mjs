@@ -295,5 +295,356 @@ describe('Integration 07: Comprehensive Preset Orbit Insertion & Dynamic Sizing'
 			assert.equal(propPanel.style.display, 'none', 'Propulsion panel must be hidden for passive payload');
 		});
 	});
+
+	describe('5. High-Energy and Target Orbit Insertion Physics (ISS, GTO, Lunar TLI, Mars TMI)', () => {
+		const AU = 149597870700;
+		const earthRadius = 6371000;
+		const earthOrbitSpeed = 29780;
+		const omega = (2 * Math.PI) / 86400;
+		const dy = -(earthRadius + 10);
+		const rotVx = -omega * dy;
+
+		it('should inject into 400km circular orbit for ISS rendezvous mission', () => {
+			const pm = new PresetManager();
+			const vehicle = pm.getVehicle('h3_22');
+			const payload = pm.getPayload('htv_x');
+			const mission = pm.getMission('iss_rendezvous');
+
+			const plan = pm.calculateMissionFlightPlan({ vehicle, payload, mission });
+			const engine = new PhysicsEngine();
+			engine.addObject({ id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, x: 0, y: 0, vx: 0, vy: 0, mass: 1.989e30, radius: 696340000 });
+			const earth = engine.addObject({ id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, x: AU, y: 0, vx: 0, vy: earthOrbitSpeed, mass: 5.972e24, radius: earthRadius });
+
+			const rocket = engine.addObject({
+				id: 401,
+				name: 'H3-22 ISS',
+				type: OBJECT_TYPES.ROCKET,
+				x: AU,
+				y: dy,
+				vx: earth.vx + rotVx,
+				vy: earth.vy,
+				radius: plan.stages[0].radius || 2.0,
+				dryMass: plan.stages[0].dryMassT,
+				fuelMass: plan.stages[0].fuelMassT,
+				oxidMass: plan.stages[0].oxidMassT,
+				burnTime: plan.stages[0].burnTime,
+				ofRatio: plan.stages[0].ofRatio,
+				massLossRate: (plan.stages[0].fuelMassT + plan.stages[0].oxidMassT) / plan.stages[0].burnTime,
+				thrustForce: plan.stages[0].thrustKN * 1000,
+				thrustAngle: -Math.PI / 2,
+				maxGLimit: 4.0,
+				isIgnited: true,
+				isHoldDown: false,
+				stages: plan.stages,
+				payload: plan.payload,
+				fairing: plan.fairing,
+				boosters: plan.boosters,
+				flightProfile: plan.flightProfile,
+				disableOrbitalCutoff: plan.disableOrbitalCutoff,
+				targetApogeeKm: plan.targetApogeeKm,
+				targetPerigeeKm: plan.targetPerigeeKm
+			});
+			engine._categorizeBodies();
+
+			let orbitAchieved = false;
+			for (let step = 0; step < 850; step++) {
+				engine._moveObjects(1.0);
+				const curDist = Math.hypot(rocket.x - earth.x, rocket.y - earth.y);
+				const curAltKm = (curDist - earthRadius) / 1000;
+				assert.ok(curAltKm >= -0.1, `ISS rocket must not crash into Earth (alt=${curAltKm.toFixed(1)} km)`);
+
+				if (rocket.stageState === 'ORBITAL_COAST' && rocket.isPayloadSeparated) {
+					orbitAchieved = true;
+					break;
+				}
+			}
+			assert.ok(orbitAchieved, 'ISS rendezvous must achieve ORBITAL_COAST with payload separation');
+
+			const GM_E = PHYSICS.G * earth.mass;
+			const relX = rocket.x - earth.x;
+			const relY = rocket.y - earth.y;
+			const r = Math.hypot(relX, relY);
+			const relVx = rocket.vx - earth.vx;
+			const relVy = rocket.vy - earth.vy;
+			const v = Math.hypot(relVx, relVy);
+			const energy = (v * v) / 2 - GM_E / r;
+			const a = -GM_E / (2 * energy);
+			const h = relX * relVy - relY * relVx;
+			const ecc = Math.sqrt(Math.max(0, 1 + (2 * energy * h * h) / (GM_E * GM_E)));
+			const peKm = (a * (1 - ecc) - earthRadius) / 1000;
+			const apKm = (a * (1 + ecc) - earthRadius) / 1000;
+
+			assert.ok(energy < 0, 'ISS orbit must be gravitationally bound');
+			assert.ok(ecc < 0.05, `ISS orbit must be nearly circular (ecc=${ecc.toFixed(3)})`);
+			assert.ok(peKm >= 140, `ISS orbit perigee must be >= 140 km (actual: ${peKm.toFixed(1)} km)`);
+			assert.ok(apKm >= 380 && apKm <= 550, `ISS orbit apogee must target ~400 km (actual: ${apKm.toFixed(1)} km)`);
+		});
+
+		it('should inject into Geostationary Transfer Orbit (GTO) with apogee >= 35,000 km', () => {
+			const pm = new PresetManager();
+			const vehicle = pm.getVehicle('h3_24');
+			const payload = pm.getPayload('earth_obs');
+			const mission = pm.getMission('gto_insertion');
+
+			const plan = pm.calculateMissionFlightPlan({ vehicle, payload, mission });
+			const engine = new PhysicsEngine();
+			engine.addObject({ id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, x: 0, y: 0, vx: 0, vy: 0, mass: 1.989e30, radius: 696340000 });
+			const earth = engine.addObject({ id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, x: AU, y: 0, vx: 0, vy: earthOrbitSpeed, mass: 5.972e24, radius: earthRadius });
+
+			const rocket = engine.addObject({
+				id: 402,
+				name: 'H3-24 GTO',
+				type: OBJECT_TYPES.ROCKET,
+				x: AU,
+				y: dy,
+				vx: earth.vx + rotVx,
+				vy: earth.vy,
+				radius: plan.stages[0].radius || 2.0,
+				dryMass: plan.stages[0].dryMassT,
+				fuelMass: plan.stages[0].fuelMassT,
+				oxidMass: plan.stages[0].oxidMassT,
+				burnTime: plan.stages[0].burnTime,
+				ofRatio: plan.stages[0].ofRatio,
+				massLossRate: (plan.stages[0].fuelMassT + plan.stages[0].oxidMassT) / plan.stages[0].burnTime,
+				thrustForce: plan.stages[0].thrustKN * 1000,
+				thrustAngle: -Math.PI / 2,
+				maxGLimit: 4.0,
+				isIgnited: true,
+				isHoldDown: false,
+				stages: plan.stages,
+				payload: plan.payload,
+				fairing: plan.fairing,
+				boosters: plan.boosters,
+				flightProfile: plan.flightProfile,
+				disableOrbitalCutoff: plan.disableOrbitalCutoff,
+				targetApogeeKm: plan.targetApogeeKm,
+				targetPerigeeKm: plan.targetPerigeeKm
+			});
+			engine._categorizeBodies();
+
+			let orbitAchieved = false;
+			for (let step = 0; step < 1200; step++) {
+				engine._moveObjects(1.0);
+				if (rocket.stageState === 'ORBITAL_COAST' && rocket.isPayloadSeparated) {
+					orbitAchieved = true;
+					break;
+				}
+			}
+			assert.ok(orbitAchieved, 'GTO must achieve ORBITAL_COAST with payload separation');
+
+			const GM_E = PHYSICS.G * earth.mass;
+			const relX = rocket.x - earth.x;
+			const relY = rocket.y - earth.y;
+			const r = Math.hypot(relX, relY);
+			const relVx = rocket.vx - earth.vx;
+			const relVy = rocket.vy - earth.vy;
+			const v = Math.hypot(relVx, relVy);
+			const energy = (v * v) / 2 - GM_E / r;
+			const a = -GM_E / (2 * energy);
+			const h = relX * relVy - relY * relVx;
+			const ecc = Math.sqrt(Math.max(0, 1 + (2 * energy * h * h) / (GM_E * GM_E)));
+			const peKm = (a * (1 - ecc) - earthRadius) / 1000;
+			const apKm = (a * (1 + ecc) - earthRadius) / 1000;
+
+			assert.ok(energy < 0, 'GTO orbit must be gravitationally bound');
+			assert.ok(ecc >= 0.65 && ecc <= 0.80, `GTO orbit must be highly elliptical (ecc=${ecc.toFixed(3)})`);
+			assert.ok(peKm >= 200, `GTO perigee must be >= 200 km (actual: ${peKm.toFixed(1)} km)`);
+			assert.ok(apKm >= 35000 && apKm <= 40000, `GTO apogee must reach geostationary distance ~35,786 km (actual: ${apKm.toFixed(1)} km)`);
+		});
+
+		it('should inject into Trans-Lunar Injection (TLI) orbit with apogee >= 350,000 km', () => {
+			const pm = new PresetManager();
+			const vehicle = pm.getVehicle('h3_24');
+			const payload = pm.getPayload('earth_obs');
+			const mission = pm.getMission('lunar_insertion');
+
+			const plan = pm.calculateMissionFlightPlan({ vehicle, payload, mission });
+			const engine = new PhysicsEngine();
+			engine.addObject({ id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, x: 0, y: 0, vx: 0, vy: 0, mass: 1.989e30, radius: 696340000 });
+			const earth = engine.addObject({ id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, x: AU, y: 0, vx: 0, vy: earthOrbitSpeed, mass: 5.972e24, radius: earthRadius });
+
+			const rocket = engine.addObject({
+				id: 403,
+				name: 'H3-24 Lunar',
+				type: OBJECT_TYPES.ROCKET,
+				x: AU,
+				y: dy,
+				vx: earth.vx + rotVx,
+				vy: earth.vy,
+				radius: plan.stages[0].radius || 2.0,
+				dryMass: plan.stages[0].dryMassT,
+				fuelMass: plan.stages[0].fuelMassT,
+				oxidMass: plan.stages[0].oxidMassT,
+				burnTime: plan.stages[0].burnTime,
+				ofRatio: plan.stages[0].ofRatio,
+				massLossRate: (plan.stages[0].fuelMassT + plan.stages[0].oxidMassT) / plan.stages[0].burnTime,
+				thrustForce: plan.stages[0].thrustKN * 1000,
+				thrustAngle: -Math.PI / 2,
+				maxGLimit: 4.0,
+				isIgnited: true,
+				isHoldDown: false,
+				stages: plan.stages,
+				payload: plan.payload,
+				fairing: plan.fairing,
+				boosters: plan.boosters,
+				flightProfile: plan.flightProfile,
+				disableOrbitalCutoff: plan.disableOrbitalCutoff,
+				targetApogeeKm: plan.targetApogeeKm,
+				targetPerigeeKm: plan.targetPerigeeKm
+			});
+			engine._categorizeBodies();
+
+			let orbitAchieved = false;
+			for (let step = 0; step < 1200; step++) {
+				engine._moveObjects(1.0);
+				if (rocket.stageState === 'ORBITAL_COAST' && rocket.isPayloadSeparated) {
+					orbitAchieved = true;
+					break;
+				}
+			}
+			assert.ok(orbitAchieved, 'TLI must achieve ORBITAL_COAST with payload separation');
+
+			const GM_E = PHYSICS.G * earth.mass;
+			const relX = rocket.x - earth.x;
+			const relY = rocket.y - earth.y;
+			const r = Math.hypot(relX, relY);
+			const relVx = rocket.vx - earth.vx;
+			const relVy = rocket.vy - earth.vy;
+			const v = Math.hypot(relVx, relVy);
+			const energy = (v * v) / 2 - GM_E / r;
+			const a = -GM_E / (2 * energy);
+			const h = relX * relVy - relY * relVx;
+			const ecc = Math.sqrt(Math.max(0, 1 + (2 * energy * h * h) / (GM_E * GM_E)));
+			const peKm = (a * (1 - ecc) - earthRadius) / 1000;
+			const apKm = (a * (1 + ecc) - earthRadius) / 1000;
+
+			assert.ok(energy < 0, 'TLI orbit must be gravitationally bound');
+			assert.ok(ecc >= 0.94 && ecc < 1.0, `TLI orbit must have near-parabolic eccentricity (ecc=${ecc.toFixed(3)})`);
+			assert.ok(peKm >= 200, `TLI perigee must be >= 200 km (actual: ${peKm.toFixed(1)} km)`);
+			assert.ok(apKm >= 350000, `TLI apogee must reach lunar distance ~384,400 km (actual: ${apKm.toFixed(1)} km)`);
+		});
+
+		it('should achieve hyperbolic escape trajectory (ecc > 1.0, E > 0) for Trans-Mars Injection', () => {
+			const pm = new PresetManager();
+			const vehicle = pm.getVehicle('h3_24');
+			const payload = pm.getPayload('earth_obs');
+			const mission = pm.getMission('mars_transfer');
+
+			const plan = pm.calculateMissionFlightPlan({ vehicle, payload, mission });
+			const engine = new PhysicsEngine();
+			engine.addObject({ id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, x: 0, y: 0, vx: 0, vy: 0, mass: 1.989e30, radius: 696340000 });
+			const earth = engine.addObject({ id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, x: AU, y: 0, vx: 0, vy: earthOrbitSpeed, mass: 5.972e24, radius: earthRadius });
+
+			const rocket = engine.addObject({
+				id: 404,
+				name: 'H3-24 Mars',
+				type: OBJECT_TYPES.ROCKET,
+				x: AU,
+				y: dy,
+				vx: earth.vx + rotVx,
+				vy: earth.vy,
+				radius: plan.stages[0].radius || 2.0,
+				dryMass: plan.stages[0].dryMassT,
+				fuelMass: plan.stages[0].fuelMassT,
+				oxidMass: plan.stages[0].oxidMassT,
+				burnTime: plan.stages[0].burnTime,
+				ofRatio: plan.stages[0].ofRatio,
+				massLossRate: (plan.stages[0].fuelMassT + plan.stages[0].oxidMassT) / plan.stages[0].burnTime,
+				thrustForce: plan.stages[0].thrustKN * 1000,
+				thrustAngle: -Math.PI / 2,
+				maxGLimit: 4.0,
+				isIgnited: true,
+				isHoldDown: false,
+				stages: plan.stages,
+				payload: plan.payload,
+				fairing: plan.fairing,
+				boosters: plan.boosters,
+				flightProfile: plan.flightProfile,
+				disableOrbitalCutoff: plan.disableOrbitalCutoff,
+				targetApogeeKm: plan.targetApogeeKm,
+				targetPerigeeKm: plan.targetPerigeeKm
+			});
+			engine._categorizeBodies();
+
+			let orbitAchieved = false;
+			for (let step = 0; step < 1200; step++) {
+				engine._moveObjects(1.0);
+				if (rocket.stageState === 'ORBITAL_COAST' && rocket.isPayloadSeparated) {
+					orbitAchieved = true;
+					break;
+				}
+			}
+			assert.ok(orbitAchieved, 'Mars transfer must burn through all stages and separate payload');
+
+			const GM_E = PHYSICS.G * earth.mass;
+			const relX = rocket.x - earth.x;
+			const relY = rocket.y - earth.y;
+			const r = Math.hypot(relX, relY);
+			const relVx = rocket.vx - earth.vx;
+			const relVy = rocket.vy - earth.vy;
+			const v = Math.hypot(relVx, relVy);
+			const energy = (v * v) / 2 - GM_E / r;
+			const h = relX * relVy - relY * relVx;
+			const ecc = Math.sqrt(Math.max(0, 1 + (2 * energy * h * h) / (GM_E * GM_E)));
+
+			assert.ok(energy > 0, `Mars transfer must achieve positive orbital energy (E=${energy.toExponential(2)})`);
+			assert.ok(ecc > 1.0, `Mars transfer must achieve hyperbolic escape trajectory (ecc=${ecc.toFixed(3)})`);
+		});
+	});
+
+	describe('6. Solid Rocket Booster Switching & Reset Verification', () => {
+		it('should reset boosters to null when switching from booster configuration to boosterless configuration', () => {
+			const launcher = universe.RocketLauncher;
+			const pm = presetManager;
+
+			// 1. Apply H3-24 (4 SRBs)
+			pm.applyToLauncher(launcher, { vehicleId: 'h3_24', missionId: 'leo_250km' });
+			assert.ok(launcher.boosters, 'Launcher must have boosters configured for H3-24');
+			assert.equal(launcher.boosters.count, 4, 'H3-24 must have 4 boosters');
+
+			// 2. Switch to H3-30 (0 SRBs)
+			pm.applyToLauncher(launcher, { vehicleId: 'h3_30', missionId: 'leo_250km' });
+			assert.ok(
+				!launcher.boosters || launcher.boosters.count === 0,
+				'Launcher boosters must be reset to null or count 0 when switching to H3-30'
+			);
+
+			// 3. Switch to H3-22 (2 SRBs)
+			pm.applyToLauncher(launcher, { vehicleId: 'h3_22', missionId: 'leo_250km' });
+			assert.ok(launcher.boosters, 'Launcher must have boosters configured for H3-22');
+			assert.equal(launcher.boosters.count, 2, 'H3-22 must have 2 boosters');
+
+			// 4. Switch to Falcon 9 (0 SRBs)
+			pm.applyToLauncher(launcher, { vehicleId: 'falcon9', missionId: 'leo_250km' });
+			assert.ok(
+				!launcher.boosters || launcher.boosters.count === 0,
+				'Launcher boosters must be reset to null or count 0 when switching to Falcon 9'
+			);
+		});
+	});
+
+	describe('7. RocketLauncher State Persistence & Rollout Integration', () => {
+		it('should serialize and deserialize cutoff parameters and booster configuration', () => {
+			const launcher = new RocketLauncher(universe);
+			launcher.currentVehicleId = 'h3_24';
+			launcher.boosters = { count: 4, name: 'SRB-3', thrustKN: 8560 };
+			launcher.targetApogeeKm = 35786;
+			launcher.targetPerigeeKm = 250;
+			launcher.disableOrbitalCutoff = false;
+
+			const state = launcher.getState();
+			assert.equal(state.targetApogeeKm, 35786);
+			assert.equal(state.targetPerigeeKm, 250);
+			assert.equal(state.disableOrbitalCutoff, false);
+			assert.equal(state.boosters?.count, 4);
+
+			const newLauncher = new RocketLauncher(universe);
+			newLauncher.loadState(state);
+			assert.equal(newLauncher.targetApogeeKm, 35786);
+			assert.equal(newLauncher.targetPerigeeKm, 250);
+			assert.equal(newLauncher.disableOrbitalCutoff, false);
+			assert.equal(newLauncher.boosters?.count, 4);
+		});
+	});
 });
 

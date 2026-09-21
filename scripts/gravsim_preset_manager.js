@@ -425,6 +425,8 @@ export class PresetManager {
 			} : (vehicle.defaultFairing ? JSON.parse(JSON.stringify(vehicle.defaultFairing)) : null),
 			flightProfile: adaptedFlightProfile,
 			disableOrbitalCutoff: !!mission?.disableOrbitalCutoff,
+			targetApogeeKm: mission?.targetApogeeKm || 0,
+			targetPerigeeKm: mission?.targetPerigeeKm || 0,
 			predictionDurationMonths: mission?.predictionDurationMonths
 		};
 	}
@@ -497,7 +499,9 @@ export class PresetManager {
 		const plan = this.calculateMissionFlightPlan({ vehicle, payload, mission });
 		if (plan) {
 			launcher.stages = plan.stages;
-			launcher.boosters = plan.boosters;
+			launcher.boosters = plan.boosters || null;
+			launcher.targetApogeeKm = plan.targetApogeeKm || null;
+			launcher.targetPerigeeKm = plan.targetPerigeeKm || null;
 			if (plan.payload) {
 				launcher.payload = plan.payload;
 			}
@@ -541,39 +545,7 @@ export class PresetManager {
 		const htvxPayload = this.getPayload('htv_x') || this.payloads.get('htv_x') || {};
 		const issMission = this.getMission('iss_rendezvous') || this.missions.get('iss_rendezvous') || {};
 
-		const fallbackStages = h3Vehicle.stages ? JSON.parse(JSON.stringify(h3Vehicle.stages)) : [
-			{
-				stageNumber: 1,
-				name: "1st Stage (LE-9 x 3 Core)",
-				fuelType: "hydro",
-				thrustKN: 4500,
-				dryMassT: 25.0,
-				fuelMassT: 34.0,
-				oxidMassT: 206.0,
-				burnTime: 240.0,
-				ofRatio: 6.0,
-				radius: 2.6,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 18.0
-			},
-			{
-				stageNumber: 2,
-				name: "2nd Stage (LE-5B-3 Upper)",
-				fuelType: "hydro",
-				thrustKN: 200,
-				dryMassT: 3.5,
-				fuelMassT: 4.0,
-				oxidMassT: 24.0,
-				burnTime: 618.0,
-				ofRatio: 6.0,
-				radius: 2.6,
-				separationDelaySec: 3.0,
-				ignitionDelaySec: 2.0,
-				jettisonSpeedM_S: 5.0
-			}
-		];
-
+		const fallbackStages = h3Vehicle.stages ? JSON.parse(JSON.stringify(h3Vehicle.stages)) : [];
 		if (fallbackStages[0]) {
 			fallbackStages[0].thrustKN = 4500;
 		}
@@ -594,16 +566,7 @@ export class PresetManager {
 			separationAltKm: 115
 		};
 
-		const fallbackProfile = issMission.flightProfile ? JSON.parse(JSON.stringify(issMission.flightProfile)) : [
-			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-			{ type: 'alt', value: 2000, thrust: 100, angle: 8 },
-			{ type: 'alt', value: 18000, thrust: 100, angle: 22 },
-			{ type: 'alt', value: 50000, thrust: 100, angle: 42 },
-			{ type: 'alt', value: 100000, thrust: 100, angle: 62 },
-			{ type: 'alt', value: 200000, thrust: 100, angle: 76 },
-			{ type: 'alt', value: 320000, thrust: 100, angle: 85 },
-			{ type: 'alt', value: 400000, thrust: 100, angle: 90 }
-		];
+		const fallbackProfile = issMission.flightProfile ? JSON.parse(JSON.stringify(issMission.flightProfile)) : [];
 
 		return {
 			H3: {
@@ -651,11 +614,7 @@ export class PresetManager {
 			description: vehicle.description || '',
 			stages: plan?.stages || (vehicle.stages ? JSON.parse(JSON.stringify(vehicle.stages)) : []),
 			payload: plan?.payload || defaultPayload,
-			fairing: plan?.fairing || (vehicle.defaultFairing ? JSON.parse(JSON.stringify(vehicle.defaultFairing)) : {
-				enabled: defaultPayload.fairing?.enabled ?? true,
-				massT: defaultPayload.fairing?.massT ?? 2.2,
-				separationAltKm: defaultPayload.fairing?.separationAltKm ?? 120
-			}),
+			fairing: plan?.fairing || vehicle.defaultFairing || null,
 			flightProfile: plan?.flightProfile || (defaultMission.flightProfile ? JSON.parse(JSON.stringify(defaultMission.flightProfile)) : []),
 			rendering: vehicle.rendering ? JSON.parse(JSON.stringify(vehicle.rendering)) : null,
 			boosters: plan?.boosters || vehicle.boosters || vehicle.rendering?.boosters || { count: 0 }

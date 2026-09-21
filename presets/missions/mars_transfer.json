@@ -9,13 +9,14 @@
 	"payloadDeltaVM_S": 1200,
 	"flightProfile": [
 		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
-		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 6 },
-		{ "type": "alt", "value": 20000, "thrust": 100, "angle": 20 },
-		{ "type": "alt", "value": 50000, "thrust": 100, "angle": 42 },
-		{ "type": "alt", "value": 90000, "thrust": 100, "angle": 62 },
-		{ "type": "alt", "value": 140000, "thrust": 100, "angle": 76 },
-		{ "type": "alt", "value": 200000, "thrust": 100, "angle": 86 },
-		{ "type": "alt", "value": 260000, "thrust": 100, "angle": 90 }
+		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 10 },
+		{ "type": "alt", "value": 15000, "thrust": 100, "angle": 26 },
+		{ "type": "alt", "value": 40000, "thrust": 100, "angle": 48 },
+		{ "type": "alt", "value": 80000, "thrust": 100, "angle": 68 },
+		{ "type": "alt", "value": 150000, "thrust": 100, "angle": 80 },
+		{ "type": "alt", "value": 220000, "thrust": 100, "angle": 86 },
+		{ "type": "alt", "value": 300000, "thrust": 100, "angle": 89 },
+		{ "type": "alt", "value": 380000, "thrust": 100, "angle": 90 }
 	],
 	"rendering": {
 		"trajectoryColor": "#ff5533",

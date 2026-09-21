@@ -276,10 +276,13 @@ export class CalcRocket extends GravSimCalcObject {
 		this.maxGLimit = thrustData?.maxGLimit || 0; // G
 		this.autoControl = thrustData?.autoControl !== undefined ? thrustData.autoControl : true;
 		this.disableStaging = thrustData?.disableStaging || false;
+		this.disableOrbitalCutoff = thrustData?.disableOrbitalCutoff || false;
+		this.targetApogeeKm = thrustData?.targetApogeeKm || 0;
+		this.targetPerigeeKm = thrustData?.targetPerigeeKm || 0;
 		this.hostId = thrustData?.hostId !== undefined ? thrustData.hostId : null;
 		this.hostAngleRad = thrustData?.hostAngleRad || 0; // rad
 		this.hostAltM = thrustData?.hostAltM || 0; // m
-		this.colorTheme = normConfig.colorTheme || 'orange';
+		this.colorTheme = normConfig.colorTheme || thrustData?.colorTheme || 'orange';
 
 		this._thrustRatio = 0;
 		this._qAxialKpa = 0; // kPa
@@ -297,7 +300,8 @@ export class CalcRocket extends GravSimCalcObject {
 			maxQLateralLimit: DEFAULT_OBJECT_PARAMS[name]?.MAX_Q_LATERAL || Infinity,
 			thrustAngle: this.thrustAngle,
 			flightProfile: this.flightProfile,
-			hostAngleRad: this.hostAngleRad
+			hostAngleRad: this.hostAngleRad,
+			disableOrbitalCutoff: this.disableOrbitalCutoff
 		});
 
 		// Pressure simulation parameters
@@ -622,7 +626,7 @@ export class CalcRocket extends GravSimCalcObject {
 			const posY = this.y + Math.sin(slot.latAngle) * offsetDist + Math.sin(this.thrustAngle) * slot.axialOffset;
 
 			this._pendingDebris.push({
-				name: `${this.name} - SRB-3 Booster ${i + 1}`,
+				name: `${this.name} - ${this.boosters.name || 'SRB'} Booster ${i + 1}`,
 				debrisSubType: 4,
 				x: posX,
 				y: posY,
@@ -630,7 +634,7 @@ export class CalcRocket extends GravSimCalcObject {
 				vy: vy,
 				mass: massPerBooster,
 				radius: boosterRadius,
-				color: '#f0f2f5',
+				color: this.boosters.casingColor || '#f0f2f5',
 				parentRocketId: this.id
 			});
 		}
@@ -998,9 +1002,15 @@ export class CalcRocket extends GravSimCalcObject {
 						const ecc = Math.sqrt(Math.max(0, 1 + (2 * E * h * h) / (GM * GM)));
 						const a = -GM / (2 * E);
 						const peKm = (a * (1 - ecc) - refBody.radius) / 1000;
+						const apKm = (a * (1 + ecc) - refBody.radius) / 1000;
 
-						// Cutoff when safe perigee is reached or circularized near apogee
-						if (!this.flightComputer?.disableOrbitalCutoff && (peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MAX_ECC && peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM))) {
+						// Cutoff when:
+						// 1. Target Apogee is reached outside atmosphere (e.g. GTO at 35,786 km, Lunar at 384,400 km)
+						const isTargetApogeeReached = (this.targetApogeeKm > 0 && apKm >= this.targetApogeeKm && peKm >= 140);
+						// 2. Standard safe perigee / circularization cutoff (LEO, ISS)
+						const isStandardCutoff = (!this.targetApogeeKm && !this.disableOrbitalCutoff && !this.flightComputer?.disableOrbitalCutoff && (peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MAX_ECC && peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM)));
+
+						if (isTargetApogeeReached || isStandardCutoff) {
 							this.burnTime = 0;
 							this.fuelMass = 0;
 							this.oxidMass = 0;

@@ -42,9 +42,7 @@ export class RocketLauncher {
 		this.currentVehicleId = defaultVehicle?.id || 'h3_30';
 		this.currentPresetId = (defaultVehicle?.id || 'H3_30').toUpperCase();
 		this.colorTheme = defaultVehicle?.colorTheme || 'orange';
-		this.stages = defaultVehicle?.stages ? JSON.parse(JSON.stringify(defaultVehicle.stages)) : [
-			{ stageNumber: 1, fuelType: 'hydro', thrustKN: 4410, dryMassT: 25.0, fuelMassT: 34.0, oxidMassT: 206.0, burnTime: 240.0 }
-		];
+		this.stages = defaultVehicle?.stages ? JSON.parse(JSON.stringify(defaultVehicle.stages)) : [];
 		this.payload = defaultPayload ? JSON.parse(JSON.stringify(defaultPayload)) : { name: 'HTV-X Cargo', massT: 6.0 };
 		this.fairing = defaultPayload?.fairing ? JSON.parse(JSON.stringify(defaultPayload.fairing)) : { enabled: true, massT: 2.2, separationAltKm: 120 };
 		this.boosters = defaultVehicle?.boosters || defaultVehicle?.rendering?.boosters || null;
@@ -58,19 +56,13 @@ export class RocketLauncher {
 		this.fuelType = stg0.fuelType ?? 'hydro';
 		this.thrustKN = stg0.thrustKN ?? 4410;
 
-		// Default Flight Profile (from default Mission)
-		this.flightProfile = defaultMission?.flightProfile ? JSON.parse(JSON.stringify(defaultMission.flightProfile)) : [
-			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-			{ type: 'alt', value: 2000, thrust: 100, angle: 8 },
-			{ type: 'alt', value: 18000, thrust: 100, angle: 22 },
-			{ type: 'alt', value: 50000, thrust: 100, angle: 42 },
-			{ type: 'alt', value: 100000, thrust: 100, angle: 62 },
-			{ type: 'alt', value: 200000, thrust: 100, angle: 76 },
-			{ type: 'alt', value: 320000, thrust: 100, angle: 85 },
-			{ type: 'alt', value: 400000, thrust: 100, angle: 90 }
-		];
+		// Default Flight Profile & Orbit targets (from default Mission)
+		this.flightProfile = defaultMission?.flightProfile ? JSON.parse(JSON.stringify(defaultMission.flightProfile)) : [];
+		this.targetApogeeKm = defaultMission?.targetApogeeKm || null;
+		this.targetPerigeeKm = defaultMission?.targetPerigeeKm || null;
+		this.disableOrbitalCutoff = defaultMission?.disableOrbitalCutoff || false;
 
-		this.thrustKN = this.stages[0].thrustKN;
+		this.thrustKN = this.stages[0]?.thrustKN ?? 4410;
 		this.calculatedBurnTime = this.stages[0]?.burnTime || 0;
 		this.maxGLimit = 4.0;	// G
 		this.predictionDurationMonths = TRAJECTORY_PREDICTION.DEFAULT_DURATION_MONTHS;
@@ -154,7 +146,10 @@ export class RocketLauncher {
 		this.stages = JSON.parse(JSON.stringify(preset.stages || []));
 		this.payload = JSON.parse(JSON.stringify(preset.payload || { massT: 0 }));
 		this.fairing = JSON.parse(JSON.stringify(preset.fairing || { enabled: false, massT: 0, separationAltKm: 120 }));
-		this.boosters = preset.boosters || preset.rendering?.boosters || null;
+		this.boosters = (preset.boosters || preset.rendering?.boosters) ? {
+			...(preset.rendering?.boosters || {}),
+			...(preset.boosters || {})
+		} : null;
 		this.rendering = preset.rendering ? JSON.parse(JSON.stringify(preset.rendering)) : null;
 
 		const stg0 = this.stages[0] || {};
@@ -169,6 +164,15 @@ export class RocketLauncher {
 
 		if (preset.flightProfile) {
 			this.flightProfile = JSON.parse(JSON.stringify(preset.flightProfile));
+		}
+		if (preset.disableOrbitalCutoff !== undefined) {
+			this.disableOrbitalCutoff = preset.disableOrbitalCutoff;
+		}
+		if (preset.targetApogeeKm !== undefined) {
+			this.targetApogeeKm = preset.targetApogeeKm;
+		}
+		if (preset.targetPerigeeKm !== undefined) {
+			this.targetPerigeeKm = preset.targetPerigeeKm;
 		}
 		if (typeof this.requestPreviewUpdate === 'function') {
 			this.requestPreviewUpdate();
@@ -596,6 +600,9 @@ export class RocketLauncher {
 			ofRatio: fuelDef.ofRatio,
 			angle: initialAngleRad, // Initially set to zenith direction
 			flightProfile: this.flightProfile, // Profile is handled dynamically by FlightComputer
+			disableOrbitalCutoff: this.disableOrbitalCutoff,
+			targetApogeeKm: this.targetApogeeKm,
+			targetPerigeeKm: this.targetPerigeeKm,
 			time: this.calculatedBurnTime,
 			lossRate: massLossRateTon,
 			maxGLimit: this.maxGLimit,
@@ -681,7 +688,10 @@ export class RocketLauncher {
 			rendering: this.rendering ? JSON.parse(JSON.stringify(this.rendering)) : null,
 			stages: JSON.parse(JSON.stringify(this.stages || [])),
 			payload: JSON.parse(JSON.stringify(this.payload || {})),
-			fairing: JSON.parse(JSON.stringify(this.fairing || {}))
+			fairing: JSON.parse(JSON.stringify(this.fairing || {})),
+			disableOrbitalCutoff: this.disableOrbitalCutoff || false,
+			targetApogeeKm: this.targetApogeeKm || null,
+			targetPerigeeKm: this.targetPerigeeKm || null
 		};
 	}
 
@@ -706,5 +716,8 @@ export class RocketLauncher {
 		if (state.stages && Array.isArray(state.stages)) this.stages = JSON.parse(JSON.stringify(state.stages));
 		if (state.payload) this.payload = JSON.parse(JSON.stringify(state.payload));
 		if (state.fairing) this.fairing = JSON.parse(JSON.stringify(state.fairing));
+		if (state.disableOrbitalCutoff !== undefined) this.disableOrbitalCutoff = state.disableOrbitalCutoff;
+		if (state.targetApogeeKm !== undefined) this.targetApogeeKm = state.targetApogeeKm;
+		if (state.targetPerigeeKm !== undefined) this.targetPerigeeKm = state.targetPerigeeKm;
 	}
 }

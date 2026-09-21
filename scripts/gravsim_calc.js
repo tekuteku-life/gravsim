@@ -56,7 +56,11 @@ export class PhysicsEngine {
 					payload: data.payload,
 					fairing: data.fairing,
 					boosters: data.boosters,
-					disableStaging: data.disableStaging
+					disableStaging: data.disableStaging,
+					disableOrbitalCutoff: data.disableOrbitalCutoff,
+					colorTheme: data.colorTheme,
+					targetApogeeKm: data.targetApogeeKm,
+					targetPerigeeKm: data.targetPerigeeKm
 				}
 			);
 		} else if (data.type === OBJECT_TYPES.DEBRIS) {
