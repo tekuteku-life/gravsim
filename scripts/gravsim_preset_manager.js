@@ -178,12 +178,8 @@ export class PresetManager {
 					} else {
 						onProgress(progressObj);
 					}
-				} catch (_) {
-					try {
-						onProgress(progressObj);
-					} catch (e) {
-						console.warn('[PresetManager] onProgress callback error:', e);
-					}
+				} catch (e) {
+					console.warn('[PresetManager] onProgress callback error:', e);
 				}
 			}
 		};
@@ -384,149 +380,82 @@ export class PresetManager {
 
 	/**
 	 * Build legacy monolithic MULTISTAGE_PRESETS object for full backward compatibility
+	 * Retains only the minimum baseline (H3-30 + HTV-X cargo) as fallback.
 	 */
 	_buildLegacyPresets() {
-		const h3Vehicle = this.getVehicle('h3_22') || {};
-		const f9Vehicle = this.getVehicle('falcon9') || {};
-		const h330Vehicle = this.getVehicle('h3_30') || {};
-		const h324Vehicle = this.getVehicle('h3_24') || {};
-		const sstoVehicle = this.getVehicle('ssto') || {};
-		const epVehicle = this.getVehicle('epsilon') || {};
+		const h3Vehicle = this.getVehicle('h3_30') || this.vehicles.get('h3_30') || {};
+		const htvxPayload = this.getPayload('htv_x') || this.payloads.get('htv_x') || {};
+		const issMission = this.getMission('iss_rendezvous') || this.missions.get('iss_rendezvous') || {};
 
-		const leoMission = this.getMission('leo_250km') || {};
-		const issMission = this.getMission('iss_rendezvous') || {};
-		const marsMission = this.getMission('mars_transfer') || {};
+		const fallbackStages = h3Vehicle.stages ? JSON.parse(JSON.stringify(h3Vehicle.stages)) : [
+			{
+				stageNumber: 1,
+				name: "1st Stage (LE-9 x 3 Core)",
+				fuelType: "hydro",
+				thrustKN: 4410,
+				dryMassT: 25.0,
+				fuelMassT: 34.0,
+				oxidMassT: 206.0,
+				burnTime: 240.0,
+				ofRatio: 6.0,
+				radius: 2.6,
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 18.0
+			},
+			{
+				stageNumber: 2,
+				name: "2nd Stage (LE-5B-3 Upper)",
+				fuelType: "hydro",
+				thrustKN: 150,
+				dryMassT: 3.5,
+				fuelMassT: 4.0,
+				oxidMassT: 24.0,
+				burnTime: 618.0,
+				ofRatio: 6.0,
+				radius: 2.6,
+				separationDelaySec: 3.0,
+				ignitionDelaySec: 2.0,
+				jettisonSpeedM_S: 5.0
+			}
+		];
+
+		const fallbackPayload = {
+			name: htvxPayload.name || "HTV-X Cargo",
+			massT: htvxPayload.massT || 6.0,
+			radius: htvxPayload.radius || 2.2,
+			propulsion: htvxPayload.propulsion ? JSON.parse(JSON.stringify(htvxPayload.propulsion)) : null
+		};
+
+		const fallbackFairing = htvxPayload.fairing ? JSON.parse(JSON.stringify(htvxPayload.fairing)) : {
+			enabled: true,
+			massT: 2.2,
+			separationAltKm: 120
+		};
+
+		const fallbackProfile = issMission.flightProfile ? JSON.parse(JSON.stringify(issMission.flightProfile)) : [
+			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+			{ type: 'alt', value: 2000, thrust: 100, angle: 8 },
+			{ type: 'alt', value: 18000, thrust: 100, angle: 22 },
+			{ type: 'alt', value: 50000, thrust: 100, angle: 42 },
+			{ type: 'alt', value: 100000, thrust: 100, angle: 62 },
+			{ type: 'alt', value: 200000, thrust: 100, angle: 76 },
+			{ type: 'alt', value: 320000, thrust: 100, angle: 85 },
+			{ type: 'alt', value: 400000, thrust: 100, angle: 90 }
+		];
 
 		return {
-			FALCON9: {
-				id: "FALCON9",
-				name: "Falcon 9 Style (2-Stage)",
-				lengthM: 70.0,
-				colorTheme: "classic",
-				description: "Two-stage orbital launch vehicle with liquid oxygen and kerosene propellants",
-				stages: JSON.parse(JSON.stringify(f9Vehicle.stages || [])),
-				payload: { name: "Satellite Payload", massT: 8.0, radius: 2.0 },
-				fairing: { enabled: true, massT: 1.7, separationAltKm: 110 },
-				flightProfile: JSON.parse(JSON.stringify(leoMission.flightProfile || [])),
-				rendering: f9Vehicle.rendering ? JSON.parse(JSON.stringify(f9Vehicle.rendering)) : null,
-				boosters: { count: 0 }
-			},
 			H3: {
 				id: "H3",
-				name: "H3 Style (2-Stage)",
-				lengthM: 63.0,
-				colorTheme: "orange",
-				description: "Two-stage cryogenic launch vehicle with LE-9 and LE-5B-3 engines",
-				stages: [
-					{
-						stageNumber: 1,
-						name: "1st Stage (LE-9 x3 / Boosted)",
-						fuelType: "hydro",
-						thrustKN: 4500,
-						dryMassT: 25.0,
-						fuelMassT: 34.0,
-						oxidMassT: 206.0,
-						burnTime: 235.0,
-						ofRatio: 6.0,
-						radius: 2.6,
-						separationDelaySec: 3.0,
-						ignitionDelaySec: 2.0,
-						jettisonSpeedM_S: 18.0
-					},
-					{
-						stageNumber: 2,
-						name: "2nd Stage (LE-5B-3)",
-						fuelType: "hydro",
-						thrustKN: 200,
-						dryMassT: 3.5,
-						fuelMassT: 4.0,
-						oxidMassT: 24.0,
-						burnTime: 618.0,
-						ofRatio: 6.0,
-						radius: 2.6,
-						separationDelaySec: 3.0,
-						ignitionDelaySec: 2.0,
-						jettisonSpeedM_S: 5.0
-					}
-				],
-				payload: { name: "HTV-X Cargo", massT: 4.0, radius: 2.0 },
-				fairing: { enabled: true, massT: 2.0, separationAltKm: 115 },
-				flightProfile: JSON.parse(JSON.stringify(issMission.flightProfile || [])),
+				name: h3Vehicle.name || "H3-30 (LE-9 x 3, No SRB)",
+				lengthM: h3Vehicle.lengthM || 63.0,
+				colorTheme: h3Vehicle.colorTheme || "orange",
+				description: h3Vehicle.description || "Two-stage cryogenic launch vehicle with HTV-X Cargo",
+				stages: fallbackStages,
+				payload: fallbackPayload,
+				fairing: fallbackFairing,
+				flightProfile: fallbackProfile,
 				rendering: h3Vehicle.rendering ? JSON.parse(JSON.stringify(h3Vehicle.rendering)) : null,
-				boosters: (h3Vehicle.boosters || h3Vehicle.rendering?.boosters) ? {
-					...(h3Vehicle.rendering?.boosters || {}),
-					...(h3Vehicle.boosters || {})
-				} : null
-			},
-			H3_30: {
-				id: "H3_30",
-				name: "H3-30 (LE-9 x 3, No SRB)",
-				lengthM: 63.0,
-				colorTheme: "orange",
-				description: "Two-stage cryogenic launch vehicle with 3x LE-9 main engines and no solid rocket boosters",
-				stages: JSON.parse(JSON.stringify(h330Vehicle.stages || [])),
-				payload: { name: "ALOS-4 Satellite", massT: 3.0, radius: 1.8 },
-				fairing: { enabled: true, massT: 2.0, separationAltKm: 115 },
-				flightProfile: JSON.parse(JSON.stringify(leoMission.flightProfile || [])),
-				rendering: h330Vehicle.rendering ? JSON.parse(JSON.stringify(h330Vehicle.rendering)) : null,
-				boosters: { count: 0 }
-			},
-			H3_22: {
-				id: "H3_22",
-				name: "H3-22 (SRB-3 x 2 + LE-9 x 2)",
-				lengthM: 63.0,
-				colorTheme: "orange",
-				description: "Standard medium-lift launch vehicle with 2x LE-9 cryogenic core engines and 2x SRB-3 solid rocket boosters",
-				stages: JSON.parse(JSON.stringify(h3Vehicle.stages || [])),
-				payload: { name: "HTV-X Cargo", massT: 6.0, radius: 2.2 },
-				fairing: { enabled: true, massT: 2.2, separationAltKm: 115 },
-				flightProfile: JSON.parse(JSON.stringify(issMission.flightProfile || [])),
-				rendering: h3Vehicle.rendering ? JSON.parse(JSON.stringify(h3Vehicle.rendering)) : null,
-				boosters: (h3Vehicle.boosters || h3Vehicle.rendering?.boosters) ? {
-					...(h3Vehicle.rendering?.boosters || {}),
-					...(h3Vehicle.boosters || {})
-				} : null
-			},
-			H3_24: {
-				id: "H3_24",
-				name: "H3-24L (Heavy: SRB-3 x 4 + LE-9 x 2)",
-				lengthM: 65.0,
-				colorTheme: "orange",
-				description: "Heavy-lift cryogenic launch vehicle with 2x LE-9 main engines and 4x SRB-3 solid rocket boosters for high-energy missions",
-				stages: JSON.parse(JSON.stringify(h324Vehicle.stages || [])),
-				payload: { name: "MMX Probe", massT: 4.0, radius: 2.0 },
-				fairing: { enabled: true, massT: 2.5, separationAltKm: 120 },
-				flightProfile: JSON.parse(JSON.stringify(marsMission.flightProfile || [])),
-				rendering: h324Vehicle.rendering ? JSON.parse(JSON.stringify(h324Vehicle.rendering)) : null,
-				boosters: (h324Vehicle.boosters || h324Vehicle.rendering?.boosters) ? {
-					...(h324Vehicle.rendering?.boosters || {}),
-					...(h324Vehicle.boosters || {})
-				} : null
-			},
-			SSTO: {
-				id: "SSTO",
-				name: "Single Stage (SSTO)",
-				lengthM: 50.0,
-				colorTheme: "blue",
-				description: "Single-stage-to-orbit rocket (Legacy baseline)",
-				stages: JSON.parse(JSON.stringify(sstoVehicle.stages || [])),
-				payload: { name: "Orbital Capsule", massT: 2.0, radius: 1.8 },
-				fairing: { enabled: true, massT: 1.0, separationAltKm: 110 },
-				flightProfile: JSON.parse(JSON.stringify(sstoVehicle.flightProfile || leoMission.flightProfile || [])),
-				rendering: sstoVehicle.rendering ? JSON.parse(JSON.stringify(sstoVehicle.rendering)) : null,
-				boosters: { count: 0 }
-			},
-			EPSILON: {
-				id: "EPSILON",
-				name: "Epsilon S Style (3-Stage Solid)",
-				lengthM: 26.0,
-				colorTheme: "epsilon",
-				description: "Three-stage solid propellant launch vehicle for small satellite orbital insertion",
-				stages: JSON.parse(JSON.stringify(epVehicle.stages || [])),
-				payload: { name: "ASNARO-2", massT: 0.6, radius: 1.2 },
-				fairing: { enabled: true, massT: 0.8, separationAltKm: 115 },
-				flightProfile: JSON.parse(JSON.stringify(epVehicle.flightProfile || leoMission.flightProfile || [])),
-				rendering: epVehicle.rendering ? JSON.parse(JSON.stringify(epVehicle.rendering)) : null,
 				boosters: { count: 0 }
 			}
 		};

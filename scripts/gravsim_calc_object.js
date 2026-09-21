@@ -569,9 +569,10 @@ export class CalcRocket extends GravSimCalcObject {
 
 	separateBoosters() {
 		if (this.disableStaging || this.isBoosterSeparated || !this.hasBoosters) { return; }
-		this.isBoosterSeparated = true;
 
+		this.isBoosterSeparated = true;
 		const boosterDryMass = this.boosters.dryMassT || (this.boosters.count === 4 ? 40.0 : 20.0);
+
 		if (this.stages && this.stages[0]) {
 			this.stages[0].dryMassT = Math.max(0, (this.stages[0].dryMassT || 0) - boosterDryMass);
 			this.dryMass = Math.max(0, this.dryMass - boosterDryMass);
@@ -589,67 +590,48 @@ export class CalcRocket extends GravSimCalcObject {
 		const latAngle1 = this.thrustAngle + Math.PI / 2;
 		const latAngle2 = this.thrustAngle - Math.PI / 2;
 
+		// Calculate mounting geometry (lateral angle and optional axial offset) for each booster
+		const boosterSlots = [];
 		if (count === 2) {
-			const angles = [latAngle1, latAngle2];
-			for (let i = 0; i < 2; i++) {
-				const ang = angles[i];
-				const vx = this.vx + Math.cos(ang) * sepSpeedLat + Math.cos(this.thrustAngle) * sepSpeedBack;
-				const vy = this.vy + Math.sin(ang) * sepSpeedLat + Math.sin(this.thrustAngle) * sepSpeedBack;
-				this._pendingDebris.push({
-					name: `${this.name} - SRB-3 Booster ${i + 1}`,
-					debrisSubType: 4,
-					x: this.x + Math.cos(ang) * offsetDist,
-					y: this.y + Math.sin(ang) * offsetDist,
-					vx: vx,
-					vy: vy,
-					mass: massPerBooster,
-					radius: boosterRadius,
-					color: '#f0f2f5',
-					parentRocketId: this.id
-				});
-			}
+			boosterSlots.push({ latAngle: latAngle1, axialOffset: 0 });
+			boosterSlots.push({ latAngle: latAngle2, axialOffset: 0 });
 		} else if (count === 4) {
-			const pairs = [
-				{ lat: latAngle1, axialOffset: baseRad * 0.4 },
-				{ lat: latAngle1, axialOffset: -baseRad * 0.4 },
-				{ lat: latAngle2, axialOffset: baseRad * 0.4 },
-				{ lat: latAngle2, axialOffset: -baseRad * 0.4 },
-			];
-			for (let i = 0; i < 4; i++) {
-				const p = pairs[i];
-				const vx = this.vx + Math.cos(p.lat) * sepSpeedLat + Math.cos(this.thrustAngle) * (sepSpeedBack + (p.axialOffset > 0 ? 0.5 : -0.5));
-				const vy = this.vy + Math.sin(p.lat) * sepSpeedLat + Math.sin(this.thrustAngle) * (sepSpeedBack + (p.axialOffset > 0 ? 0.5 : -0.5));
-				this._pendingDebris.push({
-					name: `${this.name} - SRB-3 Booster ${i + 1}`,
-					debrisSubType: 4,
-					x: this.x + Math.cos(p.lat) * offsetDist + Math.cos(this.thrustAngle) * p.axialOffset,
-					y: this.y + Math.sin(p.lat) * offsetDist + Math.sin(this.thrustAngle) * p.axialOffset,
-					vx: vx,
-					vy: vy,
-					mass: massPerBooster,
-					radius: boosterRadius,
-					color: '#f0f2f5',
-					parentRocketId: this.id
-				});
-			}
+			const axialOffset = baseRad * 0.4;
+			boosterSlots.push({ latAngle: latAngle1, axialOffset: axialOffset });
+			boosterSlots.push({ latAngle: latAngle1, axialOffset: -axialOffset });
+			boosterSlots.push({ latAngle: latAngle2, axialOffset: axialOffset });
+			boosterSlots.push({ latAngle: latAngle2, axialOffset: -axialOffset });
 		} else {
 			for (let i = 0; i < count; i++) {
-				const ang = (i % 2 === 0) ? latAngle1 : latAngle2;
-				const vx = this.vx + Math.cos(ang) * sepSpeedLat + Math.cos(this.thrustAngle) * sepSpeedBack;
-				const vy = this.vy + Math.sin(ang) * sepSpeedLat + Math.sin(this.thrustAngle) * sepSpeedBack;
-				this._pendingDebris.push({
-					name: `${this.name} - SRB-3 Booster ${i + 1}`,
-					debrisSubType: 4,
-					x: this.x + Math.cos(ang) * offsetDist,
-					y: this.y + Math.sin(ang) * offsetDist,
-					vx: vx,
-					vy: vy,
-					mass: massPerBooster,
-					radius: boosterRadius,
-					color: '#f0f2f5',
-					parentRocketId: this.id
+				boosterSlots.push({
+					latAngle: (i % 2 === 0) ? latAngle1 : latAngle2,
+					axialOffset: 0
 				});
 			}
+		}
+
+		// Single unified loop to spawn booster debris
+		for (let i = 0; i < boosterSlots.length; i++) {
+			const slot = boosterSlots[i];
+			const backImpulse = sepSpeedBack + (slot.axialOffset !== 0 ? (slot.axialOffset > 0 ? 0.5 : -0.5) : 0);
+			const vx = this.vx + Math.cos(slot.latAngle) * sepSpeedLat + Math.cos(this.thrustAngle) * backImpulse;
+			const vy = this.vy + Math.sin(slot.latAngle) * sepSpeedLat + Math.sin(this.thrustAngle) * backImpulse;
+
+			const posX = this.x + Math.cos(slot.latAngle) * offsetDist + Math.cos(this.thrustAngle) * slot.axialOffset;
+			const posY = this.y + Math.sin(slot.latAngle) * offsetDist + Math.sin(this.thrustAngle) * slot.axialOffset;
+
+			this._pendingDebris.push({
+				name: `${this.name} - SRB-3 Booster ${i + 1}`,
+				debrisSubType: 4,
+				x: posX,
+				y: posY,
+				vx: vx,
+				vy: vy,
+				mass: massPerBooster,
+				radius: boosterRadius,
+				color: '#f0f2f5',
+				parentRocketId: this.id
+			});
 		}
 	}
 

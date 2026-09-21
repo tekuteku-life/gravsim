@@ -32,20 +32,21 @@ export class RocketLauncher {
 		this.hostAngleDeg = 0;
 		this.hostAltitudeM = 10; // (m)
 
-		// Multi-stage setup (default: Falcon 9, or H3-30 fallback, or first available preset)
-		let preset = MULTISTAGE_PRESETS.FALCON9;
-		if (!preset || !preset.stages || !preset.stages.length) {
-			preset = MULTISTAGE_PRESETS.H3_30 || MULTISTAGE_PRESETS.H3 || Object.values(MULTISTAGE_PRESETS).find(p => p?.stages?.length) || null;
-		}
-		this.currentPresetId = preset?.id || 'H3_30';
-		this.colorTheme = preset?.colorTheme || 'classic';
-		this.stages = preset?.stages ? JSON.parse(JSON.stringify(preset.stages)) : [
+		// Multi-stage setup (Load default baseline from PresetManager)
+		const defaultVehicle = presetManager.getVehicle('h3_30') || presetManager.getVehicle('h3_22');
+		const defaultPayload = presetManager.getPayload('htv_x');
+		const defaultMission = presetManager.getMission('iss_rendezvous');
+
+		this.currentVehicleId = defaultVehicle?.id || 'h3_30';
+		this.currentPresetId = (defaultVehicle?.id || 'H3_30').toUpperCase();
+		this.colorTheme = defaultVehicle?.colorTheme || 'orange';
+		this.stages = defaultVehicle?.stages ? JSON.parse(JSON.stringify(defaultVehicle.stages)) : [
 			{ stageNumber: 1, fuelType: 'hydro', thrustKN: 4410, dryMassT: 25.0, fuelMassT: 34.0, oxidMassT: 206.0, burnTime: 240.0 }
 		];
-		this.payload = preset?.payload ? JSON.parse(JSON.stringify(preset.payload)) : { name: 'Payload', massT: 5.0 };
-		this.fairing = preset?.fairing ? JSON.parse(JSON.stringify(preset.fairing)) : { enabled: true, massT: 2.0, separationAltKm: 115 };
-		this.boosters = preset?.boosters || preset?.rendering?.boosters || null;
-		this.rendering = preset?.rendering || null;
+		this.payload = defaultPayload ? JSON.parse(JSON.stringify(defaultPayload)) : { name: 'HTV-X Cargo', massT: 6.0 };
+		this.fairing = defaultPayload?.fairing ? JSON.parse(JSON.stringify(defaultPayload.fairing)) : { enabled: true, massT: 2.2, separationAltKm: 120 };
+		this.boosters = defaultVehicle?.boosters || defaultVehicle?.rendering?.boosters || null;
+		this.rendering = defaultVehicle?.rendering || null;
 
 		// Rocket parameters (synced with active/booster stage for launcher UI)
 		const stg0 = this.stages[0] || {};
@@ -55,19 +56,17 @@ export class RocketLauncher {
 		this.fuelType = stg0.fuelType ?? 'hydro';
 		this.thrustKN = stg0.thrustKN ?? 4410;
 
-		// Default Flight Profile (from Preset)
-		this.flightProfile = preset.flightProfile
-			? JSON.parse(JSON.stringify(preset.flightProfile))
-			: [
-				{ type: 'alt', value: 0, thrust: 100, angle: 0 },
-				{ type: 'alt', value: 2000, thrust: 100, angle: 10 },
-				{ type: 'alt', value: 15000, thrust: 100, angle: 25 },
-				{ type: 'alt', value: 40000, thrust: 100, angle: 45 },
-				{ type: 'alt', value: 80000, thrust: 100, angle: 65 },
-				{ type: 'alt', value: 150000, thrust: 100, angle: 78 },
-				{ type: 'alt', value: 220000, thrust: 100, angle: 86 },
-				{ type: 'alt', value: 280000, thrust: 100, angle: 90 }
-			];
+		// Default Flight Profile (from default Mission)
+		this.flightProfile = defaultMission?.flightProfile ? JSON.parse(JSON.stringify(defaultMission.flightProfile)) : [
+			{ type: 'alt', value: 0, thrust: 100, angle: 0 },
+			{ type: 'alt', value: 2000, thrust: 100, angle: 8 },
+			{ type: 'alt', value: 18000, thrust: 100, angle: 22 },
+			{ type: 'alt', value: 50000, thrust: 100, angle: 42 },
+			{ type: 'alt', value: 100000, thrust: 100, angle: 62 },
+			{ type: 'alt', value: 200000, thrust: 100, angle: 76 },
+			{ type: 'alt', value: 320000, thrust: 100, angle: 85 },
+			{ type: 'alt', value: 400000, thrust: 100, angle: 90 }
+		];
 
 		this.thrustKN = this.stages[0].thrustKN;
 		this.calculatedBurnTime = 0;
