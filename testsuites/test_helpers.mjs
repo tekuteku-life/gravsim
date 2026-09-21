@@ -538,6 +538,8 @@ export const createMockUniverse = (overrides = {}) => {
 			ignite: () => {},
 			abortRollout: () => {},
 			requestPreviewUpdate: () => {},
+			updatePredictionSync: () => null,
+			updatePrediction: () => null,
 			setRolloutMode: () => {},
 			togglePreview: () => {},
 			drawPreview: () => {},

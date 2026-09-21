@@ -141,7 +141,18 @@ export class Universe {
 					nextCenter = debrisList.reduce((max, obj) => obj.mass > max.mass ? obj : max, debrisList[0]);
 				}
 
-				// Select lergest object
+				// If dying object was a rocket with a host, track the host celestial body rather than Sun
+				if (!nextCenter && oldCenter.type === OBJECT_TYPES.ROCKET) {
+					const hostId = oldCenter.hostId ?? this.RocketLauncher?.hostId;
+					if (hostId !== null && hostId !== undefined && hostId !== 0) {
+						nextCenter = this.objects.find(o => o.id === hostId && o.state === OBJECT_STATE.ACTIVE);
+					}
+					if (!nextCenter) {
+						nextCenter = this.objects.find(o => o.name === 'Earth' || (o.type === OBJECT_TYPES.CELESTIAL && o.id !== 0));
+					}
+				}
+
+				// Select largest object (as ultimate fallback)
 				if (!nextCenter && this.objects.length > 0) {
 					nextCenter = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
 				}

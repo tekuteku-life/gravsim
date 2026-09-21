@@ -58,6 +58,8 @@ export class ControlPanel {
 	}
 
 	_tabBtnClick(e) {
+		if (e.target.disabled) { return; }
+
 		// Remove active class from all tabs
 		this.ui.tabBtns.forEach(b => b.classList.remove('active'));
 		this.ui.tabContents.forEach(c => c.classList.remove('active'));

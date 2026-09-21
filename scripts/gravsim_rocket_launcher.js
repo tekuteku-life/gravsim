@@ -107,6 +107,7 @@ export class RocketLauncher {
 				// Release pad for next launch
 				this.rolloutedRocketId = null;
 				this.currentPrediction = null;
+				this._lastPredictKey = null;
 				this.isActive = false;
 				if (this.universe.ControlPanel?.rocketTab) {
 					this.universe.ControlPanel.rocketTab.setRolloutState(false);
@@ -120,7 +121,9 @@ export class RocketLauncher {
 		});
 		
 		const unlockUI = () => {
-			EventBus.emit('ui:set-tabs-locked', false);
+			if (this.rolloutedRocketId === null) {
+				EventBus.emit('ui:set-tabs-locked', false);
+			}
 			EventBus.emit('ui:set-controls-locked', false);
 		};
 		EventBus.on('sequencer-end', unlockUI);
@@ -508,13 +511,6 @@ export class RocketLauncher {
 		const isRollouted = this.rolloutedRocketId !== null;
 		if (!this.isActive && !isRollouted) { return; }
 
-		// Safeguard: If an active rocket is already flying with predicted trajectory, suppress launcher pad preview to prevent duplicate lines
-		if (!isRollouted && this.universe.objects.some(
-			o => o.type === OBJECT_TYPES.ROCKET && o.state === OBJECT_STATE.ACTIVE && !o.isHoldDown && o.predictedTrajectory
-		)) {
-			return;
-		}
-
 		if (this.mode === 'host') {
 			this.drawTargetMarker(ctx, centerObject, zoomScale);
 
@@ -639,25 +635,43 @@ export class RocketLauncher {
 		this.universe.TelemetryPanel.open();
 
 		this.universe.ControlPanel.rocketTab.setRolloutState(true);
+		EventBus.emit('ui:set-tabs-locked', true);
 	}
 
 	abortRollout() {
 		if (this.rolloutedRocketId !== null) {
 			this.universe.LaunchSequencer.abort();
 
+			const host = this.universe.objects.find(o => o.id === this.hostId)
+				|| this.universe.objects.find(o => o.name === 'Earth' || (o.type === OBJECT_TYPES.CELESTIAL && o.id !== 0));
+
+			if (host) {
+				EventBus.emit('camera:stop-auto-tracking', host);
+				EventBus.emit('camera:set-tracking-target', host);
+				EventBus.emit('camera:fit-to-target', host);
+				if (this.universe.InfoPanel) {
+					this.universe.InfoPanel.updateCamera(host.name);
+				}
+			} else {
+				EventBus.emit('camera:stop-auto-tracking');
+			}
+
 			const obj = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
 			if (obj) {
 				this.universe.ObjectManager.removeObject(obj);
 			}
 			this.rolloutedRocketId = null;
+			this._lastPredictKey = null;
 
 			// Emit event to stop pad effect
 			EventBus.emit('effect:pad-stop');
 
-			this.universe.ControlPanel.rocketTab.setRolloutState(false);
+			this.universe.ControlPanel?.rocketTab?.setRolloutState(false);
+			this.universe.ControlPanel?.systemTab?.updateCenterOptions();
 
-			const host = this.universe.objects.find(o => o.id === this.hostId);
-			EventBus.emit('camera:stop-auto-tracking', host);
+			EventBus.emit('ui:set-tabs-locked', false);
+
+			this.requestPreviewUpdate(0);
 		}
 	}
 

@@ -402,8 +402,17 @@ export class RocketTab {
 		};
 
 		this.ui.rlIgniteQuickBtn.addEventListener('click', () => triggerIgnite('LEGACY_QUICK'));
-		this.ui.rlIgniteFullBtn.addEventListener('click', () => triggerIgnite('FULL_COUNTDOWN'));
-		this.ui.rlAbortBtn.addEventListener('click', () => this.universe.RocketLauncher.abortRollout());
+		this.ui.rlAbortBtn.addEventListener('click', () => {
+			this.universe.RocketLauncher.abortRollout();
+			let hostId = this.universe.RocketLauncher.hostId;
+			if (hostId === null || hostId === 0) {
+				hostId = this._getDefaultHostId();
+				this.universe.RocketLauncher.hostId = hostId;
+			}
+			this._setupLaunchEnvironment(hostId);
+			this._updateRocketHostOptions();
+			this._updateRocketStats();
+		});
 
 		EventBus.on('ui:set-controls-locked', (isLocked) => {
 			this.ui.rlIgniteQuickBtn.disabled = isLocked;
@@ -782,7 +791,11 @@ export class RocketTab {
 	}
 
 	_updateRocketHostOptions() {
-		const currentHostId = this.universe.RocketLauncher.hostId;
+		let currentHostId = this.universe.RocketLauncher.hostId;
+		if (currentHostId === null || currentHostId === 0) {
+			currentHostId = this._getDefaultHostId();
+			this.universe.RocketLauncher.hostId = currentHostId;
+		}
 		this.ui.rlHostSelect.innerHTML = '';
 
 		for (const obj of this.universe.objects) {
@@ -792,11 +805,13 @@ export class RocketTab {
 			option.value = obj.id;
 			option.textContent = `${obj.name} (ID: ${obj.id})`;
 
-			if (obj.id === currentHostId || (currentHostId === null && obj.id === this._getDefaultHostId())) {
+			if (obj.id === currentHostId) {
 				option.selected = true;
-				this.universe.RocketLauncher.hostId = obj.id;
 			}
 			this.ui.rlHostSelect.appendChild(option);
+		}
+		if (this.ui.rlHostSelect.value !== String(currentHostId)) {
+			this.ui.rlHostSelect.value = String(currentHostId);
 		}
 	}
 
@@ -929,13 +944,7 @@ export class RocketTab {
 		// Pause simulation while setting up rocket
 		EventBus.emit('simulation:pause');
 
-		this.universe.RocketLauncher.togglePreview(true);
-
-		// Save time & zoom scale & camera target
-		this.saveTimeScale();
-		this.saveZoomScale();
-		this.saveCameraTarget();
-
+		// Resolve and setup target host FIRST
 		let targetHostId = this.universe.RocketLauncher.hostId;
 		const hostStillExists = this.universe.objects.some(o => o.id === targetHostId && o.type === OBJECT_TYPES.CELESTIAL);
 
@@ -946,6 +955,19 @@ export class RocketTab {
 		this._setupLaunchEnvironment(targetHostId);
 		this._updateRocketHostOptions(); 
 		this._updateRocketStats();
+
+		// Activate launcher pad preview and update prediction immediately
+		this.universe.RocketLauncher.togglePreview(true);
+		if (typeof this.universe.RocketLauncher.updatePredictionSync === 'function') {
+			this.universe.RocketLauncher.updatePredictionSync();
+		} else if (typeof this.universe.RocketLauncher.requestPreviewUpdate === 'function') {
+			this.universe.RocketLauncher.requestPreviewUpdate(0);
+		}
+
+		// Save time & zoom scale & camera target
+		this.saveTimeScale();
+		this.saveZoomScale();
+		this.saveCameraTarget();
 	}
 
 	close() {
@@ -1020,6 +1042,7 @@ export class RocketTab {
 		const sliders = this.ui.rlModeSelect.closest('.tab-content').querySelectorAll('input[type="range"]');
 
 		if (isRollouted) {
+			EventBus.emit('ui:set-tabs-locked', true);
 			this.ui.rlRolloutBtn.style.display = 'none';
 			this.ui.rlIgnitionGroup.style.display = 'flex';
 			this.ui.rlAbortBtn.style.display = 'block';
@@ -1040,6 +1063,9 @@ export class RocketTab {
 			const profileInputs = this.ui.rlFlightProfileBody ? this.ui.rlFlightProfileBody.querySelectorAll('input, select, button') : [];
 			profileInputs.forEach(el => el.disabled = true);
 		} else {
+			if (!this.universe.LaunchSequencer || !this.universe.LaunchSequencer.isActive) {
+				EventBus.emit('ui:set-tabs-locked', false);
+			}
 			this.ui.rlRolloutBtn.style.display = 'block';
 			this.ui.rlIgnitionGroup.style.display = 'none';
 			this.ui.rlAbortBtn.style.display = 'none';

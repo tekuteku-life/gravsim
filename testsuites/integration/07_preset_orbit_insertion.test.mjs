@@ -16,10 +16,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { Camera } from '../../scripts/gravsim_camera.js';
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
 import { Universe } from '../../scripts/gravsim_universe.js';
 import { PresetManager, presetManager } from '../../scripts/gravsim_preset_manager.js';
 import { RocketLauncher } from '../../scripts/gravsim_rocket_launcher.js';
+import { ControlPanel } from '../../scripts/gravsim_control_panel.js';
 import { RocketTab } from '../../scripts/gravsim_tab_rocket.js';
 import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
 import { OBJECT_TYPES, PHYSICS, MULTISTAGE_ROCKET } from '../../scripts/gravsim_const.js';
@@ -644,6 +646,193 @@ describe('Integration 07: Comprehensive Preset Orbit Insertion & Dynamic Sizing'
 			assert.equal(newLauncher.targetPerigeeKm, 250);
 			assert.equal(newLauncher.disableOrbitalCutoff, false);
 			assert.equal(newLauncher.boosters?.count, 4);
+		});
+	});
+
+	describe('8. Abort Target Host & Second-Launch Trajectory Preview Regressions', () => {
+		it('should NOT change target host to Sun when aborting after rollout', () => {
+			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: 'ACTIVE' };
+			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: 'ACTIVE', x: 0, y: 0 };
+			universe.objects = [sun, earth];
+			universe.camera = new Camera(universe);
+
+			const launcher = new RocketLauncher(universe);
+			universe.RocketLauncher = launcher;
+			launcher.hostId = earth.id;
+			launcher.mode = 'host';
+
+			const rocketTab = new RocketTab(universe);
+			universe.ControlPanel.rocketTab = rocketTab;
+
+			// Setup on Earth
+			rocketTab.open();
+			assert.equal(launcher.hostId, earth.id, 'Host should be Earth');
+			assert.equal(rocketTab.ui.rlHostSelect.value, String(earth.id), 'rlHostSelect should show Earth');
+
+			// Rollout
+			launcher.rollout();
+			assert.ok(launcher.rolloutedRocketId !== null, 'Rocket must be rollouted');
+			assert.equal(universe.camera.trackingTarget?.id, launcher.rolloutedRocketId, 'Camera must track rollouted rocket');
+
+			// Abort rollout
+			rocketTab.ui.rlAbortBtn.click();
+
+			assert.equal(launcher.rolloutedRocketId, null, 'Rollouted rocket must be cleared');
+			assert.equal(launcher.hostId, earth.id, 'Target host must remain Earth and NEVER become Sun (id: 0)');
+			assert.notEqual(launcher.hostId, sun.id, 'Target host must NOT be Sun');
+			assert.equal(universe.camera.trackingTarget?.id, earth.id, 'Camera must focus on Earth, NOT Sun');
+			assert.equal(rocketTab.ui.rlHostSelect.value, String(earth.id), 'rlHostSelect must remain Earth, NOT Sun');
+		});
+
+		it('should display predicted trajectory line on second launch before rollout is clicked', () => {
+			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: 'ACTIVE' };
+			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: 'ACTIVE', x: 0, y: 0 };
+			
+			// Simulate a rocket that was previously launched and is now actively flying in orbit with predicted trajectory
+			const flyingRocket = {
+				id: 99,
+				name: 'Rocket 1 In Orbit',
+				type: OBJECT_TYPES.ROCKET,
+				state: 'ACTIVE',
+				isHoldDown: false,
+				predictedTrajectory: { points: [{ x: 0, y: 0 }, { x: 100, y: 100 }] },
+				x: 1000,
+				y: 2000
+			};
+			universe.objects = [sun, earth, flyingRocket];
+
+			const launcher = new RocketLauncher(universe);
+			universe.RocketLauncher = launcher;
+			launcher.hostId = earth.id;
+			launcher.mode = 'host';
+
+			const rocketTab = new RocketTab(universe);
+			universe.ControlPanel.rocketTab = rocketTab;
+
+			// Open rocket launch tab for second launch
+			rocketTab.open();
+			assert.equal(launcher.isActive, true, 'Launcher must be active when tab is opened');
+			assert.equal(launcher.rolloutedRocketId, null, 'Rocket is not yet rollouted for second launch');
+
+			// Mock canvas and predictor render
+			let predictorRenderCalled = false;
+			launcher.predictor.render = () => { predictorRenderCalled = true; };
+			launcher.currentPrediction = { points: [{ x: 0, y: 0 }] };
+
+			const mockCanvas = document.createElement('canvas');
+			const ctx = mockCanvas.getContext('2d');
+			const renderCtx = { ctx, basis: earth, zoomScale: 1.0, cameraOffset: { x: 0, y: 0 } };
+
+			// Draw preview
+			launcher.drawPreview(ctx, earth, 1.0, renderCtx);
+
+			assert.equal(
+				predictorRenderCalled,
+				true,
+				'Trajectory prediction line MUST be drawn on second launch even if an active rocket is in orbit'
+			);
+		});
+
+		it('should lock menu tabs on rollout for second and subsequent launches', () => {
+			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: 'ACTIVE' };
+			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: 'ACTIVE', x: 0, y: 0 };
+			universe.objects = [sun, earth];
+			universe.camera = new Camera(universe);
+
+			const launcher = new RocketLauncher(universe);
+			universe.RocketLauncher = launcher;
+			launcher.hostId = earth.id;
+			launcher.mode = 'host';
+
+			const sysTabBtn = document.createElement('button');
+			sysTabBtn.className = 'tab-btn active';
+			sysTabBtn.setAttribute('data-target', 'tab-sys');
+			sysTabBtn.disabled = false;
+
+			const rocketTabBtn = document.createElement('button');
+			rocketTabBtn.className = 'tab-btn';
+			rocketTabBtn.setAttribute('data-target', 'tab-rocket');
+			rocketTabBtn.disabled = false;
+
+			const tabBtns = [sysTabBtn, rocketTabBtn];
+			const origQSA = document.querySelectorAll;
+			document.querySelectorAll = (sel) => sel === '.tab-btn' ? tabBtns : [];
+
+			const cp = new ControlPanel(universe);
+			document.querySelectorAll = origQSA;
+			universe.ControlPanel = cp;
+			const rocketTab = cp.rocketTab;
+
+			// Verify initially menu tabs are unlocked
+			tabBtns.forEach(btn => {
+				assert.equal(btn.disabled, false, 'Menu tab buttons must be unlocked initially');
+			});
+
+			// --- Launch 1 ---
+			rocketTabBtn.click();
+			launcher.rollout();
+			assert.ok(launcher.rolloutedRocketId !== null, 'Launch 1: Rocket must be rollouted');
+
+			// Menu tabs MUST be locked on first rollout
+			tabBtns.forEach(btn => {
+				assert.equal(btn.disabled, true, 'Launch 1: Menu tabs must be locked on rollout');
+				assert.equal(btn.style.pointerEvents, 'none');
+				assert.equal(btn.style.opacity, '0.5');
+			});
+
+			// Abort launch 1
+			rocketTab.ui.rlAbortBtn.click();
+			assert.equal(launcher.rolloutedRocketId, null, 'Launch 1: Rocket cleared after abort');
+
+			// Menu tabs MUST be unlocked after abort
+			tabBtns.forEach(btn => {
+				assert.equal(btn.disabled, false, 'Menu tabs must unlock after abort');
+				assert.equal(btn.style.pointerEvents, 'auto');
+				assert.equal(btn.style.opacity, '1.0');
+			});
+
+			// --- Launch 2 (二度目以降の打ち上げ) ---
+			launcher.rollout();
+			assert.ok(launcher.rolloutedRocketId !== null, 'Launch 2: Second rocket must be rollouted');
+
+			// Menu tabs MUST be locked on second rollout!
+			tabBtns.forEach(btn => {
+				assert.equal(btn.disabled, true, 'Launch 2: Menu tabs MUST be locked on second rollout');
+				assert.equal(btn.style.pointerEvents, 'none');
+				assert.equal(btn.style.opacity, '0.5');
+			});
+
+			// Attempting to click another tab (e.g. System tab) while locked should do nothing
+			sysTabBtn.click();
+			assert.equal(document.getElementById('tab-sys').classList.contains('active'), false, 'Cannot switch away from rocket tab while rolled out');
+			assert.equal(document.getElementById('tab-rocket').classList.contains('active'), true, 'Rocket tab must remain active');
+
+			// Simulate liftoff & sequence end for Launch 2
+			EventBus.emit('liftoff');
+			assert.equal(launcher.rolloutedRocketId, null, 'Rollouted rocket id cleared on liftoff');
+			// Sequencer ends
+			EventBus.emit('sequencer-end');
+
+			// Menu tabs MUST be unlocked after sequence finishes
+			tabBtns.forEach(btn => {
+				assert.equal(btn.disabled, false, 'Menu tabs must unlock after launch sequencer ends');
+			});
+
+			// --- Launch 3 (三度目の打ち上げ) ---
+			launcher.rollout();
+			assert.ok(launcher.rolloutedRocketId !== null, 'Launch 3: Third rocket must be rollouted');
+
+			// Menu tabs MUST be locked again on third rollout!
+			tabBtns.forEach(btn => {
+				assert.equal(btn.disabled, true, 'Launch 3: Menu tabs MUST be locked on third rollout');
+			});
+
+			// Abort launch 3
+			launcher.abortRollout();
+			assert.equal(launcher.rolloutedRocketId, null);
+			tabBtns.forEach(btn => {
+				assert.equal(btn.disabled, false, 'Menu tabs must unlock after aborting third rollout');
+			});
 		});
 	});
 });

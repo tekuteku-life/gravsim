@@ -114,6 +114,9 @@ export class Camera {
 
 	stopAutoTracking(fallbackHost = null) {
 		this.autoTrackHost = null;
+		if (fallbackHost) {
+			this.fitToTarget(fallbackHost);
+		}
 	}
 
 	fitToTarget(target) {
