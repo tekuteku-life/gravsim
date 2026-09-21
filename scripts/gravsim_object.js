@@ -608,8 +608,7 @@ export class Debris extends GravSimObject {
 		const realRadiusPx = (baseRad / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 		const screenRadiusPx = realRadiusPx * zoomScale;
 
-		// Ensure jettisoned hardware components maintain clear visual presence
-		const minSize = this.debrisSubType > 0 ? Math.max(this.size, 4.0) : this.size;
+		const minSize = this.debrisSubType > 0 ? Math.max(this.size, 1.0) : this.size;
 		return Math.max(minSize, screenRadiusPx);
 	}
 

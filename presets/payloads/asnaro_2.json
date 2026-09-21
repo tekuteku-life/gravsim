@@ -1,0 +1,22 @@
+{
+	"id": "asnaro_2",
+	"name": "Small Earth Observation Satellite (ASNARO-2)",
+	"description": "High-performance compact radar satellite for environmental observation, suited for small launch vehicles like Epsilon",
+	"massT": 0.6,
+	"radius": 1.2,
+	"recommendedMissionId": "leo_250km",
+	"fairing": {
+		"enabled": true,
+		"massT": 0.6,
+		"separationAltKm": 110
+	},
+	"propulsion": {
+		"enabled": false
+	},
+	"rendering": {
+		"busColor": "#c0c8d0",
+		"solarPanels": { "count": 2, "color": "#0055aa" },
+		"antenna": { "type": "compact_radar", "color": "#e0e0e0" }
+	}
+}
+

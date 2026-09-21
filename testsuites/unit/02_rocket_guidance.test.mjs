@@ -16,7 +16,7 @@ import { PadEffectRenderer } from '../../scripts/gravsim_pad_effect.js';
 import { Rocket, Debris } from '../../scripts/gravsim_object.js';
 import { CalcRocket } from '../../scripts/gravsim_calc_object.js';
 import { PropulsionCard } from '../../scripts/gravsim_telemetry_card.js';
-import { UnitConvertUtils } from '../../scripts/gravsim_utils.js';
+import { UnitConvertUtils, normalizeRocketConfig } from '../../scripts/gravsim_utils.js';
 import { PHYSICS, TELEMETRY, MULTISTAGE_PRESETS, OBJECT_TYPES, OBJECT_STATE, ROCKET_VISUAL, RENDER, DEFAULT_OBJECT_PARAMS, PAD_EFFECT } from '../../scripts/gravsim_const.js';
 
 test('FlightComputer - Initialization and default telemetry cache', () => {
@@ -296,6 +296,7 @@ test('RocketLauncher - Preset loading and transform calculation', () => {
 	launcher.hostAltitudeM = 10;
 
 	// Check preset loading
+	launcher.loadPreset('FALCON9');
 	assert.equal(launcher.currentPresetId, 'FALCON9');
 	assert.equal(launcher.stages.length, 2);
 	assert.equal(launcher.payload.name, 'Satellite Payload');
@@ -1331,6 +1332,7 @@ test('RocketLauncher - Falcon 9 stage burn time preservation and rollout synchro
 	const earth = createMockCelestialBody({ id: 1, name: 'Earth', x: 0, y: 0, radius: 6371000 });
 	const universe = createMockUniverse({ objects: [earth] });
 	const launcher = new RocketLauncher(universe);
+	launcher.loadPreset('FALCON9');
 
 	launcher.hostId = earth.id;
 	assert.equal(launcher.stages[0].burnTime, 162.0, 'Preset burn time should be 162.0s');

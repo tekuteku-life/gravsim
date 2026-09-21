@@ -244,10 +244,11 @@ export class CalcRocket extends GravSimCalcObject {
 		});
 
 		this.stages = normConfig.stages;
-		this.boosters = normConfig.boosters || thrustData?.boosters || null;
+		this.boosters = normConfig.boosters || thrustData?.boosters || thrustData?.rendering?.boosters || (normConfig.stages && normConfig.stages[0]?.boosters) || null;
 		this.hasBoosters = !!(this.boosters && ((this.boosters.count > 0) || (this.boosters.burnTimeSec > 0)));
 		this.isBoosterBurnout = false;
 		this.isBoosterSeparated = false;
+		this.isBoosterIgnited = false;
 		this.boosterBurnTimer = 0;
 		this.boosterSepTimer = 0;
 		this.bottomOffsetM = thrustData?.bottomOffsetM !== undefined ? thrustData.bottomOffsetM : (radius > 10 ? radius : 31.5);
@@ -581,7 +582,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 		const count = this.boosters.count || 2;
 		const baseRad = this.baseRadiusM || (this.radius > 100 ? this.radius / 3.10 : this.radius);
-		const boosterRadius = baseRad * 0.65;
+		const boosterRadius = baseRad;
 		const massPerBooster = boosterDryMass / count;
 		const sepSpeedLat = this.boosters.jettisonSpeedM_S || MULTISTAGE_ROCKET.BOOSTER_SEP_LATERAL_SPEED_M_S || 12.0;
 		const sepSpeedBack = MULTISTAGE_ROCKET.BOOSTER_SEP_BACKWARD_SPEED_M_S || -1.0;
@@ -979,7 +980,8 @@ export class CalcRocket extends GravSimCalcObject {
 			}
 
 			// 1. Autonomous orbital insertion cutoff outside dense atmosphere
-			if (!this.isPayloadSeparated && isFinalStage && (this.totalStages === 1 || this.currentStageIndex >= 1) && this.stageState === 'STG_BURNING' && refBody && distToRefM > 0) {
+			const isPayloadBurning = (this.isPayloadSeparated && this.hasPayloadPropulsion && this.stageState === 'STG_BURNING');
+			if (((!this.isPayloadSeparated && isFinalStage && (this.totalStages === 1 || this.currentStageIndex >= 1)) || isPayloadBurning) && this.stageState === 'STG_BURNING' && refBody && distToRefM > 0) {
 				const curAltM = distToRefM - refBody.radius;
 				if (curAltM >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MIN_ALT_M) {
 					const GM = PHYSICS.G * refBody.mass;
@@ -1002,11 +1004,18 @@ export class CalcRocket extends GravSimCalcObject {
 							this.burnTime = 0;
 							this.fuelMass = 0;
 							this.oxidMass = 0;
-							this.stageState = 'STG_MECO';
-							this.stgTimer = 0;
-							if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {
-								this.presState = 'MECO_TRANSIENT';
-								this.presTimer = 0;
+							this.thrustForce = 0;
+							this.isIgnited = false;
+							if (this.isPayloadSeparated) {
+								this.stageState = 'ORBITAL_COAST';
+								this.presState = 'POST_MECO_VENT';
+							} else {
+								this.stageState = 'STG_MECO';
+								this.stgTimer = 0;
+								if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {
+									this.presState = 'MECO_TRANSIENT';
+									this.presTimer = 0;
+								}
 							}
 							this.updateTotalMass();
 						}
@@ -1154,7 +1163,13 @@ export class CalcRocket extends GravSimCalcObject {
 		// Booster Burnout and Separation State Machine
 		if (this.hasBoosters && !this.isBoosterSeparated && this.currentStageIndex === 0) {
 			if (!this.isBoosterBurnout) {
-				if (this.stageState === 'STG_BURNING' || (!this.isHoldDown && this.isIgnited)) {
+				if (!this.isHoldDown && this.isIgnited) {
+					// Liftoff achieved: ignite SRB solid boosters!
+					if (!this.isBoosterIgnited) {
+						this.isBoosterIgnited = true;
+						const fullKN = this.stages?.[0]?.thrustKN || ((this.boosters.thrustKN || 4310) + (this.boosters.coreThrustKN || 2940));
+						this.thrustForce = UnitConvertUtils.kn2n(fullKN);
+					}
 					this.boosterBurnTimer += dt;
 					const boosterBurnTime = this.boosters.burnTimeSec || 105.0;
 					const flightTime = this.flightComputer?.flightTime ?? this.boosterBurnTimer;
@@ -1167,6 +1182,11 @@ export class CalcRocket extends GravSimCalcObject {
 							this.massLossRate = remPropT / this.burnTime;
 						}
 					}
+				} else if (this.isHoldDown && this.isIgnited) {
+					// Hold-down active: core engines firing, boosters on standby
+					this.isBoosterIgnited = false;
+					const coreKN = this.boosters.coreThrustKN || 2940.0;
+					this.thrustForce = UnitConvertUtils.kn2n(coreKN);
 				}
 			} else {
 				this.boosterSepTimer += dt;

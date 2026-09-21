@@ -8,7 +8,7 @@
 	"fairing": {
 		"enabled": true,
 		"massT": 2.2,
-		"separationAltKm": 120
+		"separationAltKm": 115
 	},
 	"propulsion": {
 		"enabled": true,

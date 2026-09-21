@@ -702,8 +702,11 @@ export class RocketRenderer {
 			ctx.closePath();
 			ctx.fill();
 
-			// 5. Solid Booster Exhaust Plume (when firing and not burnt out)
-			if (isFiring && !isBoosterBurnout && throttle > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD) {
+			// 5. Solid Booster Exhaust Plume (when firing, booster ignited, and not burnt out)
+			const isBoosterIgnited = (rocket.isBoosterIgnited !== undefined)
+				? rocket.isBoosterIgnited
+				: (!rocket.isHoldDown && rocket.isIgnited);
+			if (isFiring && isBoosterIgnited && !isBoosterBurnout && throttle > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD) {
 				this._drawPlume(ctx, xBase - lNozzleB, yPos, plumeScale, throttle, plumeFuel, R);
 			}
 		}

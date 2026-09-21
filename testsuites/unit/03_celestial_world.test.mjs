@@ -1160,10 +1160,10 @@ test('ObjectManager, ObjectPlacer, and RocketLauncher deep branch coverage', () 
 	placer.destroy();
 
 	// 3. RocketLauncher presets, lengths, and zero burn-time computation
-	const origFP = MULTISTAGE_PRESETS.FALCON9.flightProfile;
-	MULTISTAGE_PRESETS.FALCON9.flightProfile = null;
+	const origFP = MULTISTAGE_PRESETS.H3.flightProfile;
+	MULTISTAGE_PRESETS.H3.flightProfile = null;
 	const rl = new RocketLauncher(universe);
-	MULTISTAGE_PRESETS.FALCON9.flightProfile = origFP;
+	MULTISTAGE_PRESETS.H3.flightProfile = origFP;
 	assert.ok(rl.flightProfile.length >= 8); // hits default flightProfile fallback lines 54-61!
 
 	// getBaseRadiusM fallback to stages[0].rocketLengthM (lines 176-178)

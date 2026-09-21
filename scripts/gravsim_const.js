@@ -221,10 +221,10 @@ export const RENDER = {
 		STAGE2_NOZZLE_RATIO: 0.35,
 		FAIRING_LEN_RATIO: 1.3,
 		FAIRING_WIDTH_RATIO: 0.65,
-		BOOSTER_LEN_RATIO: 2.20,
-		BOOSTER_WIDTH_RATIO: 0.45,
-		BOOSTER_NOZZLE_RATIO: 0.25,
-		BOOSTER_NOSE_RATIO: 0.40,
+		BOOSTER_LEN_RATIO: 1.70,
+		BOOSTER_WIDTH_RATIO: 0.26,
+		BOOSTER_NOZZLE_RATIO: 0.20,
+		BOOSTER_NOSE_RATIO: 0.35,
 		DEFAULT_ROTATION_SPEED: 0.0015,
 		LOD_RADIUS_THRESHOLD: 2.0,
 		LOD_LEN_RATIO: 2.0,
@@ -1032,7 +1032,7 @@ export const DEFAULT_OBJECT_PARAMS = {
 };
 
 export const ROCKET_FUELS = {
-	"solid": { name: "Solid", isp: 250, density: 1.8, ofRatio: 0 },
+	"solid": { name: "Solid", isp: 280, density: 1.8, ofRatio: 0 },
 	"liquid": { name: "Liquid", isp: 320, density: 1.0, ofRatio: 2.5 },
 	"hydro": { name: "Cryogenic", isp: 450, density: 0.3, ofRatio: 6.0 },
 	"ion": { name: "Ion", isp: 3000, density: 0.5, ofRatio: 0 }
@@ -1306,10 +1306,17 @@ export const MULTISTAGE_PRESETS = new Proxy({}, {
 	},
 	has(target, prop) {
 		const presets = presetManager.getLegacyPresets();
-		return prop in presets;
+		if (prop in presets) return true;
+		return !!presetManager.getLegacyPreset(prop);
 	},
 	ownKeys() {
-		return Object.keys(presetManager.getLegacyPresets());
+		const keys = new Set(Object.keys(presetManager.getLegacyPresets()));
+		if (typeof presetManager.getVehicles === 'function') {
+			for (const v of presetManager.getVehicles()) {
+				keys.add(String(v.id).toUpperCase());
+			}
+		}
+		return Array.from(keys);
 	},
 	getOwnPropertyDescriptor(target, prop) {
 		const val = presetManager.getLegacyPreset(prop);

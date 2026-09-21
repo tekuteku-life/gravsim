@@ -156,6 +156,7 @@ describe('Regression 02: Fuel Mass, Fuel Bar, and REM Delta-V Integrity', () => 
 		universe.RocketLauncher = new RocketLauncher(universe);
 		const ctrl = new ControlPanel(universe);
 		const rTab = ctrl.rocketTab;
+		rTab.loadPreset('FALCON9');
 		const rl = universe.RocketLauncher;
 
 		// 1. Initial Falcon 9 preset state (Liquid Kerosene/LOX)
@@ -207,6 +208,7 @@ describe('Regression 02: Fuel Mass, Fuel Bar, and REM Delta-V Integrity', () => 
 		universe.RocketLauncher = new RocketLauncher(universe);
 		const ctrl = new ControlPanel(universe);
 		const rTab = ctrl.rocketTab;
+		rTab.loadPreset('FALCON9');
 		const rl = universe.RocketLauncher;
 		const stg0 = rl.stages[0];
 

@@ -677,6 +677,7 @@ describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => 
 				maxGLimit: 4.0,
 				isIgnited: true, isHoldDown: false,
 				stages: preset.stages, payload: preset.payload, fairing: preset.fairing,
+				boosters: preset.boosters,
 				flightProfile: preset.flightProfile
 			});
 

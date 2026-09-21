@@ -14,6 +14,7 @@
 			"fuelMassT": 66.3,
 			"oxidMassT": 0.0,
 			"burnTime": 104.0,
+			"isp": 284,
 			"ofRatio": 0.0,
 			"radius": 1.3,
 			"separationDelaySec": 3.0,
@@ -29,6 +30,7 @@
 			"fuelMassT": 15.0,
 			"oxidMassT": 0.0,
 			"burnTime": 127.0,
+			"isp": 295,
 			"ofRatio": 0.0,
 			"radius": 1.25,
 			"separationDelaySec": 3.0,
@@ -44,6 +46,7 @@
 			"fuelMassT": 2.5,
 			"oxidMassT": 0.0,
 			"burnTime": 85.0,
+			"isp": 301,
 			"ofRatio": 0.0,
 			"radius": 0.8,
 			"separationDelaySec": 3.0,
@@ -62,16 +65,5 @@
 		"boosters": {
 			"count": 0
 		}
-	},
-	"flightProfile": [
-		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
-		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 12 },
-		{ "type": "alt", "value": 12000, "thrust": 100, "angle": 28 },
-		{ "type": "alt", "value": 35000, "thrust": 100, "angle": 48 },
-		{ "type": "alt", "value": 70000, "thrust": 100, "angle": 68 },
-		{ "type": "alt", "value": 120000, "thrust": 100, "angle": 82 },
-		{ "type": "alt", "value": 180000, "thrust": 100, "angle": 88 },
-		{ "type": "alt", "value": 240000, "thrust": 100, "angle": 90 }
-	]
+	}
 }
-

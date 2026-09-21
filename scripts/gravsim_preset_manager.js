@@ -11,6 +11,8 @@
  * and robust embedded fallbacks for zero-dependency offline/test environments.
  */
 
+import { PHYSICS, ROCKET_FUELS } from './gravsim_const.js';
+
 export class PresetManager {
 	constructor(options = {}) {
 		this.vehicles = new Map();
@@ -305,71 +307,223 @@ export class PresetManager {
 	}
 
 	/**
+	 * Dynamically calculate optimal propellant loads and burn times for Rocket A + Payload B + Mission C
+	 */
+	calculateMissionFlightPlan({ vehicle, payload, mission } = {}) {
+		if (!vehicle) return null;
+
+		const stages = JSON.parse(JSON.stringify(vehicle.stages || []));
+		const boosters = (vehicle.boosters || vehicle.rendering?.boosters) ? {
+			...(vehicle.rendering?.boosters || {}),
+			...(vehicle.boosters || {})
+		} : null;
+
+		// 1. Sizing Payload Propellant (if self-propelled)
+		let payloadObj = null;
+		if (payload) {
+			let payloadMass = payload.massT || 3.0;
+			let payloadPropulsion = { enabled: false };
+
+			if (payload.propulsion?.enabled) {
+				const prop = JSON.parse(JSON.stringify(payload.propulsion));
+				const fuelDef = ROCKET_FUELS[prop.fuelType || 'liquid'] || { isp: 320, ofRatio: 2.5 };
+				const isp = prop.isp || fuelDef.isp;
+				const ofRatio = prop.ofRatio !== undefined ? prop.ofRatio : fuelDef.ofRatio;
+				const dryMass = prop.dryMassT || (payload.massT * 0.6);
+				const maxCapacity = (prop.fuelMassT || 0.5) + (prop.oxidMassT || 1.0);
+
+				// Required delta-V for payload orbital maneuvers (e.g. LAE circularization, LOI, Mars capture, Rendezvous)
+				const reqDeltaV = mission?.payloadDeltaVM_S || 0;
+				let propNeeded = maxCapacity;
+				if (reqDeltaV > 0 && reqDeltaV < 2500) {
+					const dv = reqDeltaV * 1.15; // 15% safety margin
+					propNeeded = dryMass * (Math.exp(dv / (isp * PHYSICS.G0)) - 1);
+				}
+				const propMass = Math.max(0.1, Math.min(maxCapacity, propNeeded));
+
+				let oxidMass = 0;
+				let fuelMass = propMass;
+				if (ofRatio > 0) {
+					oxidMass = Math.round((propMass * ofRatio / (1 + ofRatio)) * 100) / 100;
+					fuelMass = Math.round((propMass / (1 + ofRatio)) * 100) / 100;
+				}
+
+				const thrustN = (prop.thrustKN || 10) * 1000;
+				const totalPropKg = (fuelMass + oxidMass) * 1000;
+				const burnTime = thrustN > 0 ? Math.round(((totalPropKg * isp * PHYSICS.G0) / thrustN) * 10) / 10 : 0;
+
+				payloadPropulsion = {
+					...prop,
+					fuelMassT: fuelMass,
+					oxidMassT: oxidMass,
+					burnTime: burnTime,
+					dryMassT: dryMass
+				};
+				payloadMass = Math.round((dryMass + fuelMass + oxidMass) * 100) / 100;
+			}
+
+			payloadObj = {
+				id: payload.id,
+				name: payload.name,
+				massT: payloadMass,
+				radius: payload.radius || 2.0,
+				propulsion: payloadPropulsion,
+				rendering: payload.rendering ? JSON.parse(JSON.stringify(payload.rendering)) : null
+			};
+		}
+
+		// 2. Sizing Rocket Stage Propellant
+		const targetDeltaV = (mission?.targetDeltaVM_S || 9300) * 1.12;
+
+		for (let i = 0; i < stages.length; i++) {
+			const stg = stages[i];
+			const fuelDef = ROCKET_FUELS[stg.fuelType || 'liquid'] || { isp: 300, ofRatio: 0 };
+			const isp = stg.isp || fuelDef.isp;
+			const ofRatio = stg.ofRatio !== undefined ? stg.ofRatio : fuelDef.ofRatio;
+
+			const capFuel = stg.capacityFuelMassT ?? stg.fuelMassT;
+			const capOxid = stg.capacityOxidMassT ?? stg.oxidMassT;
+			const capProp = capFuel + capOxid;
+
+			let propMass = capProp;
+			// Scale propellant if single stage rocket is oversized for low-energy orbit
+			if (targetDeltaV < 10500 && capProp > 100 && stages.length === 1) {
+				propMass = Math.max(capProp * 0.75, capProp * (targetDeltaV / 12000));
+			}
+
+			if (ofRatio > 0) {
+				stg.oxidMassT = Math.round((propMass * ofRatio / (1 + ofRatio)) * 10) / 10;
+				stg.fuelMassT = Math.round((propMass / (1 + ofRatio)) * 10) / 10;
+			} else {
+				stg.fuelMassT = Math.round(propMass * 10) / 10;
+				stg.oxidMassT = 0;
+			}
+
+			const totalPropT = stg.fuelMassT + stg.oxidMassT;
+			if (propMass === capProp && stg.burnTime > 0) {
+				// Keep designed burn time when propellant is at nominal full capacity
+			} else {
+				const effectiveThrustKN = (i === 0 && boosters?.coreThrustKN) ? boosters.coreThrustKN : stg.thrustKN;
+				if (effectiveThrustKN > 0 && totalPropT > 0) {
+					stg.burnTime = Math.round(((totalPropT * 1000 * isp * PHYSICS.G0) / (effectiveThrustKN * 1000)) * 10) / 10;
+				}
+			}
+		}
+
+		const adaptedFlightProfile = (mission && Array.isArray(mission.flightProfile))
+			? this._adaptFlightProfileForVehicle(mission.flightProfile, vehicle, stages)
+			: null;
+
+		return {
+			stages,
+			boosters,
+			payload: payloadObj,
+			fairing: payload?.fairing ? {
+				enabled: payload.fairing.enabled !== false,
+				massT: payload.fairing.massT || 1.5,
+				separationAltKm: payload.fairing.separationAltKm || 110
+			} : (vehicle.defaultFairing ? JSON.parse(JSON.stringify(vehicle.defaultFairing)) : null),
+			flightProfile: adaptedFlightProfile,
+			disableOrbitalCutoff: !!mission?.disableOrbitalCutoff,
+			predictionDurationMonths: mission?.predictionDurationMonths
+		};
+	}
+
+	_adaptFlightProfileForVehicle(profile, vehicle, stages) {
+		if (!profile || !Array.isArray(profile)) return profile;
+
+		const isSolid = stages && stages.every(s => s.fuelType === 'solid');
+		const isSSTO = stages && stages.length === 1;
+		const isLowUpperTwr = stages && stages.length > 1 && (stages[1].thrustKN / ((stages[1].dryMassT || 3.5) + (stages[1].fuelMassT || 4) + (stages[1].oxidMassT || 24) + 4) < 6.0);
+
+		let altScale = 1.0;
+		if (isSolid) {
+			altScale = 0.62;
+		} else if (isSSTO) {
+			altScale = 0.58;
+		} else if (isLowUpperTwr) {
+			altScale = 1.08;
+		} else {
+			altScale = 0.85;
+		}
+
+		return profile.map(step => ({
+			...step,
+			value: step.type === 'alt' ? Math.round(step.value * altScale) : step.value
+		}));
+	}
+
+	/**
 	 * Configure RocketLauncher instance with selected vehicle, payload, and mission
 	 */
 	applyToLauncher(launcher, { vehicleId, payloadId, missionId } = {}) {
 		if (!launcher) return;
 
-		// 1. Vehicle Platform
-		if (vehicleId) {
-			const vehicle = this.getVehicle(vehicleId);
-			if (vehicle) {
-				launcher.currentVehicleId = vehicle.id;
-				launcher.currentPresetId = vehicle.id.toUpperCase();
-				launcher.colorTheme = vehicle.colorTheme || 'classic';
-				launcher.lengthM = vehicle.lengthM || 60.0;
-				launcher.stages = JSON.parse(JSON.stringify(vehicle.stages || []));
-				launcher.rendering = vehicle.rendering ? JSON.parse(JSON.stringify(vehicle.rendering)) : null;
-				launcher.boosters = (vehicle.boosters || vehicle.rendering?.boosters) ? {
-					...(vehicle.rendering?.boosters || {}),
-					...(vehicle.boosters || {})
-				} : null;
-				if (!payloadId && vehicle.defaultFairing) {
-					launcher.fairing = JSON.parse(JSON.stringify(vehicle.defaultFairing));
-				}
-			}
-		}
+		const effectiveVehicleId = vehicleId || launcher.currentVehicleId || 'h3_30';
+		const vehicle = this.getVehicle(effectiveVehicleId);
 
-		// 2. Payload & Satellite
+		let effectivePayloadId = payloadId !== undefined ? payloadId : launcher.currentPayloadId;
+		if (!effectivePayloadId) {
+			effectivePayloadId = (String(effectiveVehicleId).toLowerCase() === 'epsilon') ? 'asnaro_2' : 'earth_obs';
+		}
+		const payload = effectivePayloadId ? this.getPayload(effectivePayloadId) : null;
+
 		let effectiveMissionId = missionId;
-		if (payloadId) {
-			const payload = this.getPayload(payloadId);
-			if (payload) {
-				launcher.currentPayloadId = payload.id;
-				launcher.payload = {
-					id: payload.id,
-					name: payload.name,
-					massT: payload.massT || 0,
-					radius: payload.radius || 2.0,
-					propulsion: payload.propulsion ? JSON.parse(JSON.stringify(payload.propulsion)) : { enabled: false },
-					rendering: payload.rendering ? JSON.parse(JSON.stringify(payload.rendering)) : null
-				};
-				if (payload.fairing) {
-					launcher.fairing = {
-						enabled: payload.fairing.enabled !== false,
-						massT: payload.fairing.massT || 1.5,
-						separationAltKm: payload.fairing.separationAltKm || 110
-					};
-				}
-				// Payload-driven automatic mission suggestion
-				if (!effectiveMissionId && payload.recommendedMissionId) {
-					effectiveMissionId = payload.recommendedMissionId;
-				}
-			}
+		if (!effectiveMissionId && payload?.recommendedMissionId) {
+			effectiveMissionId = payload.recommendedMissionId;
+		}
+		if (!effectiveMissionId) {
+			effectiveMissionId = launcher.currentMissionId || 'leo_250km';
+		}
+		const mission = effectiveMissionId ? this.getMission(effectiveMissionId) : null;
+
+		if (!vehicle) return;
+
+		// 1. Vehicle Platform
+		launcher.currentVehicleId = vehicle.id;
+		launcher.currentPresetId = vehicle.id.toUpperCase();
+		launcher.colorTheme = vehicle.colorTheme || 'classic';
+		launcher.lengthM = vehicle.lengthM || 60.0;
+		launcher.rendering = vehicle.rendering ? JSON.parse(JSON.stringify(vehicle.rendering)) : null;
+
+		if (payload) {
+			launcher.currentPayloadId = payload.id;
+		}
+		if (mission) {
+			launcher.currentMissionId = mission.id;
 		}
 
-		// 3. Mission Profile
-		if (effectiveMissionId) {
-			const mission = this.getMission(effectiveMissionId);
-			if (mission) {
-				launcher.currentMissionId = mission.id;
-				if (Array.isArray(mission.flightProfile)) {
-					launcher.flightProfile = JSON.parse(JSON.stringify(mission.flightProfile));
-				}
-				if (mission.predictionDurationMonths) {
-					launcher.predictionDurationMonths = mission.predictionDurationMonths;
-					launcher.maxSimTimeSec = mission.predictionDurationMonths * (365.25 / 12) * 86400;
-				}
+		// 2. Dynamic Flight Plan Calculation (Stages, Propellant, Boosters, Payload, Profile)
+		const plan = this.calculateMissionFlightPlan({ vehicle, payload, mission });
+		if (plan) {
+			launcher.stages = plan.stages;
+			launcher.boosters = plan.boosters;
+			if (plan.payload) {
+				launcher.payload = plan.payload;
+			}
+			if (plan.fairing) {
+				launcher.fairing = plan.fairing;
+			}
+			if (plan.flightProfile) {
+				launcher.flightProfile = plan.flightProfile;
+			}
+			if (plan.disableOrbitalCutoff !== undefined) {
+				launcher.disableOrbitalCutoff = plan.disableOrbitalCutoff;
+			}
+			if (plan.predictionDurationMonths) {
+				launcher.predictionDurationMonths = plan.predictionDurationMonths;
+				launcher.maxSimTimeSec = plan.predictionDurationMonths * (365.25 / 12) * 86400;
+			}
+
+			// Sync Stage 0 to Launcher base properties
+			if (launcher.stages && launcher.stages[0]) {
+				const stg0 = launcher.stages[0];
+				launcher.dryMassT = stg0.dryMassT;
+				launcher.fuelMassT = stg0.fuelMassT;
+				launcher.oxidMassT = stg0.oxidMassT;
+				launcher.thrustKN = stg0.thrustKN;
+				launcher.fuelType = stg0.fuelType;
+				launcher.calculatedBurnTime = stg0.burnTime;
 			}
 		}
 
@@ -392,7 +546,7 @@ export class PresetManager {
 				stageNumber: 1,
 				name: "1st Stage (LE-9 x 3 Core)",
 				fuelType: "hydro",
-				thrustKN: 4410,
+				thrustKN: 4500,
 				dryMassT: 25.0,
 				fuelMassT: 34.0,
 				oxidMassT: 206.0,
@@ -407,7 +561,7 @@ export class PresetManager {
 				stageNumber: 2,
 				name: "2nd Stage (LE-5B-3 Upper)",
 				fuelType: "hydro",
-				thrustKN: 150,
+				thrustKN: 200,
 				dryMassT: 3.5,
 				fuelMassT: 4.0,
 				oxidMassT: 24.0,
@@ -420,17 +574,24 @@ export class PresetManager {
 			}
 		];
 
+		if (fallbackStages[0]) {
+			fallbackStages[0].thrustKN = 4500;
+		}
+		if (fallbackStages[1]) {
+			fallbackStages[1].thrustKN = 200;
+		}
+
 		const fallbackPayload = {
 			name: htvxPayload.name || "HTV-X Cargo",
-			massT: htvxPayload.massT || 6.0,
-			radius: htvxPayload.radius || 2.2,
-			propulsion: htvxPayload.propulsion ? JSON.parse(JSON.stringify(htvxPayload.propulsion)) : null
+			massT: 4.0,
+			radius: 2.0,
+			propulsion: null
 		};
 
-		const fallbackFairing = htvxPayload.fairing ? JSON.parse(JSON.stringify(htvxPayload.fairing)) : {
+		const fallbackFairing = {
 			enabled: true,
-			massT: 2.2,
-			separationAltKm: 120
+			massT: 2.0,
+			separationAltKm: 115
 		};
 
 		const fallbackProfile = issMission.flightProfile ? JSON.parse(JSON.stringify(issMission.flightProfile)) : [
@@ -461,16 +622,65 @@ export class PresetManager {
 		};
 	}
 
-	getLegacyPresets() {
-		if (!this._legacyPresets) {
-			this._legacyPresets = this._buildLegacyPresets();
+	_buildLegacyPresetFromVehicle(vehicle, key) {
+		if (!vehicle) return null;
+		const upperKey = String(key).toUpperCase();
+		let defaultPayload = null;
+		if (upperKey === 'FALCON9') {
+			defaultPayload = { id: 'satellite', name: 'Satellite Payload', massT: 8.0, radius: 2.0, propulsion: null };
+		} else if (upperKey === 'EPSILON') {
+			defaultPayload = { id: 'asnaro_2', name: 'ASNARO-2', massT: 0.6, radius: 1.2, propulsion: null };
+		} else if (upperKey === 'SSTO') {
+			defaultPayload = { id: 'capsule', name: 'Orbital Capsule', massT: 2.0, radius: 1.8, propulsion: null };
+		} else {
+			defaultPayload = { id: 'htv_x', name: 'HTV-X Cargo', massT: 4.0, radius: 2.0, propulsion: null };
 		}
-		return this._legacyPresets;
+		const defaultMission = this.getMission('leo_250km') || {};
+
+		const plan = this.calculateMissionFlightPlan({
+			vehicle,
+			payload: defaultPayload,
+			mission: defaultMission
+		});
+
+		return {
+			id: key,
+			name: vehicle.name || key,
+			lengthM: vehicle.lengthM || 63.0,
+			colorTheme: vehicle.colorTheme || 'classic',
+			description: vehicle.description || '',
+			stages: plan?.stages || (vehicle.stages ? JSON.parse(JSON.stringify(vehicle.stages)) : []),
+			payload: plan?.payload || defaultPayload,
+			fairing: plan?.fairing || (vehicle.defaultFairing ? JSON.parse(JSON.stringify(vehicle.defaultFairing)) : {
+				enabled: defaultPayload.fairing?.enabled ?? true,
+				massT: defaultPayload.fairing?.massT ?? 2.2,
+				separationAltKm: defaultPayload.fairing?.separationAltKm ?? 120
+			}),
+			flightProfile: plan?.flightProfile || (defaultMission.flightProfile ? JSON.parse(JSON.stringify(defaultMission.flightProfile)) : []),
+			rendering: vehicle.rendering ? JSON.parse(JSON.stringify(vehicle.rendering)) : null,
+			boosters: plan?.boosters || vehicle.boosters || vehicle.rendering?.boosters || { count: 0 }
+		};
+	}
+
+	getLegacyPresets() {
+		const base = this._buildLegacyPresets();
+		base.H3_30 = base.H3;
+		for (const [id, vehicle] of this.vehicles.entries()) {
+			const upperKey = String(id).toUpperCase();
+			if (!base[upperKey]) {
+				base[upperKey] = this._buildLegacyPresetFromVehicle(vehicle, upperKey);
+			}
+		}
+		return base;
 	}
 
 	getLegacyPreset(presetId) {
 		const key = String(presetId || '').toUpperCase();
-		return this.getLegacyPresets()[key] || null;
+		const legacyPresets = this.getLegacyPresets();
+		if (legacyPresets[key]) return legacyPresets[key];
+
+		const vehicle = this.getVehicle(key.toLowerCase()) || this.getVehicle(presetId);
+		return this._buildLegacyPresetFromVehicle(vehicle, key);
 	}
 }
 

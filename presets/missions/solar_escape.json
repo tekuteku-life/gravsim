@@ -5,15 +5,17 @@
 	"targetOrbit": "Solar System Escape Hyperbolic Trajectory",
 	"predictionDurationMonths": 36.0,
 	"disableOrbitalCutoff": true,
+	"targetDeltaVM_S": 15500,
+	"payloadDeltaVM_S": 1500,
 	"flightProfile": [
 		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
-		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 12 },
-		{ "type": "alt", "value": 15000, "thrust": 100, "angle": 30 },
-		{ "type": "alt", "value": 45000, "thrust": 100, "angle": 52 },
-		{ "type": "alt", "value": 90000, "thrust": 100, "angle": 72 },
-		{ "type": "alt", "value": 180000, "thrust": 100, "angle": 86 },
-		{ "type": "alt", "value": 300000, "thrust": 100, "angle": 90 },
-		{ "type": "alt", "value": 450000, "thrust": 100, "angle": 90 }
+		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 6 },
+		{ "type": "alt", "value": 20000, "thrust": 100, "angle": 20 },
+		{ "type": "alt", "value": 50000, "thrust": 100, "angle": 42 },
+		{ "type": "alt", "value": 90000, "thrust": 100, "angle": 62 },
+		{ "type": "alt", "value": 140000, "thrust": 100, "angle": 76 },
+		{ "type": "alt", "value": 200000, "thrust": 100, "angle": 86 },
+		{ "type": "alt", "value": 260000, "thrust": 100, "angle": 90 }
 	],
 	"rendering": {
 		"trajectoryColor": "#ffff55",

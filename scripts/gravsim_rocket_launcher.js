@@ -10,13 +10,14 @@ import {
 import { UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 import { TrajectoryPredictor } from './gravsim_trajectory_predictor.js';
+import { presetManager } from './gravsim_preset_manager.js';
 
 /*******************************************************************
  * RocketLauncher Class
  * Manages the preview state and rendering for continuous-thrust rocket launches.
  *******************************************************************/
 export class RocketLauncher {
-	constructor(universe) {
+	constructor(universe, options = {}) {
 		this.universe = universe;
 		this.isActive = false;
 		
@@ -33,9 +34,10 @@ export class RocketLauncher {
 		this.hostAltitudeM = 10; // (m)
 
 		// Multi-stage setup (Load default baseline from PresetManager)
-		const defaultVehicle = presetManager.getVehicle('h3_30') || presetManager.getVehicle('h3_22');
-		const defaultPayload = presetManager.getPayload('htv_x');
-		const defaultMission = presetManager.getMission('iss_rendezvous');
+		const pm = options.presetManager || universe?.presetManager || (typeof presetManager !== 'undefined' ? presetManager : null);
+		const defaultVehicle = pm?.getVehicle('h3_30') || pm?.getVehicle('h3_22');
+		const defaultPayload = pm?.getPayload('htv_x');
+		const defaultMission = pm?.getMission('iss_rendezvous');
 
 		this.currentVehicleId = defaultVehicle?.id || 'h3_30';
 		this.currentPresetId = (defaultVehicle?.id || 'H3_30').toUpperCase();
@@ -69,7 +71,7 @@ export class RocketLauncher {
 		];
 
 		this.thrustKN = this.stages[0].thrustKN;
-		this.calculatedBurnTime = 0;
+		this.calculatedBurnTime = this.stages[0]?.burnTime || 0;
 		this.maxGLimit = 4.0;	// G
 		this.predictionDurationMonths = TRAJECTORY_PREDICTION.DEFAULT_DURATION_MONTHS;
 		this.maxSimTimeSec = this.predictionDurationMonths * (365.25 / 12) * 86400; // 1 month in seconds
@@ -141,6 +143,36 @@ export class RocketLauncher {
 				this.drawPreview(ctx, rc.basis, rc.zoomScale, rc);
 			}
 		}, EVENT_PRIORITY.DRAW_WORLD_FX);
+	}
+
+	loadPreset(presetKey) {
+		const preset = MULTISTAGE_PRESETS[presetKey] || (typeof presetManager !== 'undefined' ? presetManager.getLegacyPreset(presetKey) : null);
+		if (!preset) return;
+		this.currentPresetId = String(presetKey).toUpperCase();
+		this.currentVehicleId = String(presetKey).toLowerCase();
+		this.colorTheme = preset.colorTheme || 'classic';
+		this.stages = JSON.parse(JSON.stringify(preset.stages || []));
+		this.payload = JSON.parse(JSON.stringify(preset.payload || { massT: 0 }));
+		this.fairing = JSON.parse(JSON.stringify(preset.fairing || { enabled: false, massT: 0, separationAltKm: 120 }));
+		this.boosters = preset.boosters || preset.rendering?.boosters || null;
+		this.rendering = preset.rendering ? JSON.parse(JSON.stringify(preset.rendering)) : null;
+
+		const stg0 = this.stages[0] || {};
+		this.dryMassT = stg0.dryMassT ?? 25.0;
+		this.fuelMassT = stg0.fuelMassT ?? 34.0;
+		this.oxidMassT = stg0.oxidMassT ?? 206.0;
+		this.fuelType = stg0.fuelType ?? 'hydro';
+		this.thrustKN = stg0.thrustKN ?? 4410;
+		if (stg0.burnTime !== undefined) {
+			this.calculatedBurnTime = stg0.burnTime;
+		}
+
+		if (preset.flightProfile) {
+			this.flightProfile = JSON.parse(JSON.stringify(preset.flightProfile));
+		}
+		if (typeof this.requestPreviewUpdate === 'function') {
+			this.requestPreviewUpdate();
+		}
 	}
 
 	togglePreview(forceState = null) {
