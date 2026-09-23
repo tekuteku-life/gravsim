@@ -1067,9 +1067,9 @@ export const LAUNCH_SEQUENCES = {
 				"5": "num_5"
 			},
 			conditions: [
-				{ id: "tower_clear", type: "altM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
-				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
-				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
+				{ id: "tower_clear", type: "relativeAltM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
+				{ id: "pitch_roll", type: "relativeAltM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
+				{ id: "pitch_downrange", type: "relativeAltM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
 				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
 				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true },
@@ -1157,9 +1157,9 @@ export const LAUNCH_SEQUENCES = {
 				"10": "num_10"
 			},
 			conditions: [
-				{ id: "tower_clear", type: "altM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
-				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
-				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
+				{ id: "tower_clear", type: "relativeAltM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
+				{ id: "pitch_roll", type: "relativeAltM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
+				{ id: "pitch_downrange", type: "relativeAltM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
 				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
 				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true },

@@ -281,6 +281,12 @@ export class ObjectManager {
 			}
 		}
 
+		// Calculate relative altitude from the initial altitude when the rocket was added to the simulation
+		if (target._initialAltM === undefined) {
+			target._initialAltM = objData.tmAltM;
+		}
+		const relativeAltM = Math.max(0, objData.tmAltM - target._initialAltM);
+
 		const curStatus = objData.tmStatus;
 		const curStg = objData.tmStageIndex !== undefined ? objData.tmStageIndex : 0;
 		const isPayloadSep = Boolean(objData.tmPayloadSeparated);
@@ -307,6 +313,7 @@ export class ObjectManager {
 			remDv: objData.tmRemDv,
 			twr: objData.tmTwr,
 			altM: objData.tmAltM,
+			relativeAltM: relativeAltM,
 			vV: objData.tmVv,
 			vH: objData.tmVh,
 			aV: objData.tmAv,
