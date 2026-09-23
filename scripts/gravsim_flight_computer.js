@@ -194,7 +194,7 @@ export class FlightComputer {
 		} else if (sensor.burnTime > 0 && throttle > 0) {
 			statusInt = TELEMETRY.STATUS.ASCENT;
 		} else if (this.flightTime > 0) {
-			if (sensor.massLossRate > 0 && sensor.fuelMass <= 0) {
+			if (sensor.burnTime <= 0 || sensor.fuelMass <= 0) {
 				statusInt = TELEMETRY.STATUS.MECO;
 			} else {
 				statusInt = TELEMETRY.STATUS.COASTING;

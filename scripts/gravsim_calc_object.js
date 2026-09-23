@@ -1142,16 +1142,16 @@ export class CalcRocket extends GravSimCalcObject {
 					this.presState = 'MECO_TRANSIENT';
 					this.presTimer = 0;
 				}
-				if (this.fuelMass < 0) { this.fuelMass = 0; }
-				if (this.oxidMass < 0) { this.oxidMass = 0; }
-
+				this.fuelMass = 0;
+				this.oxidMass = 0;
 				this.burnTime = 0;
+				this.isIgnited = false;
+				this._thrustRatio = 0.0;
 				this.updateTotalMass();
 
 				if (this.stageState === 'STG_BURNING') {
 					if (this.isPayloadSeparated) {
 						this.stageState = 'ORBITAL_COAST';
-						this.isIgnited = false;
 						this.thrustForce = 0;
 					} else {
 						this.stageState = 'STG_MECO';

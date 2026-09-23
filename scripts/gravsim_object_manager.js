@@ -296,7 +296,13 @@ export class ObjectManager {
 		const isStage1Separated = (curStg >= 1);
 		const isStage2Separated = (curStg >= 2 || isPayloadSep);
 
-		const isMeco = (curStg >= 1) || (curStg === 0 && curStatus === 3);
+		if (!target._mecoDetected) {
+			const isFirstStageBurntOut = (curStg === 0 && (curStatus === 3 || (!isFiring && objData.burnTime <= 0)));
+			if (isFirstStageBurntOut || curStg >= 1) {
+				target._mecoDetected = true;
+			}
+		}
+		const isMeco = Boolean(target._mecoDetected);
 		const isSes = (curStg === 1 && isFiring);
 		const isSeco = isPayloadSep || (curStg === 1 && curStatus === 3);
 		const isPes = (isPayloadSep && isFiring);
