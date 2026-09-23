@@ -402,6 +402,7 @@ export class RocketTab {
 		};
 
 		this.ui.rlIgniteQuickBtn.addEventListener('click', () => triggerIgnite('LEGACY_QUICK'));
+		this.ui.rlIgniteFullBtn.addEventListener('click', () => triggerIgnite('FULL_COUNTDOWN'));
 		this.ui.rlAbortBtn.addEventListener('click', () => {
 			this.universe.RocketLauncher.abortRollout();
 			let hostId = this.universe.RocketLauncher.hostId;
