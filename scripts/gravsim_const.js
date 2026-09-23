@@ -666,7 +666,7 @@ export const FLIGHT_COMPUTER_CONFIG = {
 
 // Communication buffer structure
 export const CALC_BUFFER_CONFIG = {
-	OBJ_ATTR_COUNT: 48
+	OBJ_ATTR_COUNT: 45
 };
 
 export const BUFFER_INDEX = {
@@ -680,10 +680,7 @@ export const BUFFER_INDEX = {
 	TM_AV: 32, TM_AH: 33, TM_CURRENT_G: 34, TM_FLIGHT_TIME: 35, THRUST_ANGLE: 36,
 	DOMINANT_BODY_ID: 37, DIST_TO_DOMINANT: 38, OXID_MASS: 39,
 	TM_TANK_PRES_FUEL: 40, TM_TANK_PRES_OXID: 41,
-	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, TM_FAIRING_SEPARATED: 44,
-	DEBRIS_SUB_TYPE: 45,
-	TM_BOOSTER_SEPARATED: 46,
-	TM_BOOSTER_BURNOUT: 47
+	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, DEBRIS_SUB_TYPE: 44
 };
 
 export const OBJECT_STATE = {
@@ -1615,3 +1612,31 @@ export const DEPLOY_PROFILES = {
 		]
 	}
 };
+
+/**
+ * Common Object Physics Flags (Bits 0-4)
+ */
+export const OBJECT_FLAG = Object.freeze({
+	COLLIDED:      1 << 0,
+	SHATTERED:     1 << 1,
+	IMPACT:        1 << 2,
+	IN_ATMOSPHERE: 1 << 3,
+	ESCAPING:      1 << 4
+});
+
+/**
+ * Rocket Telemetry Bitmask Flags (Bits 5-15)
+ */
+export const ROCKET_FLAG = Object.freeze({
+	HOLD_DOWN:          1 << 5,
+	IGNITED:            1 << 6,
+	ANTI_STALL:         1 << 7,
+	Q_LIMIT_NEAR:       1 << 8,
+	G_LIMIT_NEAR:       1 << 9,
+	BOOSTER_BURNOUT:    1 << 10,
+	BOOSTER_SEPARATED:  1 << 11,
+	FAIRING_SEPARATED:  1 << 12,
+	STAGE1_SEPARATED:   1 << 13,
+	STAGE2_SEPARATED:   1 << 14,
+	PAYLOAD_SEPARATED:  1 << 15
+});
