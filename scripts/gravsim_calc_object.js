@@ -267,7 +267,6 @@ export class CalcRocket extends GravSimCalcObject {
 		this.isIgnited = thrustData?.isIgnited !== undefined ? thrustData.isIgnited : true;
 		this.stageState = this.isHoldDown ? 'PRE_LAUNCH' : 'STG_BURNING';
 		this.stgTimer = 0;
-		this.stgSepLampTimer = 0;
 		this.isPayloadSeparated = false;
 		this._pendingDebris = [];
 
@@ -437,8 +436,6 @@ export class CalcRocket extends GravSimCalcObject {
 		const forwardPush = MULTISTAGE_ROCKET.STAGE_SEP_FORWARD_PUSH_M_S;
 		this.vx += Math.cos(this.thrustAngle) * forwardPush;
 		this.vy += Math.sin(this.thrustAngle) * forwardPush;
-
-		this.stgSepLampTimer = MULTISTAGE_ROCKET.STG_SEP_LAMP_DURATION_SEC;
 
 		// If fairing is still attached when the final stage is jettisoned (payload release),
 		// force fairing separation to ensure the payload satellite is never trapped inside the fairing.
@@ -957,12 +954,6 @@ export class CalcRocket extends GravSimCalcObject {
 		if (!this.disableStaging && distToRefM && refBody) {
 			const curAltM = distToRefM - refBody.radius;
 			this.separateFairing(curAltM);
-		}
-
-		// STG-SEP lamp timer countdown
-		if (this.stgSepLampTimer > 0) {
-			this.stgSepLampTimer -= dt;
-			if (this.stgSepLampTimer < 0) this.stgSepLampTimer = 0;
 		}
 
 		// Check Orbital Insertion Cutoff (SECO) or commanded throttle cutoff when autoControl is active

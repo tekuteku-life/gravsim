@@ -642,8 +642,7 @@ export class TelemetryPanel {
 		const curStage = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
 		const totalStages = (tm.totalStages !== undefined ? tm.totalStages : target.totalStages) || 1;
 		const isEngThrusting = Boolean(target.thrustRatio > 0.01 && target.fuelMass > 0.001 && (target.burnTime > 0 || target.isIgnited));
-		const isSeparating = Boolean(tm.isStgSepActive || (target.stgSepLampTimer > 0));
-		const fairingSep = Boolean(tm.isFairingSeparated || target.fairing?.isSeparated);
+		const isSeparating = Boolean(tm.isStgSepActive);
 
 		// 10. 1-ENG (Stage 1 Engine Burning)
 		const is1EngOn = isLaunched && curStage === 0 && isEngThrusting;

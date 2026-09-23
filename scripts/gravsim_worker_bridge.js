@@ -75,7 +75,6 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = obj.tankPresOxid || 0;
 				buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX] = obj.currentStageIndex !== undefined ? obj.currentStageIndex : 0;
 				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = obj.totalStages !== undefined ? obj.totalStages : 1;
-				buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] = (obj.stgSepLampTimer && obj.stgSepLampTimer > 0) ? 1 : 0;
 				buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] = (obj.fairing && obj.fairing.isSeparated) ? 1 : 0;
 				buffer[offset + BUFFER_INDEX.TM_BOOSTER_SEPARATED] = (obj.isBoosterSeparated) ? 1 : 0;
 				buffer[offset + BUFFER_INDEX.TM_BOOSTER_BURNOUT] = (obj.isBoosterBurnout) ? 1 : 0;
@@ -89,7 +88,6 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = 0;
 				buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX] = 0;
 				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = 1;
-				buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] = 0;
 				buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] = 0;
 				buffer[offset + BUFFER_INDEX.TM_BOOSTER_SEPARATED] = 0;
 				buffer[offset + BUFFER_INDEX.TM_BOOSTER_BURNOUT] = 0;
@@ -195,7 +193,6 @@ export class WorkerBridge {
 				this._cache.tmTankPresOxid = buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID];
 				this._cache.tmStageIndex = buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX];
 				this._cache.tmTotalStages = buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES];
-				this._cache.tmStgSepActive = buffer[offset + BUFFER_INDEX.TM_STG_SEP_ACTIVE] > 0.5;
 				this._cache.tmFairingSeparated = buffer[offset + BUFFER_INDEX.TM_FAIRING_SEPARATED] > 0.5;
 				this._cache.isBoosterSeparated = buffer[offset + BUFFER_INDEX.TM_BOOSTER_SEPARATED] > 0.5;
 				this._cache.isBoosterBurnout = buffer[offset + BUFFER_INDEX.TM_BOOSTER_BURNOUT] > 0.5;

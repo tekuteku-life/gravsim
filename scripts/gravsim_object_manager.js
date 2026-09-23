@@ -281,6 +281,21 @@ export class ObjectManager {
 			}
 		}
 
+		const curStatus = objData.tmStatus;
+		const curStg = objData.tmStageIndex !== undefined ? objData.tmStageIndex : 0;
+		const isPayloadSep = Boolean(objData.tmPayloadSeparated);
+		const isIgnited = Boolean(objData.isIgnited);
+		const isFiring = isIgnited && (Number(objData.thrustRatio) > 0);
+
+		const isStage1Separated = (curStg >= 1);
+		const isStage2Separated = (curStg >= 2 || isPayloadSep);
+
+		const isMeco = (curStg >= 1) || (curStg === 0 && curStatus === 3);
+		const isSes = (curStg === 1 && isFiring);
+		const isSeco = isPayloadSep || (curStg === 1 && curStatus === 3);
+		const isPes = (isPayloadSep && isFiring);
+		const isPeco = isPayloadSep && !isFiring && (curStatus === 3 || (objData.tmBurnTime !== undefined && objData.tmBurnTime <= 0));
+
 		target.telemetry = {
 			status: objData.tmStatus,
 			qAxialKpa: objData.tmQAxial,
@@ -303,13 +318,19 @@ export class ObjectManager {
 			isGLimitNear: objData.isGLimitNear,
 			tankPresFuel: objData.tmTankPresFuel,
 			tankPresOxid: objData.tmTankPresOxid,
-			stageIndex: objData.tmStageIndex !== undefined ? objData.tmStageIndex : 0,
+			stageIndex: curStg,
 			totalStages: objData.tmTotalStages !== undefined ? objData.tmTotalStages : 1,
-			isStgSepActive: !!objData.tmStgSepActive,
 			isFairingSeparated: !!objData.tmFairingSeparated,
-			isPayloadSeparated: !!objData.isPayloadSeparated,
+			isPayloadSeparated: isPayloadSep,
 			isBoosterBurnout: !!objData.isBoosterBurnout,
-			isBoosterSeparated: !!objData.isBoosterSeparated
+			isBoosterSeparated: !!objData.isBoosterSeparated,
+			isStage1Separated: isStage1Separated,
+			isStage2Separated: isStage2Separated,
+			isMeco: isMeco,
+			isSes: isSes,
+			isSeco: isSeco,
+			isPes: isPes,
+			isPeco: isPeco
 		};
 
 		target.currentStageIndex = target.telemetry.stageIndex;

@@ -90,9 +90,8 @@ PHRASES_EN = {
 	"fl_peco": "Payload engine cutoff",
 	"fl_1-stage_sep": "1st Stage separation",
 	"fl_2-stage_sep": "2nd Stage separation",
-	"fl_srb_sep": "Solid rocket booster separation",
+	"fl_srb_sep": "SRB separation",
 	"fl_fairing_sep": "Payload fairing separation",
-	"fl_payload_sep": "Payload separation"
 }
 
 # ==========================================
@@ -154,11 +153,10 @@ PHRASES_JA = {
 	"fl_meco": "第一段エンジン燃焼停止",
 	"fl_seco": "第二段エンジン燃焼停止",
 	"fl_peco": "ペイロードエンジン燃焼停止",
-	"fl_1-stage_sep": "第一段エンジン分離",
-	"fl_2-stage_sep": "第二段エンジン分離",
-	"fl_srb_sep": "固体補助ロケットブースター分離",
-	"fl_fairing_sep": "衛星フェアリング分離",
-	"fl_payload_sep": "ペイロード分離"
+	"fl_1-stage_sep": "第一段、分離",
+	"fl_2-stage_sep": "第二段、分離",
+	"fl_srb_sep": "SRB、分離",
+	"fl_fairing_sep": "衛星フェアリング、分離",
 }
 
 # ==========================================

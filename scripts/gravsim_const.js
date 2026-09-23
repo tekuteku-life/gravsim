@@ -666,7 +666,7 @@ export const FLIGHT_COMPUTER_CONFIG = {
 
 // Communication buffer structure
 export const CALC_BUFFER_CONFIG = {
-	OBJ_ATTR_COUNT: 49
+	OBJ_ATTR_COUNT: 48
 };
 
 export const BUFFER_INDEX = {
@@ -680,10 +680,10 @@ export const BUFFER_INDEX = {
 	TM_AV: 32, TM_AH: 33, TM_CURRENT_G: 34, TM_FLIGHT_TIME: 35, THRUST_ANGLE: 36,
 	DOMINANT_BODY_ID: 37, DIST_TO_DOMINANT: 38, OXID_MASS: 39,
 	TM_TANK_PRES_FUEL: 40, TM_TANK_PRES_OXID: 41,
-	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, TM_STG_SEP_ACTIVE: 44, TM_FAIRING_SEPARATED: 45,
-	DEBRIS_SUB_TYPE: 46,
-	TM_BOOSTER_SEPARATED: 47,
-	TM_BOOSTER_BURNOUT: 48
+	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, TM_FAIRING_SEPARATED: 44,
+	DEBRIS_SUB_TYPE: 45,
+	TM_BOOSTER_SEPARATED: 46,
+	TM_BOOSTER_BURNOUT: 47
 };
 
 export const OBJECT_STATE = {
@@ -1071,9 +1071,17 @@ export const LAUNCH_SEQUENCES = {
 				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
 				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
 				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
-				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true },
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
-				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }
+				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true },
+				{ id: "srb_sep", type: "isBoosterSeparated", operator: "==", value: true, audio: "fl_srb_sep", once: true },
+				{ id: "meco", type: "isMeco", operator: "==", value: true, audio: "fl_meco", once: true },
+				{ id: "stage1_sep", type: "isStage1Separated", operator: "==", value: true, audio: "fl_1-stage_sep", once: true },
+				{ id: "ses", type: "isSes", operator: "==", value: true, audio: "fl_ses", once: true },
+				{ id: "fairing_sep", type: "isFairingSeparated", operator: "==", value: true, audio: "fl_fairing_sep", once: true },
+				{ id: "seco", type: "isSeco", operator: "==", value: true, audio: "fl_seco", once: true },
+				{ id: "stage2_sep", type: "isStage2Separated", operator: "==", value: true, audio: "fl_2-stage_sep", once: true },
+				{ id: "pes", type: "isPes", operator: "==", value: true, audio: "fl_pes", once: true },
+				{ id: "peco", type: "isPeco", operator: "==", value: true, audio: "fl_peco", once: true }
 			]
 		}
 	},
@@ -1153,9 +1161,17 @@ export const LAUNCH_SEQUENCES = {
 				{ id: "pitch_roll", type: "altM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
 				{ id: "pitch_downrange", type: "altM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
 				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
-				{ id: "meco", type: "status", operator: "==", value: 3, audio: "fl_meco", once: true },
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
-				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true }
+				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true },
+				{ id: "srb_sep", type: "isBoosterSeparated", operator: "==", value: true, audio: "fl_srb_sep", once: true },
+				{ id: "meco", type: "isMeco", operator: "==", value: true, audio: "fl_meco", once: true },
+				{ id: "stage1_sep", type: "isStage1Separated", operator: "==", value: true, audio: "fl_1-stage_sep", once: true },
+				{ id: "ses", type: "isSes", operator: "==", value: true, audio: "fl_ses", once: true },
+				{ id: "fairing_sep", type: "isFairingSeparated", operator: "==", value: true, audio: "fl_fairing_sep", once: true },
+				{ id: "seco", type: "isSeco", operator: "==", value: true, audio: "fl_seco", once: true },
+				{ id: "stage2_sep", type: "isStage2Separated", operator: "==", value: true, audio: "fl_2-stage_sep", once: true },
+				{ id: "pes", type: "isPes", operator: "==", value: true, audio: "fl_pes", once: true },
+				{ id: "peco", type: "isPeco", operator: "==", value: true, audio: "fl_peco", once: true }
 			]
 		}
 	}
