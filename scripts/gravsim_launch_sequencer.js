@@ -25,7 +25,7 @@ export class LaunchSequencer {
 		this.isActive = true;
 		this.isAutoSequence = false;
 		this.eventIndex = 0;
-		this.timer = 0; 
+		this.timer = 0;
 
 		// Force time scale to real-time via EventBus
 		const realTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
@@ -84,7 +84,7 @@ export class LaunchSequencer {
 			EventBus.emit('sequencer-event', name);
 		}
 
-		// Pass ALL commands to the worker for pressure simulation etc.
+		// Pass commands to the worker for pressure simulation and mechanics
 		if (this.rocketId !== null && cmd) {
 			EventBus.emit('worker:send-rocket-command', this.rocketId, cmd);
 		}
@@ -111,7 +111,6 @@ export class LaunchSequencer {
 			case 'WATER_DELUGE':
 			case 'ROFI_IGNITION':
 			case 'PRESSURIZE_TANK':
-				// Visual effects handled via states or specific systems in the future
 				break;
 		}
 	}

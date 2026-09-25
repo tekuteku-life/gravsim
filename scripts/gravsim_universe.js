@@ -19,6 +19,7 @@ import { SaveManager } from './gravsim_save_manager.js';
 import { InputManager } from './gravsim_input_manager.js';
 import { AudioManager } from './gravsim_audio_manager.js';
 import { SoundSequencer } from './gravsim_sound_sequencer.js';
+import { SoundEffects } from './gravsim_sound_effects.js';
 import { DestructionManager } from './gravsim_destruction_manager.js';
 import { VisualEffectManager } from './gravsim_visual_effect_manager.js';
 import { PresetManager } from './gravsim_preset_manager.js';
@@ -95,6 +96,7 @@ export class Universe {
 		this.SaveManager = new SaveManager(this);
 		this.AudioManager = new AudioManager(this);
 		this.SoundSequencer = new SoundSequencer(this);
+		this.SoundEffects = new SoundEffects(this);
 
 		this.timeScale = this.ControlPanel.getTimeScale();
 		this.showPredictedTrajectory = true;
@@ -236,6 +238,9 @@ export class Universe {
 	}
 
 	destroy() {
+		if (this.SoundEffects) {
+			this.SoundEffects.destroy();
+		}
 		EventBus.clearAll();
 	}
 
