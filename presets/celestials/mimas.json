@@ -1,0 +1,11 @@
+{
+	"id": "mimas",
+	"key": "Mimas",
+	"name": "Mimas",
+	"mass": 37490000000000000,
+	"color": "#D3D3D3",
+	"radius": 198300,
+	"a": 0.00124,
+	"e": 0.0196,
+	"perihelionDeg": 240
+}

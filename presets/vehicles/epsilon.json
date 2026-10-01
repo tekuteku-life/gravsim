@@ -61,6 +61,17 @@
 	},
 	"rendering": {
 		"colorTheme": "epsilon",
+		"theme": {
+			"stg1Grad": ["#ffffff", "#f0f3f6", "#b0b8c2"],
+			"stg2Grad": ["#ffffff", "#f0f3f6", "#b0b8c2"],
+			"stg3Grad": ["#ffffff", "#f0f3f6", "#b0b8c2"],
+			"interstage": "#1a1c20",
+			"fairingGrad": ["#ffffff", "#f2f4f7", "#a8b0ba"],
+			"fairingLine": "rgba(215, 25, 32, 0.85)",
+			"fins": "#d71920",
+			"nozzle": "#1c2024",
+			"accentBand": "#d71920"
+		},
 		"lengthM": 26.0,
 		"boosters": {
 			"count": 0

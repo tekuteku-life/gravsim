@@ -1,0 +1,14 @@
+{
+	"id": "rocket",
+	"key": "Rocket",
+	"name": "Rocket",
+	"mass": 57.5,
+	"color": "#32CD32",
+	"radius": 63,
+	"minDrawSize": 2,
+	"maxQAxial": 50000,
+	"maxQLateral": 5000,
+	"aeroAreaFront": 10,
+	"aeroAreaSide": 126,
+	"dragCoef": 0.2
+}

@@ -11,17 +11,22 @@
  * and robust embedded fallbacks for zero-dependency offline/test environments.
  */
 
-import { PHYSICS, ROCKET_FUELS } from './gravsim_const.js';
+import { PHYSICS } from './gravsim_const.js';
 
 export class PresetManager {
 	constructor(options = {}) {
 		this.vehicles = new Map();
 		this.payloads = new Map();
 		this.missions = new Map();
+		this.celestials = new Map();
+		this.celestialKeyMap = new Map();
+		this.fuels = new Map();
+		this.themes = new Map();
+		this.visuals = new Map();
 		this.isLoaded = false;
 		this.basePath = './presets';
 
-		// Seed strictly with minimum fallback (H3-30 vehicle + HTV-X cargo + ISS mission)
+		// Seed strictly with minimum fallback (H3-30 vehicle + HTV-X cargo + ISS mission + basic celestials)
 		this._seedFallbacks();
 
 		// In Node.js environment (e.g. tests), load all external JSON definitions synchronously from disk
@@ -36,11 +41,51 @@ export class PresetManager {
 		}
 	}
 
+	_normalizeCelestial(data) {
+		if (!data) return null;
+		const d = { ...data };
+		d.NAME = d.name ?? d.NAME ?? d.key ?? d.id;
+		d.name = d.NAME;
+		d.MASS = d.mass ?? d.MASS ?? 1;
+		d.mass = d.MASS;
+		d.COLOR = d.color ?? d.COLOR ?? '#888888';
+		d.color = d.COLOR;
+		d.RADIUS = d.radius ?? d.RADIUS ?? 1000;
+		d.radius = d.RADIUS;
+		if (d.a !== undefined || d.A !== undefined) { d.A = d.a = (d.a ?? d.A); }
+		if (d.e !== undefined || d.E !== undefined) { d.E = d.e = (d.e ?? d.E); }
+		if (d.perihelionDeg !== undefined || d.PERIHELION_DEG !== undefined) { d.PERIHELION_DEG = d.perihelionDeg = (d.perihelionDeg ?? d.PERIHELION_DEG); }
+		if (d.atmColor !== undefined || d.ATM_COLOR !== undefined) { d.ATM_COLOR = d.atmColor = (d.atmColor ?? d.ATM_COLOR); }
+		if (d.atmLimitAlt !== undefined || d.ATM_LIMIT_ALT !== undefined) { d.ATM_LIMIT_ALT = d.atmLimitAlt = (d.atmLimitAlt ?? d.ATM_LIMIT_ALT); }
+		if (d.atmDensity0 !== undefined || d.ATM_DENSITY_0 !== undefined) { d.ATM_DENSITY_0 = d.atmDensity0 = (d.atmDensity0 ?? d.ATM_DENSITY_0); }
+		if (d.atmScaleHeight !== undefined || d.ATM_SCALE_HEIGHT !== undefined) { d.ATM_SCALE_HEIGHT = d.atmScaleHeight = (d.atmScaleHeight ?? d.ATM_SCALE_HEIGHT); }
+		if (d.rotationPeriod !== undefined || d.ROTATION_PERIOD !== undefined) { d.ROTATION_PERIOD = d.rotationPeriod = (d.rotationPeriod ?? d.ROTATION_PERIOD); }
+		if (d.borderColor !== undefined || d.BORDER_COLOR !== undefined) { d.BORDER_COLOR = d.borderColor = (d.borderColor ?? d.BORDER_COLOR); }
+		if (d.borderWidth !== undefined || d.BORDER_WIDTH !== undefined) { d.BORDER_WIDTH = d.borderWidth = (d.borderWidth ?? d.BORDER_WIDTH); }
+		if (d.minDrawSize !== undefined || d.MIN_DRAW_SIZE !== undefined) { d.MIN_DRAW_SIZE = d.minDrawSize = (d.minDrawSize ?? d.MIN_DRAW_SIZE); }
+		if (d.maxDynamicPressure !== undefined || d.MAX_DYNAMIC_PRESSURE !== undefined) { d.MAX_DYNAMIC_PRESSURE = d.maxDynamicPressure = (d.maxDynamicPressure ?? d.MAX_DYNAMIC_PRESSURE); }
+		if (d.maxQAxial !== undefined || d.MAX_Q_AXIAL !== undefined) { d.MAX_Q_AXIAL = d.maxQAxial = (d.maxQAxial ?? d.MAX_Q_AXIAL); }
+		if (d.maxQLateral !== undefined || d.MAX_Q_LATERAL !== undefined) { d.MAX_Q_LATERAL = d.maxQLateral = (d.maxQLateral ?? d.MAX_Q_LATERAL); }
+		if (d.aeroAreaFront !== undefined || d.AERO_AREA_FRONT !== undefined) { d.AERO_AREA_FRONT = d.aeroAreaFront = (d.aeroAreaFront ?? d.AERO_AREA_FRONT); }
+		if (d.aeroAreaSide !== undefined || d.AERO_AREA_SIDE !== undefined) { d.AERO_AREA_SIDE = d.aeroAreaSide = (d.aeroAreaSide ?? d.AERO_AREA_SIDE); }
+		if (d.dragCoef !== undefined || d.DRAG_COEF !== undefined) { d.DRAG_COEF = d.dragCoef = (d.dragCoef ?? d.DRAG_COEF); }
+		return d;
+	}
+
+	_registerCelestial(id, rawData) {
+		const norm = this._normalizeCelestial(rawData);
+		if (!norm) return;
+		this.celestials.set(id, norm);
+		if (norm.key) { this.celestialKeyMap.set(norm.key, norm); }
+		if (norm.name) { this.celestialKeyMap.set(norm.name, norm); }
+		if (norm.NAME) { this.celestialKeyMap.set(norm.NAME, norm); }
+	}
+
 	_loadFromDiskSync(fs, path) {
 		const baseDir = path.resolve(process.cwd(), 'presets');
 		if (!fs.existsSync(baseDir)) return;
 
-		const loadDir = (subDir, map) => {
+		const loadDir = (subDir, map, isCelestial = false) => {
 			const dirPath = path.join(baseDir, subDir);
 			if (!fs.existsSync(dirPath)) return;
 			const manifestPath = path.join(dirPath, 'manifest.json');
@@ -52,7 +97,11 @@ export class PresetManager {
 							const file = path.join(dirPath, `${id}.json`);
 							if (fs.existsSync(file)) {
 								const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-								map.set(id, data);
+								if (isCelestial) {
+									this._registerCelestial(id, data);
+								} else {
+									map.set(id, data);
+								}
 							}
 						}
 					}
@@ -63,6 +112,19 @@ export class PresetManager {
 		loadDir('vehicles', this.vehicles);
 		loadDir('payloads', this.payloads);
 		loadDir('missions', this.missions);
+		loadDir('celestials', this.celestials, true);
+		loadDir('fuels', this.fuels);
+		loadDir('visuals', this.visuals);
+
+		// Register vehicle themes
+		for (const v of this.vehicles.values()) {
+			const theme = v.rendering?.theme || v.theme;
+			if (theme) {
+				if (v.colorTheme) this.themes.set(v.colorTheme, theme);
+				if (v.id) this.themes.set(v.id, theme);
+			}
+		}
+
 		this.isLoaded = true;
 		this._legacyPresets = null;
 	}
@@ -167,6 +229,149 @@ export class PresetManager {
 		this.vehicles.set(fallbackVehicle.id, fallbackVehicle);
 		this.payloads.set(fallbackPayload.id, fallbackPayload);
 		this.missions.set(fallbackMission.id, fallbackMission);
+
+		const fallbackSun = {
+			id: 'sun', key: 'Sun', name: 'Sun', mass: 1.9891e27, color: '#FF4500', radius: 6.96340e8, a: 1000, e: 0.05, perihelionDeg: 0
+		};
+		const fallbackEarth = {
+			id: 'earth', key: 'Earth', name: 'Earth', mass: 5.972e21, color: '#1E90FF', radius: 6.378e6, a: 1.000, e: 0.0167, perihelionDeg: 102.95,
+			atmColor: 'rgba(100, 150, 255, 0.5)', atmLimitAlt: 100000, atmDensity0: 1.225, atmScaleHeight: 8500, rotationPeriod: 86164
+		};
+		const fallbackMoon = {
+			id: 'moon', key: 'Moon', name: 'Moon', mass: 7.34767309e19, color: '#C0C0C0', radius: 1.7374e6, a: 0.00257, e: 0.0549, perihelionDeg: 0
+		};
+		const fallbackRocket = {
+			id: 'rocket', key: 'Rocket', name: 'Rocket', mass: 57.5, color: '#32CD32', radius: 63, minDrawSize: 2,
+			aeroAreaFront: 10, aeroAreaSide: 126, dragCoef: 0.2, maxQAxial: 50000, maxQLateral: 5000
+		};
+		this._registerCelestial('sun', fallbackSun);
+		this._registerCelestial('earth', fallbackEarth);
+		this._registerCelestial('moon', fallbackMoon);
+		this._registerCelestial('rocket', fallbackRocket);
+
+		// Seed fallback fuels & plumes
+		const fallbackFuels = [
+			{
+				id: 'liquid', name: 'Liquid', isp: 320, density: 1.0, ofRatio: 2.5,
+				plume: {
+					flickerFreq: 35, noiseAmp: 0.12, lenMult: 8.0, widthMult: 1.8,
+					curveLenRatio: 0.35, curveWidthRatio: 0.75, coreLenRatio: 0.4, coreWidthRatio: 0.28,
+					coreFillStart: '#ffffff', coreFillEnd: 'rgba(255, 230, 150, 0)',
+					colors: [
+						[0, '#ffffff'], [0.15, '#ffea77'], [0.45, '#ff6600'],
+						[0.85, 'rgba(200, 30, 0, 0.4)'], [1, 'rgba(100, 10, 0, 0)']
+					]
+				}
+			},
+		];
+		for (const f of fallbackFuels) {
+			this.fuels.set(f.id, f);
+		}
+
+		// Seed fallback themes
+		const fallbackThemes = {
+			orange: {
+				stg1Grad: ['#e67e3a', '#c85a1a', '#78320a'],
+				stg2Grad: ['#ffffff', '#e2e6ea', '#8a94a0'],
+				interstage: '#1e2227',
+				fairingGrad: ['#ffffff', '#e8ebed', '#8a94a0'],
+				fairingLine: 'rgba(0, 0, 0, 0.45)',
+				fins: '#994614',
+				nozzle: '#1c2024',
+				accentBand: '#ffffff'
+			}
+		};
+		for (const [k, v] of Object.entries(fallbackThemes)) {
+			this.themes.set(k, v);
+		}
+
+		// Seed fallback visual dimensions
+		const fallbackVisual = {
+			MIN_SCREEN_RADIUS: 3.5,
+			LOD_RADIUS_THRESHOLD: 4.0,
+			PAYLOAD_ZOOM_MAGNIFICATION: 1.0,
+			LOW_DETAIL: {
+				STAGE1_LEN_RATIO: 4.2,
+				STAGE2_LEN_RATIO: 2.2,
+				WIDTH_RATIO: 0.9,
+				PLUME_LEN_RATIO: 2.8,
+				PLUME_WIDTH_RATIO: 0.35,
+				PLUME_COLOR: '#ffaa00',
+				SATELLITE_BUS_W_RATIO: 1.5,
+				SATELLITE_BUS_H_RATIO: 1.0,
+				SATELLITE_BUS_COLOR: '#d4af37',
+				SOLAR_PADDLE_COLOR: '#0066cc',
+				PADDLE_OFFSET_X_RATIO: 0.4,
+				PADDLE_OFFSET_Y_RATIO: 0.6,
+				PADDLE_W_RATIO: 0.8,
+				PADDLE_H_RATIO: 0.5,
+				PADDLE_GAP_RATIO: 0.1
+			},
+			ALIGNMENT: {
+				BASE_X_STAGE1_RATIO: 0.4,
+				BASE_X_UPPER_RATIO: -0.6,
+				BASE_X_SINGLE_STAGE_RATIO: -1.5,
+				BASE_X_3STG_STAGE1_RATIO: -3.1,
+				BASE_X_3STG_STAGE2_RATIO: -1.6,
+				BASE_X_3STG_STAGE3_RATIO: -0.9,
+				PAYLOAD_OFFSET_RATIO: 0.35,
+				UPPER_PLUME_SCALE: 0.65,
+				STAGE3_PLUME_SCALE: 0.50,
+				MAIN_PLUME_SCALE: 1.0,
+				NOZZLE_BOTTOM_OFFSET: {
+					SINGLE_STAGE: 1.85,
+					TWO_STAGE: 3.10,
+					THREE_STAGE: 3.45
+				}
+			},
+			MODULES: {
+				STAGE1_RADIUS_RATIO: 0.7,
+				STAGE1_LENGTH_RATIO: 2.8,
+				STAGE2_RADIUS_RATIO: 0.65,
+				STAGE2_LENGTH_RATIO: 1.2,
+				STAGE3_RADIUS_RATIO: 0.55,
+				STAGE3_LENGTH_RATIO: 0.9,
+				INTERSTAGE_LENGTH_RATIO: 0.35,
+				INTERSTAGE2_LENGTH_RATIO: 0.25,
+				FAIRING_LENGTH_RATIO: 1.1,
+				NOZZLE1_LENGTH_RATIO: 0.35,
+				NOZZLE2_LENGTH_RATIO: 0.32,
+				NOZZLE3_LENGTH_RATIO: 0.28,
+				FIN_BASE_RATIO: 0.2,
+				FIN_SPAN_RATIO: 0.65,
+				FIN_ROOT_RATIO: 0.25,
+				FAIRING_CURVE_X_RATIO: 0.7,
+				FAIRING_CURVE_Y_RATIO: 0.9,
+				FAIRING_TIP_MARGIN: 2,
+				FAIRING_BAND_MIN_W: 1.5,
+				FAIRING_BAND_W_RATIO: 0.15,
+				STAGE2_BORDER_COLOR: 'rgba(0, 0, 0, 0.15)',
+				STAGE2_NOZZLE_BASE_RATIO: 0.35,
+				STAGE2_NOZZLE_BELL_RATIO: 0.75,
+				STAGE3_NOZZLE_BASE_RATIO: 0.30,
+				STAGE3_NOZZLE_BELL_RATIO: 0.70,
+				INTERSTAGE_BORDER_COLOR: 'rgba(255, 255, 255, 0.15)',
+				STAGE1_BAND_MIN_W: 2,
+				STAGE1_BAND_W_RATIO: 0.04,
+				STAGE1_NOZZLE_BASE_RATIO: 0.6,
+				STAGE1_NOZZLE_BELL_RATIO: 0.95,
+				SATELLITE_BUS_W_RATIO: 1.40,
+				SATELLITE_BUS_H_RATIO: 1.70,
+				SATELLITE_PANEL_W_RATIO: 0.80,
+				SATELLITE_PANEL_H_RATIO: 0.85,
+				SATELLITE_PANEL_FOLDED_H_RATIO: 0.12,
+				SATELLITE_PANEL_BOOM_W_RATIO: 0.15,
+				SATELLITE_DISH_R_RATIO: 0.35,
+				SATELLITE_DISH_OFFSET_RATIO: 0.65,
+				SATELLITE_DISH_COLOR: '#ffffff',
+				SATELLITE_BUS_FILL: '#d4af37',
+				SATELLITE_BUS_STROKE: '#ffee88',
+				SATELLITE_PANEL_FILL: '#004488',
+				SATELLITE_PANEL_STROKE: '#00aaff',
+				SATELLITE_PANEL_MARGIN: 2
+			}
+		};
+		this.visuals.set('rocket', fallbackVisual);
 	}
 
 	async init(onProgress) {
@@ -188,24 +393,37 @@ export class PresetManager {
 
 		try {
 			report(0, 10, 'Fetching preset manifests...');
-			const [vManifest, pManifest, mManifest] = await Promise.all([
+			const [vManifest, pManifest, mManifest, cManifest, fManifest, visManifest] = await Promise.all([
 				this._fetchJSON(`${this.basePath}/vehicles/manifest.json`),
 				this._fetchJSON(`${this.basePath}/payloads/manifest.json`),
-				this._fetchJSON(`${this.basePath}/missions/manifest.json`)
+				this._fetchJSON(`${this.basePath}/missions/manifest.json`),
+				this._fetchJSON(`${this.basePath}/celestials/manifest.json`),
+				this._fetchJSON(`${this.basePath}/fuels/manifest.json`),
+				this._fetchJSON(`${this.basePath}/visuals/manifest.json`)
 			]);
 
 			const vehicleIds = Array.isArray(vManifest) ? vManifest : Array.from(this.vehicles.keys());
 			const payloadIds = Array.isArray(pManifest) ? pManifest : Array.from(this.payloads.keys());
 			const missionIds = Array.isArray(mManifest) ? mManifest : Array.from(this.missions.keys());
+			const celestialIds = Array.isArray(cManifest) ? cManifest : Array.from(this.celestials.keys());
+			const fuelIds = Array.isArray(fManifest) ? fManifest : Array.from(this.fuels.keys());
+			const visualIds = Array.isArray(visManifest) ? visManifest : Array.from(this.visuals.keys());
 
-			const totalTasks = vehicleIds.length + payloadIds.length + missionIds.length;
+			const totalTasks = vehicleIds.length + payloadIds.length + missionIds.length + celestialIds.length + fuelIds.length + visualIds.length;
 			let completed = 0;
 
 			// Fetch vehicles
 			for (const id of vehicleIds) {
 				report(completed, totalTasks, `Loading vehicle: ${id}...`);
 				const data = await this._fetchJSON(`${this.basePath}/vehicles/${id}.json`);
-				if (data) this.vehicles.set(id, data);
+				if (data) {
+					this.vehicles.set(id, data);
+					const theme = data.rendering?.theme || data.theme;
+					if (theme) {
+						if (data.colorTheme) this.themes.set(data.colorTheme, theme);
+						this.themes.set(id, theme);
+					}
+				}
 				completed++;
 				report(completed, totalTasks, `Loaded vehicle: ${id}`);
 			}
@@ -226,6 +444,33 @@ export class PresetManager {
 				if (data) this.missions.set(id, data);
 				completed++;
 				report(completed, totalTasks, `Loaded mission: ${id}`);
+			}
+
+			// Fetch celestials
+			for (const id of celestialIds) {
+				report(completed, totalTasks, `Loading celestial: ${id}...`);
+				const data = await this._fetchJSON(`${this.basePath}/celestials/${id}.json`);
+				if (data) this._registerCelestial(id, data);
+				completed++;
+				report(completed, totalTasks, `Loaded celestial: ${id}`);
+			}
+
+			// Fetch fuels
+			for (const id of fuelIds) {
+				report(completed, totalTasks, `Loading fuel: ${id}...`);
+				const data = await this._fetchJSON(`${this.basePath}/fuels/${id}.json`);
+				if (data) this.fuels.set(id, data);
+				completed++;
+				report(completed, totalTasks, `Loaded fuel: ${id}`);
+			}
+
+			// Fetch visuals
+			for (const id of visualIds) {
+				report(completed, totalTasks, `Loading visual: ${id}...`);
+				const data = await this._fetchJSON(`${this.basePath}/visuals/${id}.json`);
+				if (data) this.visuals.set(id, data);
+				completed++;
+				report(completed, totalTasks, `Loaded visual: ${id}`);
 			}
 
 			this.isLoaded = true;
@@ -326,7 +571,7 @@ export class PresetManager {
 
 			if (payload.propulsion?.enabled) {
 				const prop = JSON.parse(JSON.stringify(payload.propulsion));
-				const fuelDef = ROCKET_FUELS[prop.fuelType || 'liquid'] || { isp: 320, ofRatio: 2.5 };
+				const fuelDef = this.getFuel(prop.fuelType || 'liquid') || { isp: 320, ofRatio: 2.5 };
 				const isp = prop.isp || fuelDef.isp;
 				const ofRatio = prop.ofRatio !== undefined ? prop.ofRatio : fuelDef.ofRatio;
 				const dryMass = prop.dryMassT || (payload.massT * 0.6);
@@ -377,7 +622,7 @@ export class PresetManager {
 
 		for (let i = 0; i < stages.length; i++) {
 			const stg = stages[i];
-			const fuelDef = ROCKET_FUELS[stg.fuelType || 'liquid'] || { isp: 300, ofRatio: 0 };
+			const fuelDef = this.getFuel(stg.fuelType || 'liquid') || { isp: 300, ofRatio: 0 };
 			const isp = stg.isp || fuelDef.isp;
 			const ofRatio = stg.ofRatio !== undefined ? stg.ofRatio : fuelDef.ofRatio;
 
@@ -641,7 +886,194 @@ export class PresetManager {
 		const vehicle = this.getVehicle(key.toLowerCase()) || this.getVehicle(presetId);
 		return this._buildLegacyPresetFromVehicle(vehicle, key);
 	}
+
+	getCelestials() {
+		const list = [];
+		const seen = new Set();
+		for (const c of this.celestials.values()) {
+			if (!seen.has(c.id)) {
+				seen.add(c.id);
+				list.push(JSON.parse(JSON.stringify(c)));
+			}
+		}
+		return list;
+	}
+
+	getCelestial(idOrName) {
+		if (!idOrName) { return null; }
+		const query = String(idOrName).trim();
+		const lower = query.toLowerCase();
+		const found = this.celestials.get(query)
+			|| this.celestials.get(lower)
+			|| this.celestialKeyMap.get(query)
+			|| Array.from(this.celestials.values()).find(c => c.name?.toLowerCase() === lower || c.key?.toLowerCase() === lower)
+			|| null;
+		return found ? JSON.parse(JSON.stringify(found)) : null;
+	}
+
+	getObjectParam(name) {
+		return this.getCelestial(name);
+	}
+
+	getObjectParamsMap() {
+		const map = {};
+		for (const c of this.celestials.values()) {
+			const key = c.key || c.NAME || c.name || c.id;
+			if (!map[key]) {
+				map[key] = JSON.parse(JSON.stringify(c));
+			}
+		}
+		return map;
+	}
+
+	getFuel(id) {
+		if (!id) { return null; }
+		const query = String(id).toLowerCase();
+		const found = this.fuels.get(query) || Array.from(this.fuels.values()).find(f => f.name?.toLowerCase() === query);
+		return found ? JSON.parse(JSON.stringify(found)) : null;
+	}
+
+	getFuels() {
+		return Array.from(this.fuels.values()).map(f => JSON.parse(JSON.stringify(f)));
+	}
+
+	getFuelsMap() {
+		const map = {};
+		for (const [k, v] of this.fuels.entries()) {
+			map[k] = JSON.parse(JSON.stringify(v));
+		}
+		return map;
+	}
+
+	getPlume(fuelType) {
+		const fuel = this.getFuel(fuelType) || this.getFuel('liquid');
+		return fuel?.plume || null;
+	}
+
+	getPlumesMap() {
+		const map = { THRUST_THRESHOLD: 0.01 };
+		for (const [k, v] of this.fuels.entries()) {
+			if (v.plume) {
+				map[k] = JSON.parse(JSON.stringify(v.plume));
+			}
+		}
+		return map;
+	}
+
+	getTheme(themeNameOrVehicle) {
+		if (!themeNameOrVehicle) {
+			return this.themes.get('orange') || this.themes.get('classic');
+		}
+		if (typeof themeNameOrVehicle === 'object') {
+			if (themeNameOrVehicle.theme) return themeNameOrVehicle.theme;
+			if (themeNameOrVehicle.rendering?.theme) return themeNameOrVehicle.rendering.theme;
+			if (themeNameOrVehicle.colorTheme) return this.themes.get(themeNameOrVehicle.colorTheme) || this.themes.get('orange');
+		}
+		const query = String(themeNameOrVehicle).toLowerCase();
+		return this.themes.get(query) || this.themes.get('orange') || this.themes.get('classic');
+	}
+
+	getThemesMap() {
+		const map = {};
+		for (const [k, v] of this.themes.entries()) {
+			map[k] = JSON.parse(JSON.stringify(v));
+		}
+		return map;
+	}
+
+	getRocketVisual() {
+		const base = this.visuals.get('rocket') || {};
+		return {
+			...JSON.parse(JSON.stringify(base)),
+			PLUMES: this.getPlumesMap(),
+			THEMES: this.getThemesMap()
+		};
+	}
 }
 
 // Global singleton instance
 export const presetManager = new PresetManager();
+
+if (typeof globalThis !== 'undefined') {
+	globalThis.__presetManager = presetManager;
+}
+
+export const MULTISTAGE_PRESETS = new Proxy({}, {
+	get(target, prop) {
+		if (typeof prop === 'symbol' || prop === 'inspect' || prop === 'prototype') {
+			return target[prop];
+		}
+		const presets = presetManager.getLegacyPresets();
+		return presets[prop] || presetManager.getLegacyPreset(prop);
+	},
+	has(target, prop) {
+		const presets = presetManager.getLegacyPresets();
+		if (prop in presets) { return true; }
+		return !!presetManager.getLegacyPreset(prop);
+	},
+	ownKeys() {
+		const keys = new Set(Object.keys(presetManager.getLegacyPresets()));
+		if (typeof presetManager.getVehicles === 'function') {
+			for (const v of presetManager.getVehicles()) {
+				keys.add(String(v.id).toUpperCase());
+			}
+		}
+		return Array.from(keys);
+	},
+	getOwnPropertyDescriptor(target, prop) {
+		const val = presetManager.getLegacyPreset(prop);
+		if (val !== null && val !== undefined) {
+			return { configurable: true, enumerable: true, writable: false, value: val };
+		}
+		return undefined;
+	}
+});
+
+export const ROCKET_FUELS = new Proxy({}, {
+	get(target, prop) {
+		if (typeof prop === 'symbol' || prop === 'inspect' || prop === 'prototype') {
+			return target[prop];
+		}
+		const fuels = presetManager.getFuelsMap();
+		return fuels[prop] || presetManager.getFuel(prop);
+	},
+	has(target, prop) {
+		const fuels = presetManager.getFuelsMap();
+		return prop in fuels;
+	},
+	ownKeys() {
+		return Object.keys(presetManager.getFuelsMap());
+	},
+	getOwnPropertyDescriptor(target, prop) {
+		const fuels = presetManager.getFuelsMap();
+		const val = fuels[prop];
+		if (val !== undefined && val !== null) {
+			return { configurable: true, enumerable: true, writable: false, value: val };
+		}
+		return undefined;
+	}
+});
+
+export const ROCKET_VISUAL = new Proxy({}, {
+	get(target, prop) {
+		if (typeof prop === 'symbol' || prop === 'inspect' || prop === 'prototype') {
+			return target[prop];
+		}
+		const vis = presetManager.getRocketVisual();
+		return vis[prop];
+	},
+	has(target, prop) {
+		const vis = presetManager.getRocketVisual();
+		return prop in vis;
+	},
+	ownKeys() {
+		return Object.keys(presetManager.getRocketVisual());
+	},
+	getOwnPropertyDescriptor(target, prop) {
+		const vis = presetManager.getRocketVisual();
+		if (prop in vis) {
+			return { configurable: true, enumerable: true, writable: false, value: vis[prop] };
+		}
+		return undefined;
+	}
+});

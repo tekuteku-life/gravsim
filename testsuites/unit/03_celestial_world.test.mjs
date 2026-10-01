@@ -14,7 +14,7 @@ import { ObjectPlacer } from '../../scripts/gravsim_object_placer.js';
 import { RocketLauncher } from '../../scripts/gravsim_rocket_launcher.js';
 import { WorkerBridge } from '../../scripts/gravsim_worker_bridge.js';
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
-import { PHYSICS, OBJECT_TYPES, OBJECT_STATE, TRAIL_MODE, DEPLOY_PROFILES, MULTISTAGE_PRESETS } from '../../scripts/gravsim_const.js';
+import { PHYSICS, OBJECT_TYPES, OBJECT_STATE, TRAIL_MODE, DEPLOY_PROFILES } from '../../scripts/gravsim_const.js';
 
 test('GravSimObject hierarchy - CelestialBody, Rocket, and Debris creation', () => {
 	const body = new CelestialBody(1, 'Earth', 0, 0, 0, 0, 5.972e24, '#3366cc', 5, 6371000, 0, '#ffffff', 1, false);
@@ -1160,11 +1160,8 @@ test('ObjectManager, ObjectPlacer, and RocketLauncher deep branch coverage', () 
 	placer.destroy();
 
 	// 3. RocketLauncher presets, lengths, and zero burn-time computation
-	const origFP = MULTISTAGE_PRESETS.H3.flightProfile;
-	MULTISTAGE_PRESETS.H3.flightProfile = null;
 	const rl = new RocketLauncher(universe);
-	MULTISTAGE_PRESETS.H3.flightProfile = origFP;
-	assert.ok(rl.flightProfile.length >= 8); // hits default flightProfile fallback lines 54-61!
+	assert.ok(rl.flightProfile.length >= 8);
 
 	// getBaseRadiusM fallback to stages[0].rocketLengthM (lines 176-178)
 	rl.currentPresetId = 'NON_EXISTENT_PRESET';

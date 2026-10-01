@@ -446,8 +446,12 @@ describe('Integration 06: External Presets & Payload On-Board Propulsion', () =>
 		assert.equal(pm.getLegacyPreset('h3_30').boosters.count, 0);
 		assert.equal(pm.getLegacyPreset('unknown_key'), null);
 
-		// 3. Verify const.js MULTISTAGE_PRESETS backward compatibility
-		const { MULTISTAGE_PRESETS } = await import('../../scripts/gravsim_const.js');
+		// 3. Verify MULTISTAGE_PRESETS removal from const.js and preset_manager backward compatibility
+		const constExports = await import('../../scripts/gravsim_const.js');
+		assert.equal('MULTISTAGE_PRESETS' in constExports, false, 'MULTISTAGE_PRESETS must not be exported from const.js');
+		assert.equal(constExports.MULTISTAGE_PRESETS, undefined);
+
+		const { MULTISTAGE_PRESETS } = await import('../../scripts/gravsim_preset_manager.js');
 		assert.ok(MULTISTAGE_PRESETS.FALCON9);
 		assert.ok(MULTISTAGE_PRESETS.H3);
 		assert.equal(MULTISTAGE_PRESETS.H3_22.boosters.count, 2);
@@ -472,6 +476,58 @@ describe('Integration 06: External Presets & Payload On-Board Propulsion', () =>
 		assert.ok(earthObs.rendering?.solarPanels);
 		const leoMission = pm.getMission('leo_250km');
 		assert.ok(leoMission.rendering?.trajectoryColor);
+
+		// 6. Verify external celestial bodies, removal of DEFAULT_OBJECT_PARAMS, and new JSON presets (fuels, themes, visuals)
+		const constModule = await import('../../scripts/gravsim_const.js');
+		assert.equal(constModule.DEFAULT_OBJECT_PARAMS, undefined, 'DEFAULT_OBJECT_PARAMS must be removed from const.js');
+
+		assert.ok(pm.getCelestials().length >= 30, 'Should load all celestial bodies from JSON');
+		assert.ok(pm.getCelestial('earth'));
+		assert.ok(pm.getCelestial('sun'));
+		const earthParam = pm.getObjectParam('Earth');
+		const sunParam = pm.getObjectParam('Sun');
+		assert.ok(earthParam);
+		assert.ok(sunParam);
+		assert.equal(earthParam.NAME, 'Earth');
+		assert.ok(earthParam.ATM_LIMIT_ALT > 0);
+		const paramsMap = pm.getObjectParamsMap();
+		assert.ok('Earth' in paramsMap);
+		assert.ok('Sun' in paramsMap);
+		assert.equal('NON_EXISTENT' in paramsMap, false);
+		assert.ok(Object.keys(paramsMap).length >= 30);
+
+		// 7. Verify external fuels & plumes JSON definitions
+		assert.ok(pm.getFuels().length >= 4);
+		assert.ok(pm.getFuel('hydro'));
+		assert.ok(pm.getFuel('solid'));
+		assert.ok(pm.getPlume('hydro'));
+		assert.equal('ROCKET_VISUAL' in constModule, false, 'ROCKET_VISUAL must not be exported from const.js');
+		assert.equal(constModule.ROCKET_VISUAL, undefined);
+		const { ROCKET_FUELS } = constModule;
+		const { ROCKET_VISUAL } = await import('../../scripts/gravsim_preset_manager.js');
+		assert.ok(ROCKET_FUELS.hydro);
+		assert.equal(ROCKET_FUELS.hydro.isp, 450);
+		assert.equal(ROCKET_FUELS.solid.isp, 280);
+
+		// 8. Verify vehicle themes embedded in vehicle JSON
+		assert.ok(pm.getTheme('orange'));
+		assert.ok(pm.getTheme('classic'));
+		assert.ok(pm.getTheme('epsilon'));
+		assert.ok(pm.getTheme('blue'));
+		const h3Vehicle = pm.getVehicle('h3_22');
+		assert.ok(h3Vehicle.rendering?.theme);
+		assert.deepEqual(pm.getTheme(h3Vehicle), h3Vehicle.rendering.theme);
+
+		// 9. Verify procedural rocket visual settings from presets/visuals/rocket.json
+		const rocketVis = pm.getRocketVisual();
+		assert.ok(rocketVis.LOW_DETAIL);
+		assert.ok(rocketVis.ALIGNMENT);
+		assert.ok(rocketVis.MODULES);
+		assert.ok(rocketVis.PLUMES.hydro);
+		assert.ok(rocketVis.THEMES.orange);
+		assert.ok(ROCKET_VISUAL.MODULES);
+		assert.ok(ROCKET_VISUAL.THEMES.orange);
+		assert.ok(ROCKET_VISUAL.PLUMES.hydro);
 	});
 
 	it('10. should cover PresetManager queries, edge cases, and init lifecycle', async () => {
@@ -481,6 +537,16 @@ describe('Integration 06: External Presets & Payload On-Board Propulsion', () =>
 		assert.ok(pm.getVehicles().length > 0);
 		assert.ok(pm.getPayloads().length > 0);
 		assert.ok(pm.getMissions().length > 0);
+		assert.ok(pm.getCelestials().length > 0);
+		assert.equal(pm.getCelestial(null), null);
+		assert.equal(pm.getCelestial('non_existent'), null);
+		assert.equal(pm.getObjectParam(null), null);
+		assert.equal(pm.getObjectParam('non_existent'), null);
+		assert.ok(pm.getFuels().length > 0);
+		assert.equal(pm.getFuel(null), null);
+		assert.equal(pm.getFuel('non_existent'), null);
+		assert.ok(pm.getPlume(null)); // falls back to liquid
+		assert.ok(pm.getTheme(null)); // falls back to default
 		assert.equal(pm.getLegacyPreset(null), null);
 		assert.equal(pm.getVehicle(null), null);
 		assert.equal(pm.getVehicle('non_existent'), null);

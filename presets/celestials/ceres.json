@@ -1,0 +1,11 @@
+{
+	"id": "ceres",
+	"key": "Ceres",
+	"name": "Ceres",
+	"mass": 939300000000000000,
+	"color": "#A9A9A9",
+	"radius": 473000,
+	"a": 2.768,
+	"e": 0.0758,
+	"perihelionDeg": 73.6
+}

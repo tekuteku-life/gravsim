@@ -1,9 +1,10 @@
 
 // gravsim_tab_navi.js
 
-import { PHYSICS, UI, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
+import { PHYSICS, UI, OBJECT_TYPES } from './gravsim_const.js';
 import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
+import { presetManager } from './gravsim_preset_manager.js';
 
 export class NaviTab {
 	constructor(universe) {
@@ -114,7 +115,7 @@ export class NaviTab {
 			DOMUtils.setText(this.ui.nvVel, "--- km/s");
 		}
 
-		const param = DEFAULT_OBJECT_PARAMS[target.name];
+		const param = target.param || (typeof this.universe?.getObjectParams === 'function' ? this.universe.getObjectParams(target.name) : null) || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(target.name) : null);
 		if (param && param.ATM_LIMIT_ALT) {
 			DOMUtils.setText(this.ui.nvAtmAlt, UnitConvertUtils.m2km(param.ATM_LIMIT_ALT).toLocaleString() + " km");
 			DOMUtils.setText(this.ui.nvAtmRho, param.ATM_DENSITY_0.toLocaleString() + " kg/m³");

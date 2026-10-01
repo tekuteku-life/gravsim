@@ -1,0 +1,10 @@
+{
+	"id": "sgra_star",
+	"key": "SgrAStar",
+	"name": "Sagittarius A*",
+	"mass": 8.573021e+33,
+	"color": "#000000",
+	"radius": 12700000000,
+	"borderColor": "#FF4500",
+	"borderWidth": 0.1
+}

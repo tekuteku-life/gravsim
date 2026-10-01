@@ -1,0 +1,9 @@
+{
+	"id": "asteroid",
+	"key": "Asteroid",
+	"name": "Asteroid",
+	"mass": 10000000,
+	"color": "#808080",
+	"radius": 90,
+	"maxDynamicPressure": 5000000
+}

@@ -1,7 +1,8 @@
 
 // gravsim_rocket_renderer.js
 
-import { PAD_EFFECT, ROCKET_VISUAL } from './gravsim_const.js';
+import { PAD_EFFECT } from './gravsim_const.js';
+import { ROCKET_VISUAL } from './gravsim_preset_manager.js';
 
 export class RocketRenderer {
 	static draw(ctx, rocket, x, y, screenRadius, zoomScale) {

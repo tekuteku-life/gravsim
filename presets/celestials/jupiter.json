@@ -1,0 +1,16 @@
+{
+	"id": "jupiter",
+	"key": "Jupiter",
+	"name": "Jupiter",
+	"mass": 1.898e+24,
+	"color": "#FF8C00",
+	"radius": 69911000,
+	"a": 5.204,
+	"e": 0.0489,
+	"perihelionDeg": 14.75,
+	"atmColor": "rgba(200, 180, 150, 0.4)",
+	"atmLimitAlt": 3000000,
+	"atmDensity0": 0.16,
+	"atmScaleHeight": 27000,
+	"rotationPeriod": 35730
+}

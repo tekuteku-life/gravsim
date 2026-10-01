@@ -1,11 +1,11 @@
 // gravsim_trajectory_predictor.js
 
 import {
-	PHYSICS, SIMULATION, RENDER, DEFAULT_OBJECT_PARAMS,
-	ROCKET_FUELS, OBJECT_TYPES, DEFAULT_FLIGHT_EVENTS,
+	PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_FLIGHT_EVENTS,
 	TRAJECTORY_PREDICTION, TELEMETRY, OBJECT_STATE
 } from './gravsim_const.js';
-import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
+import { ROCKET_FUELS } from './gravsim_preset_manager.js';
+import { UnitConvertUtils } from './gravsim_utils.js';
 import { runMultiBodySimulation } from './gravsim_calc_predictor.js';
 
 /*******************************************************************
@@ -98,8 +98,10 @@ export class TrajectoryPredictor {
 		const host = config.host;
 		if (!host) { return null; }
 
-		const hostParam = DEFAULT_OBJECT_PARAMS[host.name] || DEFAULT_OBJECT_PARAMS['Earth'];
-		const hostOmega = hostParam.ROTATION_PERIOD ? (2 * Math.PI) / hostParam.ROTATION_PERIOD : 0;
+		const hostParam = host.param
+			|| (this.universe?.getObjectParams ? this.universe.getObjectParams(host.name) : null)
+			|| (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam(host.name) : null);
+		const hostOmega = (hostParam && hostParam.ROTATION_PERIOD) ? (2 * Math.PI) / hostParam.ROTATION_PERIOD : 0;
 
 		const fuelDef = ROCKET_FUELS[config.fuelType] || ROCKET_FUELS['liquid'];
 		const isp = fuelDef.isp || 320;
@@ -190,6 +192,7 @@ export class TrajectoryPredictor {
 		if (this.universe && this.universe.objects) {
 			for (const obj of this.universe.objects) {
 				if (obj.type === OBJECT_TYPES.CELESTIAL) {
+					const objParam = obj.param || (this.universe?.getObjectParams ? this.universe.getObjectParams(obj.name) : null);
 					celestialBodies.push({
 						id: obj.id,
 						name: obj.name,
@@ -199,7 +202,9 @@ export class TrajectoryPredictor {
 						y: UnitConvertUtils.pix2m(obj.y),
 						vx: UnitConvertUtils.pix2m(obj.vx),
 						vy: UnitConvertUtils.pix2m(obj.vy),
-						rotationAngle: obj.rotationAngle || 0
+						rotationAngle: obj.rotationAngle || 0,
+						param: objParam,
+						rotationPeriod: objParam?.ROTATION_PERIOD || 0
 					});
 				}
 			}
@@ -214,7 +219,9 @@ export class TrajectoryPredictor {
 				y: hostY_m,
 				vx: hostVx_m,
 				vy: hostVy_m,
-				rotationAngle: host.rotationAngle || 0
+				rotationAngle: host.rotationAngle || 0,
+				param: hostParam,
+				rotationPeriod: hostParam?.ROTATION_PERIOD || 0
 			});
 		}
 

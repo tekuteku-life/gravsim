@@ -1,0 +1,11 @@
+{
+	"id": "io",
+	"key": "Io",
+	"name": "Io",
+	"mass": 89320000000000000000,
+	"color": "#FFCC00",
+	"radius": 1821600,
+	"a": 0.00282,
+	"e": 0.0041,
+	"perihelionDeg": 0
+}

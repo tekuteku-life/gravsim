@@ -28,6 +28,16 @@
 	},
 	"rendering": {
 		"colorTheme": "blue",
+		"theme": {
+			"stg1Grad": ["#28558a", "#17365d", "#0b1d33"],
+			"stg2Grad": ["#356aa0", "#1c4273", "#0e2440"],
+			"interstage": "#bcc5d0",
+			"fairingGrad": ["#20252d", "#13171e", "#090b0e"],
+			"fairingLine": "rgba(0, 255, 204, 0.65)",
+			"fins": "#3a78bd",
+			"nozzle": "#3d454e",
+			"accentBand": "#00e5ff"
+		},
 		"lengthM": 50.0,
 		"boosters": {
 			"count": 0

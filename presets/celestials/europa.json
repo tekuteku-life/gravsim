@@ -1,0 +1,11 @@
+{
+	"id": "europa",
+	"key": "Europa",
+	"name": "Europa",
+	"mass": 48000000000000000000,
+	"color": "#F5DEB3",
+	"radius": 1560800,
+	"a": 0.00449,
+	"e": 0.0094,
+	"perihelionDeg": 90
+}

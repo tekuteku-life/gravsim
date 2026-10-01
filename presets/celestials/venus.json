@@ -1,0 +1,16 @@
+{
+	"id": "venus",
+	"key": "Venus",
+	"name": "Venus",
+	"mass": 4.867e+21,
+	"color": "#FFD700",
+	"radius": 6051800,
+	"a": 0.723,
+	"e": 0.0067,
+	"perihelionDeg": 131.53,
+	"atmColor": "rgba(255, 200, 100, 0.6)",
+	"atmLimitAlt": 250000,
+	"atmDensity0": 65,
+	"atmScaleHeight": 15900,
+	"rotationPeriod": 20996800
+}

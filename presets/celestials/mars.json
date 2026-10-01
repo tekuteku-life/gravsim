@@ -1,0 +1,16 @@
+{
+	"id": "mars",
+	"key": "Mars",
+	"name": "Mars",
+	"mass": 641710000000000000000,
+	"color": "#FF6347",
+	"radius": 3389500,
+	"a": 1.524,
+	"e": 0.0934,
+	"perihelionDeg": 336.04,
+	"atmColor": "rgba(255, 140, 0, 0.4)",
+	"atmLimitAlt": 50000,
+	"atmDensity0": 0.02,
+	"atmScaleHeight": 11100,
+	"rotationPeriod": 88642
+}

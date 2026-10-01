@@ -11,7 +11,8 @@ import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
 import { CalcRocket } from '../../scripts/gravsim_calc_object.js';
 import { runMultiBodySimulation } from '../../scripts/gravsim_calc_predictor.js';
 import { WorkerBridge } from '../../scripts/gravsim_worker_bridge.js';
-import { OBJECT_TYPES, MULTISTAGE_ROCKET, MULTISTAGE_PRESETS, PHYSICS } from '../../scripts/gravsim_const.js';
+import { OBJECT_TYPES, MULTISTAGE_ROCKET, PHYSICS } from '../../scripts/gravsim_const.js';
+import { presetManager } from '../../scripts/gravsim_preset_manager.js';
 import { logDebug, assertClose, createFalcon9Config } from '../test_helpers.mjs';
 
 describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => {
@@ -269,7 +270,7 @@ describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => 
 		const AU = 149597870700;
 		const earthRadius = 6371000;
 		const earthOrbitSpeed = 29780;
-		const preset = JSON.parse(JSON.stringify(MULTISTAGE_PRESETS.FALCON9));
+		const preset = JSON.parse(JSON.stringify(presetManager.getLegacyPreset('FALCON9')));
 		const omega = (2 * Math.PI) / 86400;
 		const dy = -(earthRadius + 10);
 		const rotVx = -omega * dy;
@@ -363,7 +364,7 @@ describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => 
 		const AU = 149597870700;
 		const earthRadius = 6371000;
 		const earthOrbitSpeed = 29780;
-		const preset = JSON.parse(JSON.stringify(MULTISTAGE_PRESETS.H3));
+		const preset = JSON.parse(JSON.stringify(presetManager.getLegacyPreset('H3')));
 		const omega = (2 * Math.PI) / 86400;
 		const dy = -(earthRadius + 10);
 		const rotVx = -omega * dy;
@@ -438,7 +439,7 @@ describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => 
 		const AU = 149597870700;
 		const earthRadius = 6371000;
 		const earthOrbitSpeed = 29780;
-		const preset = JSON.parse(JSON.stringify(MULTISTAGE_PRESETS.H3));
+		const preset = JSON.parse(JSON.stringify(presetManager.getLegacyPreset('H3')));
 		const omega = (2 * Math.PI) / 86400;
 		const dy = -(earthRadius + 10);
 		const rotVx = -omega * dy;
@@ -515,7 +516,7 @@ describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => 
 		const AU = 149597870700;
 		const earthRadius = 6371000;
 		const earthOrbitSpeed = 29780;
-		const preset = JSON.parse(JSON.stringify(MULTISTAGE_PRESETS.EPSILON));
+		const preset = JSON.parse(JSON.stringify(presetManager.getLegacyPreset('EPSILON')));
 		assert.equal(preset.stages.length, 3, 'Epsilon must have 3 stages');
 		assert.equal(preset.stages[0].fuelType, 'solid', 'Stage 1 must be solid fuel');
 		assert.equal(preset.stages[1].fuelType, 'solid', 'Stage 2 must be solid fuel');
@@ -591,7 +592,7 @@ describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => 
 		const AU = 149597870700;
 		const earthRadius = 6371000;
 		const earthOrbitSpeed = 29780;
-		const preset = JSON.parse(JSON.stringify(MULTISTAGE_PRESETS.SSTO));
+		const preset = JSON.parse(JSON.stringify(presetManager.getLegacyPreset('SSTO')));
 		assert.equal(preset.stages.length, 1, 'SSTO must have exactly 1 stage');
 		assert.equal(preset.fairing.enabled, true, 'SSTO fairing must be enabled');
 
@@ -657,11 +658,12 @@ describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => 
 		const dy = -(earthRadius + 10);
 		const rotVx = -omega * dy;
 
-		const presetKeys = Object.keys(MULTISTAGE_PRESETS);
+		const legacyPresets = presetManager.getLegacyPresets();
+		const presetKeys = Object.keys(legacyPresets);
 		assert.ok(presetKeys.length >= 4, 'Must have at least 4 presets (FALCON9, H3, EPSILON, SSTO)');
 
 		for (const key of presetKeys) {
-			const preset = JSON.parse(JSON.stringify(MULTISTAGE_PRESETS[key]));
+			const preset = JSON.parse(JSON.stringify(legacyPresets[key]));
 			const engine = new PhysicsEngine();
 			engine.addObject({ id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, x: 0, y: 0, vx: 0, vy: 0, mass: 1.989e30, radius: 696340000 });
 			const earth = engine.addObject({ id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, x: AU, y: 0, vx: 0, vy: earthOrbitSpeed, mass: 5.972e24, radius: earthRadius });

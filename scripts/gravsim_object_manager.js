@@ -3,8 +3,9 @@
 
 import {
 	SIMULATION, OBJECT_STATE, OBJECT_TYPES,
-	MULTISTAGE_ROCKET, ROCKET_VISUAL
+	MULTISTAGE_ROCKET
 } from './gravsim_const.js';
+import { ROCKET_VISUAL } from './gravsim_preset_manager.js';
 import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';

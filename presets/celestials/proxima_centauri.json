@@ -1,0 +1,11 @@
+{
+	"id": "proxima_centauri",
+	"key": "ProximaCentauri",
+	"name": "Proxima Centauri",
+	"mass": 2.426702e+26,
+	"color": "#FF6347",
+	"radius": 107000000,
+	"a": 500,
+	"e": 0.2,
+	"perihelionDeg": 110
+}

@@ -1,0 +1,11 @@
+{
+	"id": "pluto",
+	"key": "Pluto",
+	"name": "Pluto",
+	"mass": 13030000000000000000,
+	"color": "#DEB887",
+	"radius": 1188300,
+	"a": 39.482,
+	"e": 0.2488,
+	"perihelionDeg": 224.07
+}

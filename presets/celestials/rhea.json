@@ -1,0 +1,11 @@
+{
+	"id": "rhea",
+	"key": "Rhea",
+	"name": "Rhea",
+	"mass": 2307000000000000000,
+	"color": "#C0C0C0",
+	"radius": 763800,
+	"a": 0.00352,
+	"e": 0.0013,
+	"perihelionDeg": 60
+}

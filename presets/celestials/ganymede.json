@@ -1,0 +1,11 @@
+{
+	"id": "ganymede",
+	"key": "Ganymede",
+	"name": "Ganymede",
+	"mass": 148190000000000000000,
+	"color": "#C0C0C0",
+	"radius": 2634100,
+	"a": 0.00716,
+	"e": 0.0013,
+	"perihelionDeg": 180
+}

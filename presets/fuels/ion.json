@@ -1,0 +1,21 @@
+{
+	"id": "ion",
+	"name": "Ion",
+	"isp": 3000,
+	"density": 0.5,
+	"ofRatio": 0,
+	"plume": {
+		"flickerFreq": 20,
+		"noiseAmp": 0.04,
+		"lenMult": 4.0,
+		"widthMult": 0.7,
+		"beamLengthRatio": 0.8,
+		"beamStrokeColor": "#88ffff",
+		"colors": [
+			[0, "#ffffff"],
+			[0.25, "#00ffcc"],
+			[0.65, "rgba(0, 160, 255, 0.5)"],
+			[1, "rgba(0, 50, 200, 0)"]
+		]
+	}
+}

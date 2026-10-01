@@ -3,9 +3,9 @@
 
 import {
 	PHYSICS, SIMULATION, ROCHE_LIMIT,
-	COLLISION_CONFIG, DEBRIS, OBJECT_TYPES,
-	DEFAULT_OBJECT_PARAMS
+	COLLISION_CONFIG, DEBRIS, OBJECT_TYPES
 } from './gravsim_const.js';
+import { presetManager } from './gravsim_preset_manager.js';
 import { CalcCelestialBody, CalcRocket, CalcDebris } from './gravsim_calc_object.js';
 import { QuadTreePool, Rectangle } from './gravsim_calc_quadtree.js';
 import { WorkerProfiler } from './gravsim_profiler.js';
@@ -20,6 +20,7 @@ export class PhysicsEngine {
 		this.massiveBodies = []; // Cache for objects with significant mass
 		this.tinyBodies = []; // Cache for objects with insignificant mass
 		this.atmBodies = []; // Cache for objects with atmosphere
+		this.celestialParams = null;
 		
 		// Pre-allocate objects for spatial query to prevent GC spikes
 		this.pool = new QuadTreePool();
@@ -27,8 +28,23 @@ export class PhysicsEngine {
 		this._queryResult = [];
 	}
 
+	setCelestialParams(params) {
+		this.celestialParams = params;
+	}
+
+	getCelestialParam(name) {
+		if (this.celestialParams && this.celestialParams[name]) {
+			return this.celestialParams[name];
+		}
+		if (typeof presetManager !== 'undefined') {
+			return presetManager.getObjectParam(name);
+		}
+		return null;
+	}
+
 	addObject(data) {
 		let newObj;
+		const param = data.param || this.getCelestialParam(data.name);
 		if (data.type === OBJECT_TYPES.ROCKET) {
 			newObj = new CalcRocket(
 				data.id, data.name,
@@ -60,7 +76,8 @@ export class PhysicsEngine {
 					disableOrbitalCutoff: data.disableOrbitalCutoff,
 					colorTheme: data.colorTheme,
 					targetApogeeKm: data.targetApogeeKm,
-					targetPerigeeKm: data.targetPerigeeKm
+					targetPerigeeKm: data.targetPerigeeKm,
+					objParam: param
 				}
 			);
 		} else if (data.type === OBJECT_TYPES.DEBRIS) {
@@ -82,6 +99,7 @@ export class PhysicsEngine {
 				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
 				data.mass || SIMULATION.DEFAULT_OBJECT_MASS
 			);
+			newObj.param = param;
 		}
 		newObj._half_vx = newObj.vx;
 		newObj._half_vy = newObj.vy;
@@ -131,7 +149,7 @@ export class PhysicsEngine {
 			}
 
 			// Distinguish bodies by atmosphere parameter
-			const param = DEFAULT_OBJECT_PARAMS[obj.name];
+			const param = obj.param || this.getCelestialParam(obj.name);
 			if (obj.type === OBJECT_TYPES.CELESTIAL && param && param.ATM_LIMIT_ALT) {
 				this.atmBodies.push(obj);
 			}
@@ -145,7 +163,7 @@ export class PhysicsEngine {
 			if (obj.type === OBJECT_TYPES.ROCKET && obj.isHoldDown && obj.hostId !== null) {
 				const host = this.objects.find(o => o.id === obj.hostId);
 				if (host) {
-					const hostParam = DEFAULT_OBJECT_PARAMS[host.name];
+					const hostParam = host.param || this.getCelestialParam(host.name);
 					let omega = 0; // rad/s
 					if (hostParam && hostParam.ROTATION_PERIOD) {
 						omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
@@ -404,7 +422,7 @@ export class PhysicsEngine {
 
 		// Ignore if don't reach for the object's atmosphere
 		const distM = Math.sqrt(obj._minAtmDistSq); // m
-		const refParam = DEFAULT_OBJECT_PARAMS[refBody.name];
+		const refParam = refBody.param || this.getCelestialParam(refBody.name);
 		const altM = distM - refBody.radius; // m
 
 		if (altM > refParam.ATM_LIMIT_ALT) {
@@ -525,7 +543,7 @@ export class PhysicsEngine {
 		const massiveLen = this.massiveBodies.length;
 		for (let i = 0; i < massiveLen; i++) {
 			const objA = this.massiveBodies[i];
-			const paramA = DEFAULT_OBJECT_PARAMS[objA.name];
+			const paramA = objA.param || this.getCelestialParam(objA.name);
 			const hasAtmA = paramA && paramA.ATM_LIMIT_ALT;
 
 			for (let j = i + 1; j < massiveLen; j++) {
@@ -555,7 +573,7 @@ export class PhysicsEngine {
 						objA.dominantBody = objB;
 						objA.distToDominantM = dist;
 					}
-					const paramB = DEFAULT_OBJECT_PARAMS[objB.name];
+					const paramB = objB.param || this.getCelestialParam(objB.name);
 					if (paramB && paramB.ATM_LIMIT_ALT && distSq < objA._minAtmDistSq) {
 						objA._minAtmDistSq = distSq;
 						objA._nearestAtmBody = objB;
@@ -583,7 +601,7 @@ export class PhysicsEngine {
 	// Massive vs Tiny Gravity
 	_calculateMassiveToTinyGravity() {
 		for (const objA of this.massiveBodies) {
-			const hasAtmA = DEFAULT_OBJECT_PARAMS[objA.name]?.ATM_LIMIT_ALT;
+			const hasAtmA = (objA.param || this.getCelestialParam(objA.name))?.ATM_LIMIT_ALT;
 
 			for (const objB of this.tinyBodies) {
 				const dx = objB.x - objA.x; // m
@@ -712,9 +730,12 @@ export class PhysicsEngine {
 
 			// Atmosphere entry scale height limit
 			if (obj.inAtmosphere && obj._nearestAtmBody) {
-				const refParam = DEFAULT_OBJECT_PARAMS[obj._nearestAtmBody.name];
-						const H = refParam.ATM_SCALE_HEIGHT || AERO_DYNAMIC.DEFAULT_SCALE_HEIGHT;
-						const dtAtm = cfg.ETA_ATM * (H / (v + cfg.ATM_VEL_OFFSET));
+				const refParam = obj._nearestAtmBody.param || this.getCelestialParam(obj._nearestAtmBody.name);
+				if (refParam) {
+					const H = refParam.ATM_SCALE_HEIGHT || AERO_DYNAMIC.DEFAULT_SCALE_HEIGHT;
+					const dtAtm = cfg.ETA_ATM * (H / (v + cfg.ATM_VEL_OFFSET));
+					if (dtAtm < minAllowedDt) { minAllowedDt = dtAtm; }
+				}
 			}
 
 			// Rocket powered flight safeguard
@@ -775,6 +796,11 @@ export class SimulationController {
 	handleMessage(e) {
 		const data = e.data;
 		switch (data.cmd) {
+			case 'initDefinitions':
+				if (data.celestialParams) {
+					this.engine.setCelestialParams(data.celestialParams);
+				}
+				break;
 			case 'add':
 				this.engine.addObject(data);
 				break;

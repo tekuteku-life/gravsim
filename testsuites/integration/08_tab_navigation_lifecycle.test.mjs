@@ -36,7 +36,7 @@ import { CalcRocket, CalcCelestialBody, CalcDebris } from '../../scripts/gravsim
 import { Renderer } from '../../scripts/gravsim_renderer.js';
 import { EffectTrail } from '../../scripts/gravsim_effect_trail.js';
 import { ObjectManager } from '../../scripts/gravsim_object_manager.js';
-import { OBJECT_TYPES, OBJECT_STATE, PHYSICS, UI, TELEMETRY, MULTISTAGE_PRESETS, TRAJECTORY_PREDICTION } from '../../scripts/gravsim_const.js';
+import { OBJECT_TYPES, OBJECT_STATE, PHYSICS, UI, TELEMETRY, TRAJECTORY_PREDICTION } from '../../scripts/gravsim_const.js';
 import {
 	setupMockDOM,
 	createMockUniverse,

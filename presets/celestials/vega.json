@@ -1,0 +1,11 @@
+{
+	"id": "vega",
+	"key": "Vega",
+	"name": "Vega",
+	"mass": 4.246728499999999e+27,
+	"color": "#F0F8FF",
+	"radius": 1860000000,
+	"a": 2000,
+	"e": 0.03,
+	"perihelionDeg": 75
+}

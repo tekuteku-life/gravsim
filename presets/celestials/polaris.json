@@ -1,0 +1,11 @@
+{
+	"id": "polaris",
+	"key": "Polaris",
+	"name": "Polaris",
+	"mass": 1.0741140000000002e+28,
+	"color": "#FFFACD",
+	"radius": 32700000000,
+	"a": 2500,
+	"e": 0.1,
+	"perihelionDeg": 160
+}

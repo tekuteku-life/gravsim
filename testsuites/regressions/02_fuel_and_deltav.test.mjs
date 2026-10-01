@@ -9,7 +9,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { CalcRocket } from '../../scripts/gravsim_calc_object.js';
 import { FlightComputer } from '../../scripts/gravsim_flight_computer.js';
-import { PHYSICS, MULTISTAGE_PRESETS, MULTISTAGE_ROCKET, ROCKET_FUELS } from '../../scripts/gravsim_const.js';
+import { PHYSICS, MULTISTAGE_ROCKET, ROCKET_FUELS } from '../../scripts/gravsim_const.js';
+import { presetManager } from '../../scripts/gravsim_preset_manager.js';
 import { UnitConvertUtils } from '../../scripts/gravsim_utils.js';
 import { ControlPanel } from '../../scripts/gravsim_control_panel.js';
 import { RocketLauncher } from '../../scripts/gravsim_rocket_launcher.js';
@@ -277,7 +278,7 @@ describe('Regression 02: Fuel Mass, Fuel Bar, and REM Delta-V Integrity', () => 
 	});
 
 	it('should verify realistic liftoff TWR and burnTime for H3 preset', () => {
-		const h3 = MULTISTAGE_PRESETS.H3;
+		const h3 = presetManager.getLegacyPreset('H3');
 		assert.ok(h3, 'H3 preset must exist');
 
 		const stg1 = h3.stages[0];

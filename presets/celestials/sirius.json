@@ -1,0 +1,11 @@
+{
+	"id": "sirius",
+	"key": "Sirius",
+	"name": "Sirius",
+	"mass": 4.017982e+27,
+	"color": "#CAE1FF",
+	"radius": 1190000000,
+	"a": 1500,
+	"e": 0.05,
+	"perihelionDeg": 200
+}

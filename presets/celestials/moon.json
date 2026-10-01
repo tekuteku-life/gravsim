@@ -1,0 +1,11 @@
+{
+	"id": "moon",
+	"key": "Moon",
+	"name": "Moon",
+	"mass": 73476730900000000000,
+	"color": "#C0C0C0",
+	"radius": 1737400,
+	"a": 0.00257,
+	"e": 0.0549,
+	"perihelionDeg": 0
+}

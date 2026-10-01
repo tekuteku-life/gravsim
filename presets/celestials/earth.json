@@ -1,0 +1,16 @@
+{
+	"id": "earth",
+	"key": "Earth",
+	"name": "Earth",
+	"mass": 5.972e+21,
+	"color": "#1E90FF",
+	"radius": 6378000,
+	"a": 1,
+	"e": 0.0167,
+	"perihelionDeg": 102.95,
+	"atmColor": "rgba(100, 150, 255, 0.5)",
+	"atmLimitAlt": 100000,
+	"atmDensity0": 1.225,
+	"atmScaleHeight": 8500,
+	"rotationPeriod": 86164
+}

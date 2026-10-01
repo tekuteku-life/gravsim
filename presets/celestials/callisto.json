@@ -1,0 +1,11 @@
+{
+	"id": "callisto",
+	"key": "Callisto",
+	"name": "Callisto",
+	"mass": 107590000000000000000,
+	"color": "#808080",
+	"radius": 2410300,
+	"a": 0.01259,
+	"e": 0.0074,
+	"perihelionDeg": 270
+}

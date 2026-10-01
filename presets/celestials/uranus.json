@@ -1,0 +1,16 @@
+{
+	"id": "uranus",
+	"key": "Uranus",
+	"name": "Uranus",
+	"mass": 8.681000000000001e+22,
+	"color": "#AFEEEE",
+	"radius": 25362000,
+	"a": 19.191,
+	"e": 0.0457,
+	"perihelionDeg": 170.96,
+	"atmColor": "rgba(175, 238, 238, 0.4)",
+	"atmLimitAlt": 2000000,
+	"atmDensity0": 0.42,
+	"atmScaleHeight": 27700,
+	"rotationPeriod": 62064
+}

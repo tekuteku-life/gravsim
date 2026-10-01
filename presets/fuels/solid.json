@@ -1,0 +1,25 @@
+{
+	"id": "solid",
+	"name": "Solid",
+	"isp": 280,
+	"density": 1.8,
+	"ofRatio": 0,
+	"plume": {
+		"flickerFreq": 0,
+		"noiseAmp": 0.18,
+		"lenMult": 9.5,
+		"widthMult": 1.6,
+		"curveLenRatio": 0.6,
+		"curveWidthRatio": 0.35,
+		"coreLenRatio": 0.55,
+		"coreWidthRatio": 0.28,
+		"coreFill": "rgba(255, 255, 255, 0.95)",
+		"colors": [
+			[0, "#ffffff"],
+			[0.2, "#fff6bd"],
+			[0.5, "#ffd15c"],
+			[0.8, "#ff8c1a"],
+			[1, "rgba(180, 80, 0, 0)"]
+		]
+	}
+}

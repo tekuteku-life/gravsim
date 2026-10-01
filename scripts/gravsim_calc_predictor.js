@@ -3,7 +3,7 @@
 // Inherits and reuses PhysicsEngine to ensure 100% consistent physics behavior without duplicate code.
 
 import {
-	PHYSICS, DEFAULT_FLIGHT_EVENTS, TRAJECTORY_PREDICTION, DEFAULT_OBJECT_PARAMS
+	PHYSICS, DEFAULT_FLIGHT_EVENTS, TRAJECTORY_PREDICTION
 } from './gravsim_const.js';
 import { PhysicsEngine } from './gravsim_calc.js';
 import { CalcCelestialBody, CalcRocket } from './gravsim_calc_object.js';
@@ -177,6 +177,8 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 			b.massKg !== undefined ? b.massKg : UnitConvertUtils.ton2kg(b.mass || 0)
 		);
 		cb.rotationAngle = b.rotationAngle || 0;
+		cb.param = b.param || null;
+		cb.rotationPeriod = b.rotationPeriod || b.param?.ROTATION_PERIOD || 0;
 		return cb;
 	});
 
@@ -258,8 +260,9 @@ export function runMultiBodySimulation({ hostId, celestialBodies = [], rocketCon
 	const recordedStageMeco = new Set();
 	const recordedStageSep = new Set();
 	const recordedStageSes = new Set();
-	const hostParam = DEFAULT_OBJECT_PARAMS[hostBody.name];
-	const hostOmega = (hostParam && hostParam.ROTATION_PERIOD) ? (2 * Math.PI) / hostParam.ROTATION_PERIOD : 0;
+	const hostParam = hostBody.param || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam(hostBody.name) : null);
+	const hostRotationPeriod = hostParam?.ROTATION_PERIOD || hostBody.rotationPeriod || 0;
+	const hostOmega = hostRotationPeriod ? (2 * Math.PI) / hostRotationPeriod : 0;
 	const hostInitRot = hostBody.rotationAngle || 0;
 	const initDistHostPx = UnitConvertUtils.m2pix(initDistHostM);
 

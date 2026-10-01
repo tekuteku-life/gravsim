@@ -1,10 +1,10 @@
 
 // gravsim_tab_rocket.js
 
-import { PHYSICS, RENDER, OBJECT_TYPES, DEFAULT_OBJECT_PARAMS, ROCKET_FUELS, MULTISTAGE_PRESETS, MULTISTAGE_ROCKET } from './gravsim_const.js';
+import { PHYSICS, OBJECT_TYPES, MULTISTAGE_ROCKET } from './gravsim_const.js';
 import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
-import { presetManager } from './gravsim_preset_manager.js';
+import { presetManager, ROCKET_FUELS } from './gravsim_preset_manager.js';
 
 export class RocketTab {
 	constructor(universe) {
@@ -739,7 +739,7 @@ export class RocketTab {
 	}
 
 	loadPreset(presetKey) {
-		const preset = MULTISTAGE_PRESETS[presetKey];
+		const preset = this.presetManager.getLegacyPreset(presetKey);
 		if (!preset) return;
 		const rl = this.universe.RocketLauncher;
 		rl.currentPresetId = presetKey;
@@ -819,7 +819,7 @@ export class RocketTab {
 	_updateRocketStats() {
 		const rl = this.universe.RocketLauncher;
 		const objName = 'Rocket';
-		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
+		const param = this.presetManager.getObjectParam(objName) || this.presetManager.getObjectParam('Rocket');
 		
 		const stages = rl.stages || [{
 			dryMassT: rl.dryMassT, fuelMassT: rl.fuelMassT, oxidMassT: rl.oxidMassT,

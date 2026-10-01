@@ -1,0 +1,11 @@
+{
+	"id": "rigel",
+	"key": "Rigel",
+	"name": "Rigel",
+	"mass": 4.17711e+28,
+	"color": "#B0C4DE",
+	"radius": 54400000000,
+	"a": 5000,
+	"e": 0.12,
+	"perihelionDeg": 260
+}

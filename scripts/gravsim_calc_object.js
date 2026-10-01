@@ -3,12 +3,12 @@
 
 import {
 	PHYSICS, ROCHE_LIMIT, AERO_DYNAMIC,
-	DEFAULT_OBJECT_PARAMS, TANK_PRESSURE_SIM,
+	TANK_PRESSURE_SIM,
 	OBJECT_TYPES, SIMULATION,
 	MULTISTAGE_ROCKET,
-	TRAJECTORY_PREDICTION,
-	ROCKET_FUELS
+	TRAJECTORY_PREDICTION
 } from './gravsim_const.js';
+import { presetManager, ROCKET_FUELS } from './gravsim_preset_manager.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
 import { MathUtils, UnitConvertUtils, normalizeRocketConfig } from './gravsim_utils.js';
 
@@ -140,7 +140,7 @@ class GravSimCalcObject {
 	}
 
 	_checkAerodynamicDestruction(q) {
-		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
+		const objParam = this.param || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(this.name) : null);
 		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity; // Pa
 		if (q > maxQ) {
 			this.shattered = true;
@@ -293,10 +293,12 @@ export class CalcRocket extends GravSimCalcObject {
 		// Activate initial stage
 		this._activateStage(0);
 
+		this.objParam = thrustData?.objParam || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(name) : null);
+
 		this.flightComputer = new FlightComputer({
 			maxGLimit: this.maxGLimit,
-			maxQAxialLimit: DEFAULT_OBJECT_PARAMS[name]?.MAX_Q_AXIAL || Infinity,
-			maxQLateralLimit: DEFAULT_OBJECT_PARAMS[name]?.MAX_Q_LATERAL || Infinity,
+			maxQAxialLimit: this.objParam?.MAX_Q_AXIAL || Infinity,
+			maxQLateralLimit: this.objParam?.MAX_Q_LATERAL || Infinity,
 			thrustAngle: this.thrustAngle,
 			flightProfile: this.flightProfile,
 			hostAngleRad: this.hostAngleRad,
@@ -669,7 +671,7 @@ export class CalcRocket extends GravSimCalcObject {
 		let area = 0; // m^2
 		let cd = AERO_DYNAMIC.ROCKET_DEFAULT_CD;
 
-		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
+		const objParam = this.objParam || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(this.name) : null);
 		if (objParam && objParam.DRAG_COEF) {
 			cd = objParam.DRAG_COEF;
 		}
@@ -704,7 +706,7 @@ export class CalcRocket extends GravSimCalcObject {
 	}
 
 	_checkAerodynamicDestruction(q) {
-		const objParam = DEFAULT_OBJECT_PARAMS[this.name];
+		const objParam = this.objParam || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(this.name) : null);
 		const maxQAxial = objParam?.MAX_Q_AXIAL || Infinity; // Pa
 		const maxQLateral = objParam?.MAX_Q_LATERAL || Infinity; // Pa
 

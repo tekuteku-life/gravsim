@@ -1,0 +1,15 @@
+{
+	"id": "titan",
+	"key": "Titan",
+	"name": "Titan",
+	"mass": 134520000000000000000,
+	"color": "#DAA520",
+	"radius": 2574700,
+	"a": 0.00817,
+	"e": 0.0288,
+	"perihelionDeg": 0,
+	"atmColor": "rgba(218, 165, 32, 0.5)",
+	"atmLimitAlt": 600000,
+	"atmDensity0": 5.3,
+	"atmScaleHeight": 21000
+}

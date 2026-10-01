@@ -1,7 +1,7 @@
 
 // gravsim_pad_effect.js
 
-import { PAD_EFFECT, DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
+import { PAD_EFFECT } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 
 class UmbilicalCable {
@@ -360,7 +360,7 @@ export class PadEffectRenderer {
 			}
 		} else if (host && rocket && !rocket.isHoldDown) {
 			// Update pad position by rotation even after liftoff
-			const hostParam = DEFAULT_OBJECT_PARAMS[host.name];
+			const hostParam = host.param || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam(host.name) : null);
 			if (hostParam && hostParam.ROTATION_PERIOD) {
 				const omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
 				const angleDelta = omega * dt;

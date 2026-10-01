@@ -1,0 +1,11 @@
+{
+	"id": "eris",
+	"key": "Eris",
+	"name": "Eris",
+	"mass": 16600000000000000000,
+	"color": "#F5F5DC",
+	"radius": 1163000,
+	"a": 67.864,
+	"e": 0.4407,
+	"perihelionDeg": 151.43
+}

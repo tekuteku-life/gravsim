@@ -1,0 +1,26 @@
+{
+	"id": "liquid",
+	"name": "Liquid",
+	"isp": 320,
+	"density": 1.0,
+	"ofRatio": 2.5,
+	"plume": {
+		"flickerFreq": 35,
+		"noiseAmp": 0.12,
+		"lenMult": 8.0,
+		"widthMult": 1.8,
+		"curveLenRatio": 0.35,
+		"curveWidthRatio": 0.75,
+		"coreLenRatio": 0.4,
+		"coreWidthRatio": 0.28,
+		"coreFillStart": "#ffffff",
+		"coreFillEnd": "rgba(255, 230, 150, 0)",
+		"colors": [
+			[0, "#ffffff"],
+			[0.15, "#ffea77"],
+			[0.45, "#ff6600"],
+			[0.85, "rgba(200, 30, 0, 0.4)"],
+			[1, "rgba(100, 10, 0, 0)"]
+		]
+	}
+}

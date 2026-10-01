@@ -1,0 +1,11 @@
+{
+	"id": "mercury",
+	"key": "Mercury",
+	"name": "Mercury",
+	"mass": 330110000000000000000,
+	"color": "#B8860B",
+	"radius": 2439700,
+	"a": 0.387,
+	"e": 0.2056,
+	"perihelionDeg": 77.46
+}

@@ -17,7 +17,8 @@ import { TrailLineRenderer, EffectRenderer } from '../../scripts/gravsim_trail_r
 import { Trajectory } from '../../scripts/gravsim_trajectory.js';
 import { EffectTrail } from '../../scripts/gravsim_effect_trail.js';
 import { EventBus } from '../../scripts/gravsim_event_bus.js';
-import { ROCKET_LAUNCHER_CONFIG, TRAIL_MODE, RENDER, OBJECT_STATE, ROCKET_VISUAL, PAD_EFFECT } from '../../scripts/gravsim_const.js';
+import { TRAIL_MODE, OBJECT_STATE, PAD_EFFECT } from '../../scripts/gravsim_const.js';
+import { ROCKET_VISUAL } from '../../scripts/gravsim_preset_manager.js';
 import { RocketLauncher } from '../../scripts/gravsim_rocket_launcher.js';
 import { UnitConvertUtils } from '../../scripts/gravsim_utils.js';
 

@@ -1,0 +1,11 @@
+{
+	"id": "sun",
+	"key": "Sun",
+	"name": "Sun",
+	"mass": 1.9891e+27,
+	"color": "#FF4500",
+	"radius": 696340000,
+	"a": 1000,
+	"e": 0.05,
+	"perihelionDeg": 0
+}

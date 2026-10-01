@@ -9,14 +9,15 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
 import { CalcCelestialBody } from '../../scripts/gravsim_calc_object.js';
-import { PHYSICS, DEFAULT_OBJECT_PARAMS } from '../../scripts/gravsim_const.js';
+import { PHYSICS } from '../../scripts/gravsim_const.js';
+import { presetManager } from '../../scripts/gravsim_preset_manager.js';
 import { UnitConvertUtils } from '../../scripts/gravsim_utils.js';
 import { logDebug, assertClose } from '../test_helpers.mjs';
 
 describe('Regression 03: Solar System Gravity & Orbital Stability', () => {
 	it('should verify correct mass unit scaling (ton <-> kg) between threads', () => {
-		// Sun mass in tons (as stored in DEFAULT_OBJECT_PARAMS)
-		const sunParam = DEFAULT_OBJECT_PARAMS.Sun;
+		// Sun mass in tons (as stored in celestial presets)
+		const sunParam = presetManager.getObjectParam('Sun');
 		const sunMassTon = sunParam.MASS; // 1.9891e27 t
 
 		// Main thread converts to kg when transmitting to PhysicsEngine worker

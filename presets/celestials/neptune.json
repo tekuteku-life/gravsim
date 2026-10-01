@@ -1,0 +1,16 @@
+{
+	"id": "neptune",
+	"key": "Neptune",
+	"name": "Neptune",
+	"mass": 1.0241300000000002e+23,
+	"color": "#4169E1",
+	"radius": 24622000,
+	"a": 30.07,
+	"e": 0.0113,
+	"perihelionDeg": 44.97,
+	"atmColor": "rgba(65, 105, 225, 0.4)",
+	"atmLimitAlt": 2000000,
+	"atmDensity0": 0.45,
+	"atmScaleHeight": 19700,
+	"rotationPeriod": 57996
+}

@@ -2,15 +2,14 @@
 // gravsim_rocket_launcher.js
 
 import {
-	PHYSICS, RENDER, DEFAULT_OBJECT_PARAMS,
-	ROCKET_FUELS, LAUNCH_SEQUENCES, EVENT_PRIORITY,
-	TRAJECTORY_PREDICTION, OBJECT_TYPES, OBJECT_STATE,
-	MULTISTAGE_PRESETS, ROCKET_VISUAL
+	PHYSICS, RENDER,
+	LAUNCH_SEQUENCES, EVENT_PRIORITY,
+	TRAJECTORY_PREDICTION, OBJECT_TYPES
 } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 import { TrajectoryPredictor } from './gravsim_trajectory_predictor.js';
-import { presetManager } from './gravsim_preset_manager.js';
+import { presetManager, ROCKET_VISUAL, ROCKET_FUELS } from './gravsim_preset_manager.js';
 
 /*******************************************************************
  * RocketLauncher Class
@@ -140,8 +139,20 @@ export class RocketLauncher {
 		}, EVENT_PRIORITY.DRAW_WORLD_FX);
 	}
 
+	_getObjectParam(name) {
+		return (typeof this.universe?.getObjectParams === 'function' ? this.universe.getObjectParams(name) : null)
+			|| (this.presetManager ? this.presetManager.getObjectParam(name) : null)
+			|| (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(name) : null);
+	}
+
+	_getLegacyPreset(key) {
+		return (typeof this.universe?.getLegacyPreset === 'function' ? this.universe.getLegacyPreset(key) : null)
+			|| (this.presetManager ? this.presetManager.getLegacyPreset(key) : null)
+			|| (typeof presetManager !== 'undefined' ? presetManager.getLegacyPreset(key) : null);
+	}
+
 	loadPreset(presetKey) {
-		const preset = MULTISTAGE_PRESETS[presetKey] || (typeof presetManager !== 'undefined' ? presetManager.getLegacyPreset(presetKey) : null);
+		const preset = this._getLegacyPreset(presetKey);
 		if (!preset) return;
 		this.currentPresetId = String(presetKey).toUpperCase();
 		this.currentVehicleId = String(presetKey).toLowerCase();
@@ -214,14 +225,14 @@ export class RocketLauncher {
 	}
 
 	getBaseRadiusM() {
-		const preset = MULTISTAGE_PRESETS[this.currentPresetId];
+		const preset = this._getLegacyPreset(this.currentPresetId);
 		if (preset?.lengthM) {
 			return preset.lengthM;
 		}
 		if (this.stages && this.stages[0]?.rocketLengthM) {
 			return this.stages[0].rocketLengthM;
 		}
-		const param = DEFAULT_OBJECT_PARAMS['Rocket'];
+		const param = this._getObjectParam('Rocket');
 		return param?.RADIUS || 63;
 	}
 
@@ -230,7 +241,7 @@ export class RocketLauncher {
 	}
 
 	getBottomOffsetM() {
-		const preset = MULTISTAGE_PRESETS[this.currentPresetId];
+		const preset = this._getLegacyPreset(this.currentPresetId);
 		const totalStg = preset?.stages?.length || this.stages?.length || 2;
 		const offsets = ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET;
 		let mult = offsets.TWO_STAGE;
@@ -251,7 +262,7 @@ export class RocketLauncher {
 		let deltaVM = 0;
 
 		const massName = 'Rocket';
-		const param = DEFAULT_OBJECT_PARAMS[massName] || DEFAULT_OBJECT_PARAMS['Rocket'];
+		const param = this._getObjectParam(massName) || this._getObjectParam('Rocket');
 		const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
 		const ve = fuel.isp * PHYSICS.G0; // Exhaust velocity
 		const m0 = UnitConvertUtils.ton2kg(this.dryMassT + this.fuelMassT + this.oxidMassT); // Initial mass in kg
@@ -290,7 +301,7 @@ export class RocketLauncher {
 				baseVy = host.vy;
 
 				// Add host's rotation speed to rocket initial speed (tangential velocity in px/s)
-				const hostParam = DEFAULT_OBJECT_PARAMS[host.name];
+				const hostParam = host.param || this._getObjectParam(host.name);
 				if (hostParam && hostParam.ROTATION_PERIOD) {
 					const omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
 					baseVx += -omega * dyPx;
@@ -318,8 +329,8 @@ export class RocketLauncher {
 		const relY = (t.y - centerObject.y) * zoomScale;
 		
 		const objName = 'Rocket';
-		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Rocket'];
-		const rocketRadiusM = param.RADIUS || 1;
+		const param = this._getObjectParam(objName) || this._getObjectParam('Rocket');
+		const rocketRadiusM = param?.RADIUS || 1;
 		const screenRadiusPx = UnitConvertUtils.m2pix(rocketRadiusM) * zoomScale;
 		const conf = RENDER.MARKER;
 		const mSize = Math.max(conf.HOST_MIN_SIZE, screenRadiusPx);

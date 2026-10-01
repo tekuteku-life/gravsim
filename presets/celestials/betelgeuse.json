@@ -1,0 +1,11 @@
+{
+	"id": "betelgeuse",
+	"key": "Betelgeuse",
+	"name": "Betelgeuse",
+	"mass": 3.2820149999999997e+28,
+	"color": "#FF4500",
+	"radius": 887000000000,
+	"a": 3500,
+	"e": 0.15,
+	"perihelionDeg": 30
+}

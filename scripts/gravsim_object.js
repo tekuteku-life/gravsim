@@ -2,9 +2,10 @@
 // gravsim_object.js
 
 import {
-	PHYSICS, RENDER, OBJECT_STATE, ROCKET_VISUAL,
-	DEFAULT_OBJECT_PARAMS, OBJECT_TYPES, TRAIL_MODE, MULTISTAGE_ROCKET,
+	PHYSICS, RENDER, OBJECT_STATE,
+	OBJECT_TYPES, TRAIL_MODE, MULTISTAGE_ROCKET,
 } from './gravsim_const.js';
+import { ROCKET_VISUAL } from './gravsim_preset_manager.js';
 import { Trajectory } from './gravsim_trajectory.js';
 import { EffectTrail } from './gravsim_effect_trail.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
@@ -205,7 +206,7 @@ export class CelestialBody extends GravSimObject {
 	set mass(val) { this._mass = val; }
 
 	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
-		const param = DEFAULT_OBJECT_PARAMS[this.name];
+		const param = this.param || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam(this.name) : null);
 		
 		if (param && param.ATM_COLOR && param.ATM_LIMIT_ALT) {
 			const atmThicknessPx = (param.ATM_LIMIT_ALT / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
@@ -315,7 +316,8 @@ export class Rocket extends GravSimObject {
 	 * and maintain balanced visual scale across all zoom levels.
 	 */
 	_getDrawRadius(zoomScale) {
-		const baseRadiusM = this.baseRadiusM || DEFAULT_OBJECT_PARAMS['Rocket']?.RADIUS || 63;
+		const defaultRocketRadius = this.param?.RADIUS || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam('Rocket')?.RADIUS : 63) || 63;
+		const baseRadiusM = this.baseRadiusM || defaultRocketRadius;
 		const realRadiusPx = (baseRadiusM / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 		const physicalScreenRadius = realRadiusPx * zoomScale;
 		const minSize = ROCKET_VISUAL.MIN_SCREEN_RADIUS || 5.5;
@@ -388,7 +390,8 @@ export class Rocket extends GravSimObject {
 				mult = offsets.THREE_STAGE;
 			}
 
-			const baseRadiusM = this.baseRadiusM || (this.bottomOffsetM ? this.bottomOffsetM / mult : (DEFAULT_OBJECT_PARAMS['Rocket']?.RADIUS || 63));
+			const defaultRocketRadius = this.param?.RADIUS || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam('Rocket')?.RADIUS : 63) || 63;
+			const baseRadiusM = this.baseRadiusM || (this.bottomOffsetM ? this.bottomOffsetM / mult : defaultRocketRadius);
 
 			// Determine nozzle offset ratio and plume scale for current active stage
 			let stageNozzleRatio = mult;

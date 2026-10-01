@@ -290,7 +290,7 @@ describe('Unit 01: Core Physics, QuadTree, Buffer Interop & Utilities', () => {
 		assert.equal(parsedR2.isCollided, true);
 		assert.equal(parsedR2.isShattered, true);
 		assert.equal(parsedR2.isImpact, true);
-		assert.equal(parsedR2.tmStgSepActive, true);
+		assert.equal(parsedR2.isStage2Separated, true);
 		assert.equal(parsedR2.tmFairingSeparated, true);
 
 		// Verify debris

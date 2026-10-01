@@ -1,0 +1,27 @@
+{
+	"id": "hydro",
+	"name": "Cryogenic",
+	"isp": 450,
+	"density": 0.3,
+	"ofRatio": 6.0,
+	"plume": {
+		"flickerFreq": 45,
+		"noiseAmp": 0.08,
+		"lenMult": 9.0,
+		"widthMult": 2.0,
+		"curveLenRatio": 0.3,
+		"curveWidthRatio": 0.9,
+		"diamonds": 3,
+		"diamondInterval": 0.16,
+		"diamondWidthRatio": 0.32,
+		"diamondLength": 3,
+		"diamondStrokeColor": "rgba(200, 240, 255, 0.65)",
+		"colors": [
+			[0, "rgba(255, 255, 255, 0.9)"],
+			[0.15, "rgba(120, 200, 255, 0.7)"],
+			[0.5, "rgba(150, 120, 255, 0.35)"],
+			[0.85, "rgba(200, 100, 255, 0.1)"],
+			[1, "rgba(150, 50, 255, 0)"]
+		]
+	}
+}

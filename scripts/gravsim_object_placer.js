@@ -2,9 +2,10 @@
 // gravsim_object_placer.js
 
 import {
-	PHYSICS, SIMULATION, DEFAULT_OBJECT_PARAMS,
+	PHYSICS, SIMULATION,
 	DEPLOY_PROFILES, RENDER, EVENT_PRIORITY, MULTISTAGE_ROCKET
 } from './gravsim_const.js';
+import { presetManager } from './gravsim_preset_manager.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
 import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
@@ -68,8 +69,13 @@ export class ObjectPlacer {
 		EventBus.off('input:drag-cancel', this._onDragCancel);
 	}
 
+	_getObjectParam(name) {
+		return (typeof this.universe?.getObjectParams === 'function' ? this.universe.getObjectParams(name) : null)
+			|| presetManager.getObjectParam(name);
+	}
+
 	placeObject(objName, x, y, vx = 0, vy = 0, options = {}) {
-		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
+		const param = this._getObjectParam(objName) || this._getObjectParam('Earth');
 
 		const minDrawSize = param.MIN_DRAW_SIZE !== undefined
 			? param.MIN_DRAW_SIZE
@@ -96,7 +102,7 @@ export class ObjectPlacer {
 				options.colorTheme || 'orange'
 			);
 			obj.bottomOffsetM = rocketRadius;
-			obj.baseRadiusM = options.baseRadiusM || DEFAULT_OBJECT_PARAMS['Rocket']?.RADIUS || 63;
+			obj.baseRadiusM = options.baseRadiusM || this._getObjectParam('Rocket')?.RADIUS || 63;
 
 			if (options.ofRatio !== undefined) {
 				obj.ofRatio = options.ofRatio;
@@ -182,12 +188,13 @@ export class ObjectPlacer {
 			);
 		}
 
+		obj.param = param;
 		this.universe.addObject(obj);
 		return obj;
 	}
 
 	placeAtOrbit(objName, hostObj) {
-		const param = DEFAULT_OBJECT_PARAMS[objName] || DEFAULT_OBJECT_PARAMS['Earth'];
+		const param = this._getObjectParam(objName) || this._getObjectParam('Earth');
 
 		// Get A/E (circular orbit by default)
 		const a_au = param.A || 1;
@@ -292,7 +299,7 @@ export class ObjectPlacer {
 	}
 
 	_deployEllipticalSwarm(hostObj, genConfig) {
-		const templateMass = DEFAULT_OBJECT_PARAMS[genConfig.template].MASS;
+		const templateMass = (this._getObjectParam(genConfig.template)?.MASS || 1);
 		const totalMassKg = UnitConvertUtils.ton2kg(hostObj.mass + templateMass);
 
 		for (let i = 0; i < genConfig.count; i++) {
@@ -325,7 +332,7 @@ export class ObjectPlacer {
 	_deployCircularSwarm(hostObj, genConfig) {
 		for (let i = 0; i < genConfig.count; i++) {
 			const template = genConfig.templates[Math.floor(Math.random() * genConfig.templates.length)];
-			const templateMass = DEFAULT_OBJECT_PARAMS[template].MASS;
+			const templateMass = (this._getObjectParam(template)?.MASS || 1);
 			
 			const r_au = genConfig.radiusAuMin + Math.random() * (genConfig.radiusAuMax - genConfig.radiusAuMin);
 			const r_m = UnitConvertUtils.au2m(r_au);
@@ -363,8 +370,8 @@ export class ObjectPlacer {
 		const pConf = genConfig.primary || { template: 'Sun', name: 'Sun A' };
 		const sConf = genConfig.secondary || { template: 'Sun', name: 'Sun B' };
 
-		const pParam = DEFAULT_OBJECT_PARAMS[pConf.template] || DEFAULT_OBJECT_PARAMS['Sun'];
-		const sParam = DEFAULT_OBJECT_PARAMS[sConf.template] || DEFAULT_OBJECT_PARAMS['Sun'];
+		const pParam = this._getObjectParam(pConf.template) || this._getObjectParam('Sun');
+		const sParam = this._getObjectParam(sConf.template) || this._getObjectParam('Sun');
 
 		const m1 = pConf.mass !== undefined ? pConf.mass : pParam.MASS;
 		const m2 = sConf.mass !== undefined ? sConf.mass : sParam.MASS;
@@ -476,8 +483,8 @@ export class ObjectPlacer {
 			{ template: "Sun", name: "Sun C (Trisolaris 3)", color: "#FFD700" }
 		];
 
-		const sunParam = DEFAULT_OBJECT_PARAMS['Sun'];
-		const massTon = sunParam.MASS;
+		const sunParam = this._getObjectParam('Sun');
+		const massTon = sunParam?.MASS || 1.9891e27;
 		const massKg = UnitConvertUtils.ton2kg(massTon);
 
 		const radiusAu = genConfig.radiusAu || 3.0;
@@ -591,7 +598,7 @@ export class ObjectPlacer {
 
 	getLaunchObjectName() {
 		const massSelect = document.getElementById('mass-select');
-		if (massSelect && DEFAULT_OBJECT_PARAMS[massSelect.value]) {
+		if (massSelect && this._getObjectParam(massSelect.value)) {
 			return massSelect.value;
 		}
 		return 'Rocket'; // Default rocket object name
@@ -773,8 +780,8 @@ export class ObjectPlacer {
 
 		// Floating HUD
 		const objName = this.getLaunchObjectName();
-		const param = DEFAULT_OBJECT_PARAMS[objName];
-		const massText = param.MASS.toExponential(2) + " t";
+		const param = this._getObjectParam(objName) || this._getObjectParam('Rocket');
+		const massText = (param?.MASS ? param.MASS.toExponential(2) : '1.00e+00') + " t";
 
 		// Adjust center offset natively based on screen cursor
 		// Note: The UI is rendered in the rotated and translated context here,

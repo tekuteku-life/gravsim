@@ -1,9 +1,9 @@
 
 // gravsim_tab_deploy.js
 
-import { DEFAULT_OBJECT_PARAMS } from './gravsim_const.js';
 import { DOMUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
+import { presetManager } from './gravsim_preset_manager.js';
 
 export class DeployTab {
 	constructor(universe) {
@@ -138,14 +138,17 @@ export class DeployTab {
 
 	generateMassSelect() {
 		this.ui.massSelect.innerHTML = '';
-		for (const key in DEFAULT_OBJECT_PARAMS) {
-			const param = DEFAULT_OBJECT_PARAMS[key];
+		const params = (typeof this.universe?.getObjectParamsMap === 'function' ? this.universe.getObjectParamsMap() : null) || presetManager.getObjectParamsMap();
+		for (const key in params) {
+			const param = params[key];
 			const option = document.createElement('option');
 			option.value = key;
-			option.textContent = `${param.NAME} (mass: ${param.MASS.toExponential(2)} t)`;
+			const massVal = param.MASS ?? param.mass ?? 1;
+			const nameVal = param.NAME ?? param.name ?? key;
+			option.textContent = `${nameVal} (mass: ${massVal.toExponential(2)} t)`;
 			this.ui.massSelect.appendChild(option);
 
-			if (param.NAME === "Rocket") {
+			if (nameVal === "Rocket" || key === "Rocket") {
 				option.selected = true;
 			}
 		}

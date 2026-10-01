@@ -1,0 +1,16 @@
+{
+	"id": "saturn",
+	"key": "Saturn",
+	"name": "Saturn",
+	"mass": 5.6834e+23,
+	"color": "#FFD700",
+	"radius": 58232000,
+	"a": 9.582,
+	"e": 0.0565,
+	"perihelionDeg": 92.43,
+	"atmColor": "rgba(240, 220, 130, 0.4)",
+	"atmLimitAlt": 4000000,
+	"atmDensity0": 0.19,
+	"atmScaleHeight": 59500,
+	"rotationPeriod": 38360
+}

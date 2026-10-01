@@ -17,7 +17,8 @@ import { Rocket, Debris } from '../../scripts/gravsim_object.js';
 import { CalcRocket } from '../../scripts/gravsim_calc_object.js';
 import { PropulsionCard } from '../../scripts/gravsim_telemetry_card.js';
 import { UnitConvertUtils, normalizeRocketConfig } from '../../scripts/gravsim_utils.js';
-import { PHYSICS, TELEMETRY, MULTISTAGE_PRESETS, OBJECT_TYPES, OBJECT_STATE, ROCKET_VISUAL, RENDER, DEFAULT_OBJECT_PARAMS, PAD_EFFECT } from '../../scripts/gravsim_const.js';
+import { PHYSICS, TELEMETRY, OBJECT_TYPES, OBJECT_STATE, ROCKET_VISUAL, RENDER, PAD_EFFECT } from '../../scripts/gravsim_const.js';
+import { presetManager } from '../../scripts/gravsim_preset_manager.js';
 
 test('FlightComputer - Initialization and default telemetry cache', () => {
 	const fc = new FlightComputer({
@@ -1476,7 +1477,7 @@ test('PhysicsEngine - Rocket launch collision safeguard and impact detection', (
 	engine.addObject(earth);
 
 	// Falcon 9 style rocket on pad with altitude = 0
-	const rocketLength = MULTISTAGE_PRESETS.FALCON9?.lengthM || 70.0;
+	const rocketLength = presetManager.getLegacyPreset('FALCON9')?.lengthM || 70.0;
 	const offsets = ROCKET_VISUAL.ALIGNMENT.NOZZLE_BOTTOM_OFFSET;
 	const bottomOffset = rocketLength * offsets.TWO_STAGE; // 217.0 m
 	const initialR = earth.radius + bottomOffset; // rocket nozzle sits exactly at pad level
@@ -1693,7 +1694,7 @@ test('RocketLauncher - Initial velocity includes planetary surface rotation spee
 	assert.ok(t, 'Transform should be computed');
 
 	// Earth rotation period is 86164s. At radius ~6371200m, tangential velocity = omega * r approx 464.6 m/s
-	const hostParam = DEFAULT_OBJECT_PARAMS['Earth'];
+	const hostParam = presetManager.getObjectParam('Earth');
 	const omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
 	const expectedSpeedMps = omega * (earth.radius + launcher.getBottomOffsetM() + launcher.hostAltitudeM);
 
@@ -1918,7 +1919,7 @@ test('Telemetry & Predictor - Stage 2 burn telemetry remaining fuel reaches 0% a
 	launcher.mode = 'host';
 	launcher.currentPresetId = 'FALCON9';
 
-	const preset = MULTISTAGE_PRESETS.FALCON9;
+	const preset = presetManager.getLegacyPreset('FALCON9');
 	const mockRocket = new Rocket(100, 'Falcon 9', 0, 0, 0, 0, 25, 140, 280, '#fff', 5, 2.5);
 	mockRocket.stages = JSON.parse(JSON.stringify(preset.stages));
 	mockRocket.totalStages = preset.stages.length;

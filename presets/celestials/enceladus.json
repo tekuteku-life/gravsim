@@ -1,0 +1,11 @@
+{
+	"id": "enceladus",
+	"key": "Enceladus",
+	"name": "Enceladus",
+	"mass": 108020000000000000,
+	"color": "#F0FFFF",
+	"radius": 252100,
+	"a": 0.00159,
+	"e": 0.0047,
+	"perihelionDeg": 120
+}

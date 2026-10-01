@@ -3,7 +3,7 @@
 
 import {
 	EVENT_PRIORITY, PHYSICS, SIMULATION, OBJECT_STATE,
-	OBJECT_TYPES, DEFAULT_OBJECT_PARAMS
+	OBJECT_TYPES
 } from './gravsim_const.js';
 import { Camera } from './gravsim_camera.js';
 import { Renderer } from './gravsim_renderer.js';
@@ -22,7 +22,7 @@ import { SoundSequencer } from './gravsim_sound_sequencer.js';
 import { SoundEffects } from './gravsim_sound_effects.js';
 import { DestructionManager } from './gravsim_destruction_manager.js';
 import { VisualEffectManager } from './gravsim_visual_effect_manager.js';
-import { PresetManager } from './gravsim_preset_manager.js';
+import { presetManager } from './gravsim_preset_manager.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 const GRAVSIM_CALC_JS_FILE = `./scripts/gravsim_calc.js?v=${Date.now()}`;
@@ -75,12 +75,16 @@ export class Universe {
 		this.canvas = _canvas;
 		this.isPaused = false;
 		this.trailLengthAU = 3.0; // AU
-		this.presetManager = options.presetManager || (typeof window !== 'undefined' && window.presetManager) || new PresetManager();
+		this.presetManager = options.presetManager || (typeof window !== 'undefined' && window.presetManager) || presetManager;
 
 		// Initialize Modules
 		this.camera = new Camera();
 		this.Renderer = new Renderer(_canvas, 'main');
 		this.CalcWorkerManager = new CalcWorkerManager((data) => this.updateObjectParams(data));
+		this.CalcWorkerManager.postMessage({
+			cmd: 'initDefinitions',
+			celestialParams: this.getObjectParamsMap()
+		});
 		this.InputManager = new InputManager(this.canvas);
 		this.ObjectManager = new ObjectManager(this.Renderer, this.CalcWorkerManager);
 		this.ObjectManager.universe = this;
@@ -178,7 +182,7 @@ export class Universe {
 		EventBus.onUpdate((dt, scaledDt) => {
 			this.objects.forEach(obj => {
 				if (obj.type === OBJECT_TYPES.CELESTIAL && obj.state === OBJECT_STATE.ACTIVE) {
-					const param = DEFAULT_OBJECT_PARAMS[obj.name];
+					const param = obj.param || this.getObjectParams(obj.name);
 					if (param && param.ROTATION_PERIOD) {
 						const omega = (2 * Math.PI) / param.ROTATION_PERIOD; // rad/s
 						obj.rotationAngle = (obj.rotationAngle || 0) + omega * scaledDt; // rad
@@ -198,6 +202,21 @@ export class Universe {
 		EventBus.on('app:draw', () => this.draw());
 
 		this.reset();
+	}
+
+	// ------------------------------------------
+	// Definition and Preset Distribution
+	// ------------------------------------------
+	getObjectParams(name) {
+		return this.presetManager.getObjectParam(name);
+	}
+
+	getObjectParamsMap() {
+		return this.presetManager.getObjectParamsMap();
+	}
+
+	getLegacyPreset(presetKey) {
+		return this.presetManager.getLegacyPreset(presetKey);
 	}
 
 	// ------------------------------------------

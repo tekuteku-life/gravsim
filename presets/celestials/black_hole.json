@@ -1,0 +1,10 @@
+{
+	"id": "black_hole",
+	"key": "BlackHole",
+	"name": "BlackHole",
+	"mass": 3.9782e+28,
+	"color": "#333333",
+	"radius": 30000,
+	"borderColor": "#FF8C00",
+	"borderWidth": 0.3
+}

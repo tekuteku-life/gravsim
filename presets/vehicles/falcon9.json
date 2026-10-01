@@ -43,6 +43,16 @@
 	},
 	"rendering": {
 		"colorTheme": "classic",
+		"theme": {
+			"stg1Grad": ["#ffffff", "#e2e6ea", "#7d8792"],
+			"stg2Grad": ["#ffffff", "#e2e6ea", "#7d8792"],
+			"interstage": "#181b1f",
+			"fairingGrad": ["#ffffff", "#e2e6ea", "#8a94a0"],
+			"fairingLine": "rgba(0, 0, 0, 0.45)",
+			"fins": "#444b54",
+			"nozzle": "#14171a",
+			"accentBand": "#2b313a"
+		},
 		"lengthM": 70.0,
 		"boosters": {
 			"count": 0

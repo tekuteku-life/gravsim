@@ -1,0 +1,11 @@
+{
+	"id": "alpha_centauri_a",
+	"key": "AlphaCentauriA",
+	"name": "Alpha Centauri A",
+	"mass": 2.18801e+27,
+	"color": "#FFF8DC",
+	"radius": 851000000,
+	"a": 800,
+	"e": 0.08,
+	"perihelionDeg": 320
+}
