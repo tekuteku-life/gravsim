@@ -9,6 +9,7 @@ export class DeployTab {
 	constructor(universe) {
 		this.universe = universe;
 		this.deployButtons = {
+			'put-sun-btn': 'Sun',
 			'put-neptune-btn': 'Neptune',
 			'put-uranus-btn': 'Uranus',
 			'put-saturn-btn': 'Saturn',

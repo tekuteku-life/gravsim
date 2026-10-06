@@ -132,29 +132,40 @@ export class GravSimObject {
 	getRelativeX(basis) { return basis ? this.x - basis.x : this.x; }
 	getRelativeY(basis) { return basis ? this.y - basis.y : this.y; }
 
-	draw(renderContext) {
+	draw(renderContext, maybeRenderContext) {
 		if (!renderContext) { return; }
-		if (!renderContext.basis) { return; }
+		let rc = renderContext;
+		let ctx = renderContext.ctx;
+		if (maybeRenderContext) {
+			ctx = renderContext;
+			rc = maybeRenderContext;
+			if (!rc.ctx) rc.ctx = ctx;
+		}
 
 		// Draw main body and effects (Screen-space calculation)
 		if (this.state === OBJECT_STATE.ACTIVE) {
-			const basis = renderContext.basis;
-			const ctx = renderContext.ctx;
-			const zoomScale = renderContext.zoomScale;
+			const basis = rc.basis;
+			const zoomScale = rc.zoomScale !== undefined ? rc.zoomScale : 1.0;
 
 			const relX = this.getRelativeX(basis) * zoomScale;
 			const relY = this.getRelativeY(basis) * zoomScale;
 
 			const screenRadius = this._getDrawRadius(zoomScale);
-			renderContext.bodyScreenRadius = screenRadius
+			rc.bodyScreenRadius = screenRadius;
 
-			this._drawBody(ctx, relX, relY, screenRadius);
-			this._drawEffects(ctx, relX, relY, screenRadius, zoomScale);
+			if (ctx) {
+				this._drawBody(ctx, relX, relY, screenRadius);
+				this._drawEffects(ctx, relX, relY, screenRadius, zoomScale);
+			}
 		}
 
 		// Draw trajectory even if state == dead
-		this.trajectory.draw(renderContext);
-		this.effectTrail.draw(renderContext);
+		if (this.trajectory) {
+			this.trajectory.draw(rc);
+		}
+		if (this.effectTrail) {
+			this.effectTrail.draw(rc);
+		}
 	}
 
 	// Calculate switching between fixed size and real physical size

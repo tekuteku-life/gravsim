@@ -325,8 +325,10 @@ export class RocketLauncher {
 		const t = this._calculateTransform();
 		if (!t) { return; }
 
-		const relX = (t.x - centerObject.x) * zoomScale;
-		const relY = (t.y - centerObject.y) * zoomScale;
+		const cX = centerObject ? centerObject.x : 0;
+		const cY = centerObject ? centerObject.y : 0;
+		const relX = (t.x - cX) * zoomScale;
+		const relY = (t.y - cY) * zoomScale;
 		
 		const objName = 'Rocket';
 		const param = this._getObjectParam(objName) || this._getObjectParam('Rocket');
@@ -551,8 +553,10 @@ export class RocketLauncher {
 			const transform = this._calculateTransform();
 			if (!transform) { return; }
 
-			const relX = (transform.x - centerObject.x) * zoomScale;
-			const relY = (transform.y - centerObject.y) * zoomScale;
+			const cX = centerObject ? centerObject.x : 0;
+			const cY = centerObject ? centerObject.y : 0;
+			const relX = (transform.x - cX) * zoomScale;
+			const relY = (transform.y - cY) * zoomScale;
 			const conf = RENDER.MARKER;
 
 			ctx.save();
@@ -654,7 +658,7 @@ export class RocketLauncher {
 			this.universe.LaunchSequencer.abort();
 
 			const host = this.universe.objects.find(o => o.id === this.hostId)
-				|| this.universe.objects.find(o => o.name === 'Earth' || (o.type === OBJECT_TYPES.CELESTIAL && o.id !== 0));
+				|| this.universe.objects.find(o => o.name === 'Earth' || o.type === OBJECT_TYPES.CELESTIAL);
 
 			if (host) {
 				EventBus.emit('camera:stop-auto-tracking', host);

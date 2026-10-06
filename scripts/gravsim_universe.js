@@ -150,11 +150,12 @@ export class Universe {
 				// If dying object was a rocket with a host, track the host celestial body rather than Sun
 				if (!nextCenter && oldCenter.type === OBJECT_TYPES.ROCKET) {
 					const hostId = oldCenter.hostId ?? this.RocketLauncher?.hostId;
-					if (hostId !== null && hostId !== undefined && hostId !== 0) {
+					if (hostId !== null && hostId !== undefined) {
 						nextCenter = this.objects.find(o => o.id === hostId && o.state === OBJECT_STATE.ACTIVE);
 					}
 					if (!nextCenter) {
-						nextCenter = this.objects.find(o => o.name === 'Earth' || (o.type === OBJECT_TYPES.CELESTIAL && o.id !== 0));
+						nextCenter = this.objects.find(o => o.name === 'Earth' && o.state === OBJECT_STATE.ACTIVE)
+							|| this.objects.find(o => o.type === OBJECT_TYPES.CELESTIAL && o.id !== 0 && o.state === OBJECT_STATE.ACTIVE);
 					}
 				}
 
@@ -288,13 +289,19 @@ export class Universe {
 			} else if (clearRocket && obj.type === OBJECT_TYPES.ROCKET) {
 				toRemove.push(obj);
 			} else if (clearCelestial && obj.type === OBJECT_TYPES.CELESTIAL) {
-				// Prevent removing the Sun (id:0) to avoid crashing
+				// Prevent removing the Sun (id:0)
 				if (obj.id !== 0) {
 					toRemove.push(obj);
 				}
 			}
 		}
 		toRemove.forEach(obj => this.removeObject(obj));
+
+		// If current camera target was removed, switch to a remaining active object or null
+		if (this.camera.trackingTarget && toRemove.includes(this.camera.trackingTarget)) {
+			const remaining = this.objects.find(o => o.state === OBJECT_STATE.ACTIVE && !toRemove.includes(o));
+			EventBus.emit('camera:set-tracking-target', remaining || null);
+		}
 	}
 
 	// Execute registered updaters (Call this method in the main simulation loop)

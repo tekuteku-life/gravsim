@@ -10,6 +10,11 @@ import { CelestialBody, Rocket } from './gravsim_object.js';
 import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 
+export const SOLAR_PLANETS = new Set([
+	'Mercury', 'Venus', 'Earth', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune',
+	'Pluto', 'Ceres', 'Eris'
+]);
+
 /*******************************************************************
  * ObjectPlacer class that manages the placement of objects in the universe.
  *******************************************************************/
@@ -196,6 +201,12 @@ export class ObjectPlacer {
 	placeAtOrbit(objName, hostObj) {
 		const param = this._getObjectParam(objName) || this._getObjectParam('Earth');
 
+		if (!hostObj) {
+			const centerX = this.universe?.canvas ? this.universe.canvas.width / 2 : 0;
+			const centerY = this.universe?.canvas ? this.universe.canvas.height / 2 : 0;
+			return this.placeObject(objName, centerX, centerY, 0, 0);
+		}
+
 		// Get A/E (circular orbit by default)
 		const a_au = param.A || 1;
 		const e = param.E || 0;
@@ -231,7 +242,7 @@ export class ObjectPlacer {
 	}
 
 	placeAtOrbitAroundHost(hostName, objName) {
-		const hostObj = this.universe.objects.find(obj => obj.name === hostName);
+		const hostObj = this.universe.objects.find(obj => obj.name === hostName && (obj.state === undefined || obj.state === 0));
 		if (!hostObj) {
 			throw new Error(hostName + " object not found in the universe.");
 		}
@@ -239,11 +250,46 @@ export class ObjectPlacer {
 	}
 
 	placeAtOrbitAroundSun(objName) {
-		const sunObj = this.universe.objects.find(obj => obj.name === "Sun") || this.universe.camera.trackingTarget;
-		if (!sunObj) {
-			throw new Error("Sun object not found in the universe.");
+		if (objName === "Sun") {
+			let sunObj = this.universe.objects.find(obj => obj.name === "Sun" && (obj.state === undefined || obj.state === 0));
+			if (!sunObj) {
+				const centerX = this.universe?.canvas ? this.universe.canvas.width / 2 : 0;
+				const centerY = this.universe?.canvas ? this.universe.canvas.height / 2 : 0;
+				sunObj = this.placeObject("Sun", centerX, centerY, 0, 0);
+			}
+			if (sunObj) {
+				EventBus.emit('camera:set-tracking-target', sunObj);
+				if (this.universe?.camera) {
+					this.universe.camera.trackingTarget = sunObj;
+				}
+			}
+			return sunObj;
 		}
-		return this.placeAtOrbit(objName, sunObj);
+
+		// Ensure Sun exists in the universe
+		let sunObj = this.universe.objects.find(obj => obj.name === "Sun" && (obj.state === undefined || obj.state === 0)) || this.universe.camera?.trackingTarget;
+		if (!sunObj) {
+			if (SOLAR_PLANETS.has(objName)) {
+				const centerX = this.universe?.canvas ? this.universe.canvas.width / 2 : 0;
+				const centerY = this.universe?.canvas ? this.universe.canvas.height / 2 : 0;
+				sunObj = this.placeObject("Sun", centerX, centerY, 0, 0);
+			} else {
+				throw new Error("Sun object not found in the universe.");
+			}
+		}
+
+		// Place the planet in orbit around the Sun
+		const planetObj = this.placeAtOrbit(objName, sunObj);
+
+		// Set reference body (tracking target) to the deployed planet
+		if (planetObj && SOLAR_PLANETS.has(objName)) {
+			EventBus.emit('camera:set-tracking-target', planetObj);
+			if (this.universe?.camera) {
+				this.universe.camera.trackingTarget = planetObj;
+			}
+		}
+
+		return planetObj;
 	}
 
 	// Profile Deployer Engine
@@ -259,6 +305,17 @@ export class ObjectPlacer {
 		if (profile.clearPrevious) {
 			// Clear debris, rockets, and celestials (excluding Sun)
 			EventBus.emit('simulation:clear-objects', true, true, true);
+		}
+
+		// Process Center Object if defined in profile
+		if (profile.center) {
+			const c = profile.center;
+			let cObj = this.universe.objects.find(o => (o.name === c.name || o.name === c.template) && o.state === 0);
+			if (!cObj) {
+				cObj = this.placeObject(c.template || 'Sun', c.x || 0, c.y || 0, c.vx || 0, c.vy || 0, c.options || {});
+				if (c.name) cObj.name = c.name;
+			}
+			EventBus.emit('camera:set-tracking-target', cObj);
 		}
 
 		// 1. Process Static Objects
@@ -590,9 +647,12 @@ export class ObjectPlacer {
 			dy = rDy;
 		}
 
+		const cX = centerObj ? centerObj.x : 0;
+		const cY = centerObj ? centerObj.y : 0;
+
 		return {
-			x: dx + centerObj.x + renderState.cameraOffset.x,
-			y: dy + centerObj.y + renderState.cameraOffset.y,
+			x: dx + cX + renderState.cameraOffset.x,
+			y: dy + cY + renderState.cameraOffset.y,
 		};
 	}
 
@@ -648,8 +708,8 @@ export class ObjectPlacer {
 		const basis = this.universe.camera.getRenderState().basis;
 
 		// Keep as relative position
-		this.startRelX = pos.x - basis.x;
-		this.startRelY = pos.y - basis.y;
+		this.startRelX = pos.x - (basis ? basis.x : 0);
+		this.startRelY = pos.y - (basis ? basis.y : 0);
 	}
 
 	updateDrag(clientX, clientY) {
@@ -667,11 +727,11 @@ export class ObjectPlacer {
 		const v = this._calculateSlingshotVelocity(this.startScreenX, this.startScreenY, clientX, clientY);
 		const basis = this.universe.camera.getRenderState().basis;
 
-		const launchX = basis.x + this.startRelX;
-		const launchY = basis.y + this.startRelY;
+		const launchX = (basis ? basis.x : 0) + this.startRelX;
+		const launchY = (basis ? basis.y : 0) + this.startRelY;
 
-		const launchVx = UnitConvertUtils.m2pix(v.vx) + basis.vx;
-		const launchVy = UnitConvertUtils.m2pix(v.vy) + basis.vy;
+		const launchVx = UnitConvertUtils.m2pix(v.vx) + (basis ? basis.vx : 0);
+		const launchVy = UnitConvertUtils.m2pix(v.vy) + (basis ? basis.vy : 0);
 		const launchAngle = Math.atan2(launchVy, launchVx);
 
 		this.placeObject(

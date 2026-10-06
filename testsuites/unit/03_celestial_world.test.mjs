@@ -759,8 +759,13 @@ test('ObjectPlacer - Deep branch coverage: error throws, rotation transform, sli
 	universe.objects = [];
 	universe.camera.trackingTarget = null;
 	assert.throws(() => {
-		placer.placeAtOrbitAroundSun('Earth');
+		placer.placeAtOrbitAroundSun('UnknownNonSolar');
 	}, /Sun object not found/);
+
+	// Solar planet auto-places Sun and sets tracking target to that planet
+	const deployedEarth = placer.placeAtOrbitAroundSun('Earth');
+	assert.ok(universe.objects.find(o => o.name === 'Sun'), 'Sun must be auto-placed');
+	assert.equal(universe.camera.trackingTarget, deployedEarth, 'Reference body must be set to Earth');
 
 	// Restore earth
 	universe.objects = [earth];

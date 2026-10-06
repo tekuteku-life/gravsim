@@ -17,8 +17,8 @@ import { Rocket, Debris } from '../../scripts/gravsim_object.js';
 import { CalcRocket } from '../../scripts/gravsim_calc_object.js';
 import { PropulsionCard } from '../../scripts/gravsim_telemetry_card.js';
 import { UnitConvertUtils, normalizeRocketConfig } from '../../scripts/gravsim_utils.js';
-import { PHYSICS, TELEMETRY, OBJECT_TYPES, OBJECT_STATE, ROCKET_VISUAL, RENDER, PAD_EFFECT } from '../../scripts/gravsim_const.js';
-import { presetManager } from '../../scripts/gravsim_preset_manager.js';
+import { PHYSICS, TELEMETRY, OBJECT_TYPES, OBJECT_STATE, RENDER, PAD_EFFECT } from '../../scripts/gravsim_const.js';
+import { presetManager, ROCKET_VISUAL } from '../../scripts/gravsim_preset_manager.js';
 
 test('FlightComputer - Initialization and default telemetry cache', () => {
 	const fc = new FlightComputer({

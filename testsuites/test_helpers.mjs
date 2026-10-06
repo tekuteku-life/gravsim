@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { EventBus } from '../scripts/gravsim_event_bus.js';
 
 export const isVerbose = () => {
 	return process.env.DEBUG === '1' || process.env.VERBOSE === '1' || process.argv.includes('--verbose');
@@ -276,6 +277,25 @@ export const setupMockDOM = () => {
 						disconnect: () => {}
 					};
 				}
+				createBuffer(channels, length, sampleRate) {
+					return {
+						numberOfChannels: channels,
+						length: length,
+						sampleRate: sampleRate,
+						getChannelData: () => new Float32Array(length)
+					};
+				}
+				createDynamicsCompressor() {
+					return {
+						threshold: { value: -24, setValueAtTime: () => {} },
+						knee: { value: 30, setValueAtTime: () => {} },
+						ratio: { value: 12, setValueAtTime: () => {} },
+						attack: { value: 0.003, setValueAtTime: () => {} },
+						release: { value: 0.25, setValueAtTime: () => {} },
+						connect: () => {},
+						disconnect: () => {}
+					};
+				}
 				createOscillator() {
 					return {
 						type: 'sine',
@@ -457,6 +477,7 @@ export const createMockCelestialBody = (overrides = {}) => {
 		id: overrides.id || 1,
 		name: overrides.name || 'Earth',
 		type: 0, // CELESTIAL_BODY
+		state: overrides.state !== undefined ? overrides.state : 0, // ACTIVE
 		x: overrides.x || 0,
 		y: overrides.y || 0,
 		vx: overrides.vx || 0,
@@ -502,7 +523,7 @@ export const createMockRocket = (overrides = {}) => {
  */
 export const createMockUniverse = (overrides = {}) => {
 	const objects = overrides.objects || [];
-	return {
+	const mockUniverse = {
 		objects,
 		timeScale: 1,
 		isPaused: false,
@@ -524,7 +545,7 @@ export const createMockUniverse = (overrides = {}) => {
 			toScreenY: (y) => y,
 			toWorldX: (x) => x,
 			toWorldY: (y) => y,
-			getRenderState: () => ({ zoomScale: 1.0, basis: null, cameraOffset: { x: 0, y: 0 }, rotation: 0 }),
+			getRenderState: () => ({ zoomScale: 1.0, basis: mockUniverse.camera?.trackingTarget || null, cameraOffset: { x: 0, y: 0 }, rotation: 0 }),
 			...(overrides.camera || {})
 		},
 		RocketLauncher: {
@@ -601,5 +622,6 @@ export const createMockUniverse = (overrides = {}) => {
 		},
 		...(overrides || {})
 	};
+	return mockUniverse;
 };
 

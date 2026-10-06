@@ -45,11 +45,14 @@ export class OverlayRenderer {
 		ctx.textAlign = "left";
 		ctx.textBaseline = "middle";
 
+		const cX = centerObject ? centerObject.x : 0;
+		const cY = centerObject ? centerObject.y : 0;
+
 		objects.forEach(obj => {
 			if (obj.state !== 0) { return; }
 			
-			const relX = (obj.x - centerObject.x) * zoomScale;
-			const relY = (obj.y - centerObject.y) * zoomScale;
+			const relX = (obj.x - cX) * zoomScale;
+			const relY = (obj.y - cY) * zoomScale;
 			
 			// Don't draw if completely out of screen
 			const halfW = ctx.canvas.width / 2;
