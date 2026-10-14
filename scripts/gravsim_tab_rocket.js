@@ -517,7 +517,8 @@ export class RocketTab {
 		const totalPropT = (stg.fuelMassT || 0) + (stg.oxidMassT || 0);
 		const thrustKN = stg.thrustKN || 0;
 		if (thrustKN > 0 && totalPropT > 0) {
-			const burnTime = (totalPropT * fuelDef.isp * PHYSICS.G0) / thrustKN;
+			const isp = stg.ispVac || stg.isp || fuelDef.ispVac || fuelDef.isp || 320;
+			const burnTime = (totalPropT * isp * PHYSICS.G0) / thrustKN;
 			stg.burnTime = Math.round(burnTime * 10) / 10;
 		}
 		if (this.currentTab === 0) {
@@ -546,8 +547,8 @@ export class RocketTab {
 		const rl = this.universe.RocketLauncher;
 		const prop = rl.payload?.propulsion;
 		if (!prop || !prop.enabled) return;
-		const fuelDef = ROCKET_FUELS[prop.fuelType || 'liquid'] || { isp: 320 };
-		const isp = prop.isp || fuelDef.isp;
+		const fuelDef = ROCKET_FUELS[prop.fuelType || 'liquid'] || { isp: 320, ispVac: 320, ispSl: 282 };
+		const isp = prop.ispVac || prop.isp || fuelDef.ispVac || fuelDef.isp || 320;
 		const thrustN = (prop.thrustKN || 10) * 1000;
 		const totalPropKg = ((prop.fuelMassT || 0) + (prop.oxidMassT || 0)) * 1000;
 		prop.burnTime = thrustN > 0 ? Math.round(((totalPropKg * isp * PHYSICS.G0) / thrustN) * 10) / 10 : 0;
@@ -834,8 +835,9 @@ export class RocketTab {
 
 		for (let i = 0; i < numStages; i++) {
 			const stg = stages[i];
-			const fuel = ROCKET_FUELS[stg.fuelType] || ROCKET_FUELS['liquid'];
-			const ve = fuel.isp * PHYSICS.G0;
+			const fuel = ROCKET_FUELS[stg.fuelType] || ROCKET_FUELS['liquid'] || { isp: 320, ispVac: 320, ispSl: 282 };
+			const isp = stg.ispVac || stg.isp || fuel.ispVac || fuel.isp || 320;
+			const ve = isp * PHYSICS.G0;
 
 			// Initial mass for stage i (payload + fairing (if stage 1) + this stage + upper stages)
 			let m0_T = payloadMassT + (i === 0 ? fairingMassT : 0);

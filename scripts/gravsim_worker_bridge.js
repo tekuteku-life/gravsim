@@ -76,6 +76,8 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX] = obj.currentStageIndex !== undefined ? obj.currentStageIndex : 0;
 				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = obj.totalStages !== undefined ? obj.totalStages : 1;
 				buffer[offset + BUFFER_INDEX.DEBRIS_SUB_TYPE] = 0;
+				buffer[offset + BUFFER_INDEX.TM_AMBIENT_PRES_RATIO] = obj.ambientPresRatio || 0;
+				buffer[offset + BUFFER_INDEX.TM_CURRENT_ISP] = obj.currentIsp || (obj.getEffectiveIsp ? obj.getEffectiveIsp() : 0);
 			} else {
 				buffer[offset + BUFFER_INDEX.MASS] = obj.mass;
 				buffer[offset + BUFFER_INDEX.FUEL_MASS] = 0;
@@ -86,6 +88,8 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = 0;
 				buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX] = 0;
 				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = 1;
+				buffer[offset + BUFFER_INDEX.TM_AMBIENT_PRES_RATIO] = 0;
+				buffer[offset + BUFFER_INDEX.TM_CURRENT_ISP] = 0;
 				if (obj.type === OBJECT_TYPES.DEBRIS) {
 					buffer[offset + BUFFER_INDEX.DEBRIS_SUB_TYPE] = obj.debrisSubType || 0;
 				} else {
@@ -205,6 +209,8 @@ export class WorkerBridge {
 				this._cache.tmTankPresOxid = buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID];
 				this._cache.tmStageIndex = buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX];
 				this._cache.tmTotalStages = buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES];
+				this._cache.tmAmbientPresRatio = buffer[offset + BUFFER_INDEX.TM_AMBIENT_PRES_RATIO] || 0;
+				this._cache.tmCurrentIsp = buffer[offset + BUFFER_INDEX.TM_CURRENT_ISP] || 0;
 				this._cache.tmFairingSeparated = (flags & ROCKET_FLAG.FAIRING_SEPARATED) !== 0;
 				this._cache.isBoosterSeparated = (flags & ROCKET_FLAG.BOOSTER_SEPARATED) !== 0;
 				this._cache.isBoosterBurnout = (flags & ROCKET_FLAG.BOOSTER_BURNOUT) !== 0;

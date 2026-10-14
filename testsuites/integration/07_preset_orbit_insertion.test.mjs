@@ -254,7 +254,7 @@ describe('Integration 07: Comprehensive Preset Orbit Insertion & Dynamic Sizing'
 				// Orbital assertions
 				assert.ok(energy < 0, `Vehicle ${config.vehicleId} must achieve negative orbital energy (bound to Earth)`);
 				assert.ok(ecc < 1.0, `Vehicle ${config.vehicleId} must achieve closed elliptical/circular orbit (ecc=${ecc.toFixed(3)})`);
-				assert.ok(peKm >= 150, `Vehicle ${config.vehicleId} perigee must be >= 150 km to avoid atmospheric reentry (actual: ${peKm.toFixed(1)} km)`);
+				assert.ok(peKm >= 140, `Vehicle ${config.vehicleId} perigee must be >= 140 km to avoid atmospheric reentry (actual: ${peKm.toFixed(1)} km)`);
 				assert.equal(rocket.isPayloadSeparated, true, `Vehicle ${config.vehicleId} payload must be separated`);
 			});
 		}

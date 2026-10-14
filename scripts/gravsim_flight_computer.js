@@ -266,8 +266,8 @@ export class FlightComputer {
 		const curProp = sensor.fuelMass || 0; // t (contains fuelMass + oxidMass)
 		const curBurnoutMass = sensor.mass - curProp; // t
 
+		let ve = FLIGHT_COMPUTER_CONFIG.DEFAULT_ISP * PHYSICS.G0; // m/s
 		if (sensor.mass > 0 && curBurnoutMass > 0 && curProp > 0) {
-			let ve = FLIGHT_COMPUTER_CONFIG.DEFAULT_ISP * PHYSICS.G0; // m/s
 			if (sensor.thrustForce > 0 && sensor.massLossRate > 0) {
 				ve = sensor.thrustForce / (sensor.massLossRate * 1000); // massLossRate is in t/s, convert to kg/s
 			}
@@ -285,13 +285,15 @@ export class FlightComputer {
 				const stgBurnoutMass = nextStageStackMass - stgProp;
 
 				if (nextStageStackMass > 0 && stgBurnoutMass > 0 && stgProp > 0) {
-					const stgVe = (stg.isp || FLIGHT_COMPUTER_CONFIG.DEFAULT_ISP) * PHYSICS.G0;
+					const stgVe = (stg.ispVac || stg.isp || FLIGHT_COMPUTER_CONFIG.DEFAULT_ISP) * PHYSICS.G0;
 					remDv += stgVe * Math.log(nextStageStackMass / stgBurnoutMass);
 				}
 				nextStageStackMass = stgBurnoutMass - (stg.dryMassT || 0);
 			}
 		}
 
+		this.telemetryCache.ambientPresRatio = sensor.ambientPresRatio !== undefined ? sensor.ambientPresRatio : 0;
+		this.telemetryCache.currentIsp = sensor.currentIsp !== undefined ? sensor.currentIsp : Math.round(ve / PHYSICS.G0);
 		this.telemetryCache.qAxialKpa = sensor.qAxialKpa;
 		this.telemetryCache.qLateralKpa = sensor.qLateralKpa;
 		this.telemetryCache.aoaDeg = sensor.aoaDeg;

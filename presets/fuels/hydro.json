@@ -2,6 +2,8 @@
 	"id": "hydro",
 	"name": "Cryogenic",
 	"isp": 450,
+	"ispVac": 450,
+	"ispSl": 390,
 	"density": 0.3,
 	"ofRatio": 6.0,
 	"plume": {

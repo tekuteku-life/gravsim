@@ -252,7 +252,7 @@ export class PresetManager {
 		// Seed fallback fuels & plumes
 		const fallbackFuels = [
 			{
-				id: 'liquid', name: 'Liquid', isp: 320, density: 1.0, ofRatio: 2.5,
+				id: 'liquid', name: 'Liquid', isp: 320, ispVac: 320, ispSl: 282, density: 1.0, ofRatio: 2.5,
 				plume: {
 					flickerFreq: 35, noiseAmp: 0.12, lenMult: 8.0, widthMult: 1.8,
 					curveLenRatio: 0.35, curveWidthRatio: 0.75, coreLenRatio: 0.4, coreWidthRatio: 0.28,
@@ -263,6 +263,41 @@ export class PresetManager {
 					]
 				}
 			},
+			{
+				id: 'hydro', name: 'Cryogenic', isp: 450, ispVac: 450, ispSl: 390, density: 0.3, ofRatio: 6.0,
+				plume: {
+					flickerFreq: 45, noiseAmp: 0.08, lenMult: 9.0, widthMult: 2.0,
+					curveLenRatio: 0.3, curveWidthRatio: 0.9, diamonds: 3, diamondInterval: 0.16,
+					diamondWidthRatio: 0.32, diamondLength: 3, diamondStrokeColor: 'rgba(200, 240, 255, 0.65)',
+					colors: [
+						[0, 'rgba(255, 255, 255, 0.9)'], [0.15, 'rgba(120, 200, 255, 0.7)'],
+						[0.5, 'rgba(150, 120, 255, 0.35)'], [0.85, 'rgba(200, 100, 255, 0.1)'], [1, 'rgba(150, 50, 255, 0)']
+					]
+				}
+			},
+			{
+				id: 'solid', name: 'Solid', isp: 280, ispVac: 280, ispSl: 250, density: 1.8, ofRatio: 0,
+				plume: {
+					flickerFreq: 0, noiseAmp: 0.18, lenMult: 9.5, widthMult: 1.6,
+					curveLenRatio: 0.6, curveWidthRatio: 0.35, coreLenRatio: 0.55, coreWidthRatio: 0.28,
+					coreFill: 'rgba(255, 255, 255, 0.95)',
+					colors: [
+						[0, '#ffffff'], [0.2, '#fff6bd'], [0.5, '#ffd15c'],
+						[0.8, '#ff8c1a'], [1, 'rgba(180, 80, 0, 0)']
+					]
+				}
+			},
+			{
+				id: 'ion', name: 'Ion', isp: 3000, ispVac: 3000, ispSl: 0, density: 0.5, ofRatio: 0,
+				plume: {
+					flickerFreq: 20, noiseAmp: 0.04, lenMult: 4.0, widthMult: 0.7,
+					beamLengthRatio: 0.8, beamStrokeColor: '#88ffff',
+					colors: [
+						[0, '#ffffff'], [0.25, '#00ffcc'], [0.65, 'rgba(0, 160, 255, 0.5)'],
+						[1, 'rgba(0, 50, 200, 0)']
+					]
+				}
+			}
 		];
 		for (const f of fallbackFuels) {
 			this.fuels.set(f.id, f);
@@ -571,8 +606,8 @@ export class PresetManager {
 
 			if (payload.propulsion?.enabled) {
 				const prop = JSON.parse(JSON.stringify(payload.propulsion));
-				const fuelDef = this.getFuel(prop.fuelType || 'liquid') || { isp: 320, ofRatio: 2.5 };
-				const isp = prop.isp || fuelDef.isp;
+				const fuelDef = this.getFuel(prop.fuelType || 'liquid') || { isp: 320, ispVac: 320, ispSl: 282, ofRatio: 2.5 };
+				const isp = prop.ispVac || prop.isp || fuelDef.ispVac || fuelDef.isp || 320;
 				const ofRatio = prop.ofRatio !== undefined ? prop.ofRatio : fuelDef.ofRatio;
 				const dryMass = prop.dryMassT || (payload.massT * 0.6);
 				const maxCapacity = (prop.fuelMassT || 0.5) + (prop.oxidMassT || 1.0);
@@ -622,8 +657,8 @@ export class PresetManager {
 
 		for (let i = 0; i < stages.length; i++) {
 			const stg = stages[i];
-			const fuelDef = this.getFuel(stg.fuelType || 'liquid') || { isp: 300, ofRatio: 0 };
-			const isp = stg.isp || fuelDef.isp;
+			const fuelDef = this.getFuel(stg.fuelType || 'liquid') || { isp: 300, ispVac: 300, ispSl: 260, ofRatio: 0 };
+			const isp = stg.ispVac || stg.isp || fuelDef.ispVac || fuelDef.isp || 300;
 			const ofRatio = stg.ofRatio !== undefined ? stg.ofRatio : fuelDef.ofRatio;
 
 			const capFuel = stg.capacityFuelMassT ?? stg.fuelMassT;

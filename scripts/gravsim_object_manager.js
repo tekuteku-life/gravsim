@@ -273,6 +273,8 @@ export class ObjectManager {
 		target.radius = objData.radius;
 		target.tankPresFuel = objData.tmTankPresFuel;
 		target.tankPresOxid = objData.tmTankPresOxid;
+		target.ambientPresRatio = objData.tmAmbientPresRatio !== undefined ? objData.tmAmbientPresRatio : 0;
+		target.currentIsp = objData.tmCurrentIsp !== undefined ? objData.tmCurrentIsp : 0;
 
 		// Update name from 'Rocket' to payload name upon separation
 		if (target.isPayloadSeparated && target.payload?.name) {
@@ -330,6 +332,8 @@ export class ObjectManager {
 			isAntiStallActive: objData.isAntiStall,
 			isQLimitNear: objData.isQLimitNear,
 			isGLimitNear: objData.isGLimitNear,
+			ambientPresRatio: objData.tmAmbientPresRatio !== undefined ? objData.tmAmbientPresRatio : 0,
+			currentIsp: objData.tmCurrentIsp !== undefined ? objData.tmCurrentIsp : 0,
 			tankPresFuel: objData.tmTankPresFuel,
 			tankPresOxid: objData.tmTankPresOxid,
 			stageIndex: curStg,

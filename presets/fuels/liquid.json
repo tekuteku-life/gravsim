@@ -2,6 +2,8 @@
 	"id": "liquid",
 	"name": "Liquid",
 	"isp": 320,
+	"ispVac": 320,
+	"ispSl": 282,
 	"density": 1.0,
 	"ofRatio": 2.5,
 	"plume": {

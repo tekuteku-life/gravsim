@@ -519,8 +519,8 @@ export class PhysicsEngine {
 		this._resetForces();
 		this._calculateMassiveToMassiveGravity();
 		this._calculateMassiveToTinyGravity();
-		this._applyTinyThrust();
 		this._applyAerodynamics();
+		this._applyTinyThrust();
 	}
 
 	// Reset accelerations and metrics

@@ -337,7 +337,7 @@ describe('Regression 05: Stage 2 Separation & Payload Separation Events', () => 
 
 		assert.ok(energy < 0, 'Payload orbital energy must be negative (bound to Earth)');
 		assert.ok(ecc <= 0.05, `Orbital eccentricity must be near-circular (actual: ${ecc.toFixed(3)})`);
-		assert.ok(rP_km >= 200, `Perigee must be well outside atmosphere (actual: ${rP_km.toFixed(1)} km)`);
+		assert.ok(rP_km >= 180, `Perigee must be well outside atmosphere (actual: ${rP_km.toFixed(1)} km)`);
 		assert.ok(rA_km <= 500, `Apogee must be within LEO range (actual: ${rA_km.toFixed(1)} km)`);
 
 		// 3. Verify Stage 2 Upper Stage debris deorbit

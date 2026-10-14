@@ -16,17 +16,24 @@ export class RocketRenderer {
 		}
 
 		const theme = ROCKET_VISUAL.THEMES[rocket.colorTheme] || ROCKET_VISUAL.THEMES.orange;
+		const ambientPresRatio = rocket.ambientPresRatio !== undefined
+			? rocket.ambientPresRatio
+			: (rocket.telemetry?.ambientPresRatio !== undefined
+				? rocket.telemetry.ambientPresRatio
+				: (rocket.telemetry?.altM !== undefined
+					? (rocket.telemetry.altM > 100000 ? 0.0 : Math.exp(-rocket.telemetry.altM / 8500))
+					: (rocket.inAtmosphere ? 1.0 : 0.0)));
 
 		if (screenRadius < ROCKET_VISUAL.LOD_RADIUS_THRESHOLD) {
-			this._drawLowDetail(ctx, rocket, screenRadius, theme);
+			this._drawLowDetail(ctx, rocket, screenRadius, theme, ambientPresRatio);
 		} else {
-			this._drawHighDetail(ctx, rocket, screenRadius, zoomScale, theme);
+			this._drawHighDetail(ctx, rocket, screenRadius, zoomScale, theme, ambientPresRatio);
 		}
 
 		ctx.restore();
 	}
 
-	static _drawLowDetail(ctx, rocket, R, theme) {
+	static _drawLowDetail(ctx, rocket, R, theme, ambientPresRatio = 1.0) {
 		const isPayloadOnly = !rocket.disableStaging && Boolean(
 			rocket.isPayloadSeparated ||
 			rocket.telemetry?.isPayloadSeparated ||
@@ -75,9 +82,12 @@ export class RocketRenderer {
 
 		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
 		if (isFiring) {
-			const plumeLen = R * lod.PLUME_LEN_RATIO * (rocket.thrustRatio || 1.0);
+			const p = Math.max(0, Math.min(1.0, ambientPresRatio !== undefined ? ambientPresRatio : 1.0));
+			const e_vac = 1.0 - p;
+			const plumeLen = R * lod.PLUME_LEN_RATIO * (rocket.thrustRatio || 1.0) * (1.0 + e_vac * 0.15);
 			const isBoosterFiring = !isBoosterBurnout;
-			const plumeWidthMult = (isBoosterFiring && boosterCount >= 4) ? 1.5 : ((isBoosterFiring && boosterCount === 2) ? 1.25 : 1.0);
+			const boosterMult = (isBoosterFiring && boosterCount >= 4) ? 1.5 : ((isBoosterFiring && boosterCount === 2) ? 1.25 : 1.0);
+			const plumeWidthMult = boosterMult * (1.0 + e_vac * 1.3);
 			ctx.fillStyle = lod.PLUME_COLOR;
 			ctx.beginPath();
 			ctx.moveTo(-len * 0.5, -width * lod.PLUME_WIDTH_RATIO * plumeWidthMult);
@@ -88,7 +98,7 @@ export class RocketRenderer {
 		}
 	}
 
-	static _drawHighDetail(ctx, rocket, R, zoomScale, theme) {
+	static _drawHighDetail(ctx, rocket, R, zoomScale, theme, ambientPresRatio = 1.0) {
 		const curStgIdx = rocket.telemetry?.stageIndex !== undefined ? rocket.telemetry.stageIndex : (rocket.currentStageIndex || 0);
 		const totalStg = rocket.telemetry?.totalStages || rocket.stages?.length || 1;
 
@@ -143,10 +153,10 @@ export class RocketRenderer {
 			}
 
 			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
-			this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R);
+			this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R, ambientPresRatio);
 
 			if (isFiring) {
-				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
+				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
 			}
 			return;
 		}
@@ -174,10 +184,10 @@ export class RocketRenderer {
 				this._drawStage2(ctx, stg2X, r2, l2, false, 0, 0, theme);
 				this._drawInterstage(ctx, inter1X, r1, lInter, theme);
 				this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
-				this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R);
+				this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R, ambientPresRatio);
 
 				if (isFiring) {
-					this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
+					this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
 				}
 			} else if (curStgIdx === 1) {
 				// Stage 1 jettisoned, Stage 2 active
@@ -198,7 +208,7 @@ export class RocketRenderer {
 				this._drawStage2(ctx, stg2X, r2, l2, true, nozzle2X, lNozzle2, theme);
 
 				if (isFiring) {
-					this._drawPlume(ctx, nozzle2X, 0, align.UPPER_PLUME_SCALE, throttle, curFuel, R);
+					this._drawPlume(ctx, nozzle2X, 0, align.UPPER_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
 				}
 			} else {
 				// Stage 2 jettisoned, Stage 3 active
@@ -215,7 +225,7 @@ export class RocketRenderer {
 				this._drawStage2(ctx, stg3X, r3, l3, true, nozzle3X, lNozzle3, theme);
 
 				if (isFiring) {
-					this._drawPlume(ctx, nozzle3X, 0, align.STAGE3_PLUME_SCALE ?? 0.5, throttle, curFuel, R);
+					this._drawPlume(ctx, nozzle3X, 0, align.STAGE3_PLUME_SCALE ?? 0.5, throttle, curFuel, R, ambientPresRatio);
 				}
 			}
 			return;
@@ -242,14 +252,14 @@ export class RocketRenderer {
 		if (hasStage1) {
 			this._drawInterstage(ctx, interX, r1, lInter, theme);
 			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
-			this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R);
+			this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R, ambientPresRatio);
 		}
 
 		if (isFiring) {
 			if (hasStage1) {
-				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R);
+				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
 			} else {
-				this._drawPlume(ctx, nozzle2X, 0, align.UPPER_PLUME_SCALE, throttle, curFuel, R);
+				this._drawPlume(ctx, nozzle2X, 0, align.UPPER_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
 			}
 		}
 	}
@@ -459,18 +469,22 @@ export class RocketRenderer {
 		ctx.restore();
 	}
 
-	static _drawPlume(ctx, x, y, scale, throttle, fuelType, R) {
+	static _drawPlume(ctx, x, y, scale, throttle, fuelType, R, ambientPresRatio = 1.0) {
 		ctx.save();
 		ctx.translate(x, y);
 
 		const timeSec = performance.now() * 0.001;
 		const cfg = ROCKET_VISUAL.PLUMES[fuelType] || ROCKET_VISUAL.PLUMES.liquid;
+		const p = Math.max(0, Math.min(1.0, ambientPresRatio !== undefined ? ambientPresRatio : 1.0));
+		const e_vac = 1.0 - p; // 0.0 at sea level (collimated jet), 1.0 in vacuum (maximum expansion)
 
 		switch (fuelType) {
 			case 'hydro': {
 				const flicker = Math.sin(timeSec * cfg.flickerFreq) * cfg.noiseAmp;
-				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker);
-				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5);
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * 0.15);
+				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5) * (1.0 + e_vac * 1.5);
+				const curveW = w * cfg.curveWidthRatio * (1.0 + e_vac * 0.45);
+				const curveLen = len * cfg.curveLenRatio * (1.0 - e_vac * 0.2);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
 				for (const [stop, color] of cfg.colors) {
@@ -480,32 +494,42 @@ export class RocketRenderer {
 				ctx.fillStyle = grad;
 				ctx.beginPath();
 				ctx.moveTo(0, -w * 0.5);
-				ctx.quadraticCurveTo(-len * cfg.curveLenRatio, -w * cfg.curveWidthRatio, -len, 0);
-				ctx.quadraticCurveTo(-len * cfg.curveLenRatio, w * cfg.curveWidthRatio, 0, w * 0.5);
+				ctx.quadraticCurveTo(-curveLen, -curveW, -len, 0);
+				ctx.quadraticCurveTo(-curveLen, curveW, 0, w * 0.5);
 				ctx.closePath();
 				ctx.fill();
 
-				ctx.strokeStyle = cfg.diamondStrokeColor;
-				ctx.lineWidth = 1.2;
-				for (let i = 1; i <= cfg.diamonds; i++) {
-					const dx = -len * (cfg.diamondInterval * i);
-					const dw = (w * cfg.diamondWidthRatio) / i;
-					const dLen = cfg.diamondLength;
-					ctx.beginPath();
-					ctx.moveTo(dx - dLen, 0);
-					ctx.lineTo(dx, -dw);
-					ctx.lineTo(dx + dLen, 0);
-					ctx.lineTo(dx, dw);
-					ctx.closePath();
-					ctx.stroke();
+				// Mach / shock diamonds appear in overexpanded/collimated atmospheric flow,
+				// and fade out as ambient backpressure drops to vacuum (e_vac >= 0.65).
+				const diamondAlpha = Math.max(0, (0.65 - e_vac) / 0.65);
+				if (diamondAlpha > 0.01 && cfg.diamonds) {
+					ctx.save();
+					ctx.strokeStyle = cfg.diamondStrokeColor;
+					ctx.globalAlpha *= diamondAlpha;
+					ctx.lineWidth = 1.2;
+					for (let i = 1; i <= cfg.diamonds; i++) {
+						const dx = -len * (cfg.diamondInterval * i);
+						const dw = (w * cfg.diamondWidthRatio) / (i * (1.0 + e_vac * 0.5));
+						const dLen = cfg.diamondLength;
+						ctx.beginPath();
+						ctx.moveTo(dx - dLen, 0);
+						ctx.lineTo(dx, -dw);
+						ctx.lineTo(dx + dLen, 0);
+						ctx.lineTo(dx, dw);
+						ctx.closePath();
+						ctx.stroke();
+					}
+					ctx.restore();
 				}
 				break;
 			}
 
 			case 'solid': {
 				const flicker = (Math.random() - 0.5) * cfg.noiseAmp;
-				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker);
-				const w = R * cfg.widthMult * scale * Math.sqrt(throttle);
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * 0.12);
+				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + e_vac * 1.3);
+				const curveW = w * cfg.curveWidthRatio * (1.0 + e_vac * 0.4);
+				const curveLen = len * cfg.curveLenRatio * (1.0 - e_vac * 0.15);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
 				for (const [stop, color] of cfg.colors) {
@@ -515,18 +539,20 @@ export class RocketRenderer {
 				ctx.fillStyle = grad;
 				ctx.beginPath();
 				ctx.moveTo(0, -w * 0.5);
-				ctx.lineTo(-len * cfg.curveLenRatio, -w * cfg.curveWidthRatio);
+				ctx.lineTo(-curveLen, -curveW);
 				ctx.lineTo(-len, 0);
-				ctx.lineTo(-len * cfg.curveLenRatio, w * cfg.curveWidthRatio);
+				ctx.lineTo(-curveLen, curveW);
 				ctx.lineTo(0, w * 0.5);
 				ctx.closePath();
 				ctx.fill();
 
+				const coreW = w * cfg.coreWidthRatio * (1.0 + e_vac * 0.25);
+				const coreLen = len * cfg.coreLenRatio * (1.0 - e_vac * 0.2);
 				ctx.fillStyle = cfg.coreFill;
 				ctx.beginPath();
-				ctx.moveTo(0, -w * cfg.coreWidthRatio);
-				ctx.lineTo(-len * cfg.coreLenRatio, 0);
-				ctx.lineTo(0, w * cfg.coreWidthRatio);
+				ctx.moveTo(0, -coreW);
+				ctx.lineTo(-coreLen, 0);
+				ctx.lineTo(0, coreW);
 				ctx.closePath();
 				ctx.fill();
 				break;
@@ -535,7 +561,7 @@ export class RocketRenderer {
 			case 'ion': {
 				const flicker = Math.sin(timeSec * cfg.flickerFreq) * cfg.noiseAmp;
 				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker);
-				const w = R * cfg.widthMult * scale;
+				const w = R * cfg.widthMult * scale * (1.0 + e_vac * 0.5);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
 				for (const [stop, color] of cfg.colors) {
@@ -562,8 +588,10 @@ export class RocketRenderer {
 			case 'liquid':
 			default: {
 				const flicker = Math.sin(timeSec * cfg.flickerFreq) * cfg.noiseAmp;
-				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker);
-				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5);
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * 0.15);
+				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5) * (1.0 + e_vac * 1.4);
+				const curveW = w * cfg.curveWidthRatio * (1.0 + e_vac * 0.5);
+				const curveLen = len * cfg.curveLenRatio * (1.0 - e_vac * 0.2);
 
 				const grad = ctx.createLinearGradient(0, 0, -len, 0);
 				for (const [stop, color] of cfg.colors) {
@@ -573,19 +601,21 @@ export class RocketRenderer {
 				ctx.fillStyle = grad;
 				ctx.beginPath();
 				ctx.moveTo(0, -w * 0.5);
-				ctx.quadraticCurveTo(-len * cfg.curveLenRatio, -w * cfg.curveWidthRatio, -len, 0);
-				ctx.quadraticCurveTo(-len * cfg.curveLenRatio, w * cfg.curveWidthRatio, 0, w * 0.5);
+				ctx.quadraticCurveTo(-curveLen, -curveW, -len, 0);
+				ctx.quadraticCurveTo(-curveLen, curveW, 0, w * 0.5);
 				ctx.closePath();
 				ctx.fill();
 
-				const coreGrad = ctx.createLinearGradient(0, 0, -len * cfg.coreLenRatio, 0);
+				const coreW = w * cfg.coreWidthRatio * (1.0 + e_vac * 0.3);
+				const coreLen = len * cfg.coreLenRatio * (1.0 - e_vac * 0.25);
+				const coreGrad = ctx.createLinearGradient(0, 0, -coreLen, 0);
 				coreGrad.addColorStop(0, cfg.coreFillStart);
 				coreGrad.addColorStop(1, cfg.coreFillEnd);
 				ctx.fillStyle = coreGrad;
 				ctx.beginPath();
-				ctx.moveTo(0, -w * cfg.coreWidthRatio);
-				ctx.lineTo(-len * cfg.coreLenRatio, 0);
-				ctx.lineTo(0, w * cfg.coreWidthRatio);
+				ctx.moveTo(0, -coreW);
+				ctx.lineTo(-coreLen, 0);
+				ctx.lineTo(0, coreW);
 				ctx.closePath();
 				ctx.fill();
 				break;
@@ -595,7 +625,7 @@ export class RocketRenderer {
 		ctx.restore();
 	}
 
-	static _drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R) {
+	static _drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R, ambientPresRatio = 1.0) {
 		const isBoosterSeparated = Boolean(
 			rocket.isBoosterSeparated ||
 			rocket.telemetry?.isBoosterSeparated
@@ -708,7 +738,7 @@ export class RocketRenderer {
 				? rocket.isBoosterIgnited
 				: (!rocket.isHoldDown && rocket.isIgnited);
 			if (isFiring && isBoosterIgnited && !isBoosterBurnout && throttle > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD) {
-				this._drawPlume(ctx, xBase - lNozzleB, yPos, plumeScale, throttle, plumeFuel, R);
+				this._drawPlume(ctx, xBase - lNozzleB, yPos, plumeScale, throttle, plumeFuel, R, ambientPresRatio);
 			}
 		}
 	}

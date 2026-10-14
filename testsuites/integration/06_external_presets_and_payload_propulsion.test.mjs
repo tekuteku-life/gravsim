@@ -503,8 +503,9 @@ describe('Integration 06: External Presets & Payload On-Board Propulsion', () =>
 		assert.ok(pm.getPlume('hydro'));
 		assert.equal('ROCKET_VISUAL' in constModule, false, 'ROCKET_VISUAL must not be exported from const.js');
 		assert.equal(constModule.ROCKET_VISUAL, undefined);
-		const { ROCKET_FUELS } = constModule;
-		const { ROCKET_VISUAL } = await import('../../scripts/gravsim_preset_manager.js');
+		assert.equal('ROCKET_FUELS' in constModule, false, 'ROCKET_FUELS must not be exported from const.js');
+		assert.equal(constModule.ROCKET_FUELS, undefined);
+		const { ROCKET_FUELS, ROCKET_VISUAL } = await import('../../scripts/gravsim_preset_manager.js');
 		assert.ok(ROCKET_FUELS.hydro);
 		assert.equal(ROCKET_FUELS.hydro.isp, 450);
 		assert.equal(ROCKET_FUELS.solid.isp, 280);

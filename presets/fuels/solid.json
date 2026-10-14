@@ -2,6 +2,8 @@
 	"id": "solid",
 	"name": "Solid",
 	"isp": 280,
+	"ispVac": 280,
+	"ispSl": 250,
 	"density": 1.8,
 	"ofRatio": 0,
 	"plume": {

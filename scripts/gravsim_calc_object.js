@@ -152,6 +152,7 @@ class GravSimCalcObject {
 
 		// Calculate Atmospheric Density
 		const rho = refParam.ATM_DENSITY_0 * Math.exp(-altM / refParam.ATM_SCALE_HEIGHT); // kg/m^3
+		this.ambientPresRatio = Math.max(0, rho / (refParam.ATM_DENSITY_0 || 1.225));
 
 		// Calculate local atmosphere velocity
 		let vAtmM_x = refBody.vx; // m/s
@@ -176,7 +177,6 @@ class GravSimCalcObject {
 			return;
 		}
 
-		if (vRelSq === 0) { return; }
 		const vRel = Math.sqrt(vRelSq); // m/s
 
 		// Dynamic Pressure & Drag Force
@@ -203,6 +203,7 @@ class GravSimCalcObject {
 
 	clearAerodynamicParameters() {
 		this.inAtmosphere = false;
+		this.ambientPresRatio = 0.0;
 		this._currentQ = 0;
 		if (this._qAxialKpa !== undefined) { this._qAxialKpa = 0; }
 		if (this._qLateralKpa !== undefined) { this._qLateralKpa = 0; }
@@ -290,6 +291,17 @@ export class CalcRocket extends GravSimCalcObject {
 		this._progradeAngle = this.thrustAngle; // rad (aligned with initial thrust angle)
 		this._lastDominantBody = null;
 
+		this.ambientPresRatio = this.isHoldDown ? 1.0 : (thrustData?.ambientPresRatio !== undefined ? thrustData.ambientPresRatio : 0.0);
+		this.currentIsp = 0;
+
+		if (this.hasBoosters) {
+			const srbFuel = ROCKET_FUELS[this.boosters.plumeFuel || 'solid'] || ROCKET_FUELS['solid'] || { isp: 280, ispVac: 280, ispSl: 250 };
+			this.boosterIspVac = this.boosters.ispVac || this.boosters.isp || srbFuel.ispVac || srbFuel.isp || 280;
+			this.boosterIspSl = this.boosters.ispSl !== undefined ? this.boosters.ispSl : (srbFuel.ispSl !== undefined ? srbFuel.ispSl : Math.round(this.boosterIspVac * 0.89));
+			this.boosterThrustVac = UnitConvertUtils.kn2n(this.boosters.thrustKN || 4310);
+			this.coreThrustVac = UnitConvertUtils.kn2n(this.boosters.coreThrustKN || 2940);
+		}
+
 		// Activate initial stage
 		this._activateStage(0);
 
@@ -329,6 +341,7 @@ export class CalcRocket extends GravSimCalcObject {
 		this.currentStageIndex = stageIdx;
 		this.fuelType = stage.fuelType;
 		this.thrustForce = UnitConvertUtils.kn2n(stage.thrustKN); // N
+		this.thrustForceVac = this.thrustForce;
 		this.burnTime = stage.burnTime; // s
 		this.ofRatio = stage.ofRatio;
 
@@ -336,17 +349,52 @@ export class CalcRocket extends GravSimCalcObject {
 		this.fuelMass = stage.fuelMassT;
 		this.oxidMass = stage.oxidMassT;
 
+		const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'] || { isp: 320, ispVac: 320, ispSl: 282 };
+		this.ispVac = stage.ispVac || stage.isp || fuel.ispVac || fuel.isp || 320;
+		this.ispSl = stage.ispSl !== undefined ? stage.ispSl : (fuel.ispSl !== undefined ? fuel.ispSl : Math.round(this.ispVac * 0.88));
+
 		const totalPropT = stage.fuelMassT + stage.oxidMassT;
 		if (!this.burnTime || this.burnTime <= 0) {
-			const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
 			const totalPropKg = totalPropT * 1000;
 			if (this.thrustForce > 0 && totalPropKg > 0) {
-				this.burnTime = (totalPropKg * fuel.isp * PHYSICS.G0) / this.thrustForce;
+				this.burnTime = (totalPropKg * this.ispVac * PHYSICS.G0) / this.thrustForce;
 			}
 		}
 		this.massLossRate = this.burnTime > 0 ? (totalPropT / this.burnTime) : 0; // t/s
+		this.currentIsp = this.getEffectiveIsp(this.ambientPresRatio);
 
 		this.updateTotalMass();
+	}
+
+	getEffectiveIsp(ambientPresRatio = this.ambientPresRatio || 0) {
+		const p = Math.max(0, ambientPresRatio);
+		if (this.hasBoosters && this.isBoosterIgnited && !this.isBoosterBurnout && this.currentStageIndex === 0) {
+			const ispCore = Math.max(0, this.ispVac - (this.ispVac - this.ispSl) * p);
+			const ispSrb = Math.max(0, this.boosterIspVac - (this.boosterIspVac - this.boosterIspSl) * p);
+			const fCore = this.coreThrustVac * (this.ispVac > 0 ? (ispCore / this.ispVac) : 0);
+			const fSrb = this.boosterThrustVac * (this.boosterIspVac > 0 ? (ispSrb / this.boosterIspVac) : 0);
+			const totalF = fCore + fSrb;
+			const mDot = (this.coreThrustVac / (Math.max(1, this.ispVac) * PHYSICS.G0)) + (this.boosterThrustVac / (Math.max(1, this.boosterIspVac) * PHYSICS.G0));
+			return mDot > 0 ? (totalF / (mDot * PHYSICS.G0)) : ispCore;
+		}
+		return Math.max(0, this.ispVac - (this.ispVac - this.ispSl) * p);
+	}
+
+	getEffectiveThrustForce(ambientPresRatio = this.ambientPresRatio || 0) {
+		const p = Math.max(0, ambientPresRatio);
+		if (this.hasBoosters && this.isBoosterIgnited && !this.isBoosterBurnout && this.currentStageIndex === 0) {
+			const ispCore = Math.max(0, this.ispVac - (this.ispVac - this.ispSl) * p);
+			const ispSrb = Math.max(0, this.boosterIspVac - (this.boosterIspVac - this.boosterIspSl) * p);
+			const fCore = this.coreThrustVac * (this.ispVac > 0 ? (ispCore / this.ispVac) : 0);
+			const fSrb = this.boosterThrustVac * (this.boosterIspVac > 0 ? (ispSrb / this.boosterIspVac) : 0);
+			return fCore + fSrb;
+		}
+		if (this.ispVac > 0) {
+			const effIsp = Math.max(0, this.ispVac - (this.ispVac - this.ispSl) * p);
+			const vacThrust = this.thrustForceVac || this.thrustForce;
+			return vacThrust * (effIsp / this.ispVac);
+		}
+		return this.thrustForce;
 	}
 
 	updateTotalMass() {
@@ -483,18 +531,22 @@ export class CalcRocket extends GravSimCalcObject {
 				this.fuelMass = prop.fuelMassT || 0;
 				this.oxidMass = prop.oxidMassT || 0;
 				this.thrustForce = ((prop.thrustKN ?? prop.thrustKn ?? 0)) * 1000; // N
+				this.thrustForceVac = this.thrustForce;
+				const fuel = ROCKET_FUELS[prop.fuelType] || ROCKET_FUELS['liquid'] || { isp: 320, ispVac: 320, ispSl: 282 };
+				this.ispVac = prop.ispVac || prop.isp || fuel.ispVac || fuel.isp || 320;
+				this.ispSl = prop.ispSl !== undefined ? prop.ispSl : (fuel.ispSl !== undefined ? fuel.ispSl : Math.round(this.ispVac * 0.88));
 				this.ofRatio = prop.ofRatio || 0;
 				const totalPropT = this.fuelMass + this.oxidMass;
 				const totalPropKg = totalPropT * 1000;
 				if (prop.burnTime && prop.burnTime > 0) {
 					this.burnTime = prop.burnTime;
 				} else if (this.thrustForce > 0 && totalPropKg > 0) {
-					const isp = prop.isp || 300;
-					this.burnTime = (totalPropKg * isp * PHYSICS.G0) / this.thrustForce;
+					this.burnTime = (totalPropKg * this.ispVac * PHYSICS.G0) / this.thrustForce;
 				} else {
 					this.burnTime = 0;
 				}
 				this.massLossRate = this.burnTime > 0 ? (totalPropT / this.burnTime) : 0;
+				this.currentIsp = this.getEffectiveIsp(this.ambientPresRatio);
 				this.updateTotalMass();
 
 				this.stageState = 'STG_COAST';
@@ -914,15 +966,20 @@ export class CalcRocket extends GravSimCalcObject {
 		// Fallback sun finding if sunBody not explicitly provided
 		const effectiveSun = sunBody || (refBody?.name === 'Sun' ? refBody : null);
 
+		this.currentIsp = this.getEffectiveIsp(this.ambientPresRatio);
+		const effThrustForce = this.getEffectiveThrustForce(this.ambientPresRatio);
+
 		// Populate cached sensor object (Zero-allocation design) to prevent GC spike
 		this._sensorData.dt = dt;
 		this._sensorData.mass = this.mass;
 		this._sensorData.dryMass = this.dryMass;
 		this._sensorData.fuelMass = this.fuelMass + this.oxidMass;
-		this._sensorData.thrustForce = this.thrustForce;
+		this._sensorData.thrustForce = effThrustForce;
 		this._sensorData.thrustRatio = this._thrustRatio;
 		this._sensorData.burnTime = this.burnTime;
 		this._sensorData.massLossRate = this.massLossRate;
+		this._sensorData.currentIsp = this.currentIsp;
+		this._sensorData.ambientPresRatio = this.ambientPresRatio;
 		this._sensorData.x = this.x;
 		this._sensorData.y = this.y;
 		this._sensorData.vx = this.vx;
@@ -998,8 +1055,11 @@ export class CalcRocket extends GravSimCalcObject {
 						const apKm = (a * (1 + ecc) - refBody.radius) / 1000;
 
 						// Cutoff when:
-						// 1. Target Apogee is reached outside atmosphere (e.g. GTO at 35,786 km, Lunar at 384,400 km)
-						const isTargetApogeeReached = (this.targetApogeeKm > 0 && apKm >= this.targetApogeeKm && peKm >= 140);
+						// 1. Target Apogee is reached outside atmosphere (e.g. GTO at 35,786 km, Lunar at 384,400 km, or circular rendezvous at 400 km)
+						const isCircularTarget = Boolean(this.targetApogeeKm > 0 && this.targetPerigeeKm > 0 && Math.abs(this.targetApogeeKm - this.targetPerigeeKm) <= 50);
+						const isTargetApogeeReached = isCircularTarget
+							? (apKm >= this.targetApogeeKm * 0.95 && (peKm >= this.targetPerigeeKm * 0.95 || (ecc <= 0.04 && peKm >= 140)))
+							: (this.targetApogeeKm > 0 && apKm >= this.targetApogeeKm && peKm >= 100);
 						// 2. Standard safe perigee / circularization cutoff (LEO, ISS)
 						const isStandardCutoff = (!this.targetApogeeKm && !this.disableOrbitalCutoff && !this.flightComputer?.disableOrbitalCutoff && (peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_SAFE_PE_KM || (ecc <= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MAX_ECC && peKm >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM)));
 
@@ -1180,6 +1240,7 @@ export class CalcRocket extends GravSimCalcObject {
 						this.isBoosterBurnout = true;
 						const coreKN = this.boosters.coreThrustKN || 2940.0;
 						this.thrustForce = UnitConvertUtils.kn2n(coreKN);
+						this.thrustForceVac = this.thrustForce;
 						if (this.burnTime > 0) {
 							const remPropT = this.fuelMass + this.oxidMass;
 							this.massLossRate = remPropT / this.burnTime;
@@ -1190,6 +1251,7 @@ export class CalcRocket extends GravSimCalcObject {
 					this.isBoosterIgnited = false;
 					const coreKN = this.boosters.coreThrustKN || 2940.0;
 					this.thrustForce = UnitConvertUtils.kn2n(coreKN);
+					this.thrustForceVac = this.thrustForce;
 				}
 			} else {
 				this.boosterSepTimer += dt;
@@ -1206,9 +1268,10 @@ export class CalcRocket extends GravSimCalcObject {
 
 	applyThrust() {
 		if (this._thrustRatio > 0 && this.mass > 0) {
+			const effThrustForce = this.getEffectiveThrustForce(this.ambientPresRatio);
 			const invM_kg = this.invMassKg || (this.invMass / 1000);
-			const thrustAx = (this.thrustForce * Math.cos(this.thrustAngle)) * invM_kg; // m/s^2
-			const thrustAy = (this.thrustForce * Math.sin(this.thrustAngle)) * invM_kg; // m/s^2
+			const thrustAx = (effThrustForce * Math.cos(this.thrustAngle)) * invM_kg; // m/s^2
+			const thrustAy = (effThrustForce * Math.sin(this.thrustAngle)) * invM_kg; // m/s^2
 
 			this.ax += thrustAx * this._thrustRatio;
 			this.ay += thrustAy * this._thrustRatio;
@@ -1217,6 +1280,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 	clearAerodynamicParameters() {
 		this.inAtmosphere = false;
+		this.ambientPresRatio = 0.0;
 		this._currentQ = 0;
 		this._qAxialKpa = 0;
 		this._qLateralKpa = 0;
