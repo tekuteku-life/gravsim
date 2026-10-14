@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#0b1736" />
+      <stop offset="70%" stop-color="#050814" />
+      <stop offset="100%" stop-color="#020308" />
+    </radialGradient>
+    <radialGradient id="planetGrad" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="45%" stop-color="#0284c7" />
+      <stop offset="85%" stop-color="#0f2b60" />
+      <stop offset="100%" stop-color="#05102a" />
+    </radialGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <linearGradient id="orbitGrad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00ffcc" stop-opacity="0.2" />
+      <stop offset="50%" stop-color="#00ffcc" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#00ffcc" stop-opacity="1.0" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bgGrad)" />
+
+  <!-- Stars -->
+  <circle cx="80" cy="120" r="2" fill="#ffffff" opacity="0.8" />
+  <circle cx="160" cy="70" r="1.5" fill="#a5f3fc" opacity="0.7" />
+  <circle cx="420" cy="140" r="2.5" fill="#ffffff" opacity="0.9" />
+  <circle cx="450" cy="280" r="1.5" fill="#a5f3fc" opacity="0.6" />
+  <circle cx="90" cy="400" r="2" fill="#ffffff" opacity="0.7" />
+  <circle cx="370" cy="440" r="1.5" fill="#ffffff" opacity="0.8" />
+
+  <!-- Planet Glow -->
+  <circle cx="215" cy="295" r="118" fill="#00ffcc" opacity="0.18" filter="url(#glow)" />
+  <circle cx="215" cy="295" r="110" fill="url(#planetGrad)" />
+  <!-- Planet Atmosphere Rim -->
+  <circle cx="215" cy="295" r="109" fill="none" stroke="#00ffcc" stroke-width="2.5" opacity="0.6" />
+
+  <!-- Orbital Trajectory Line -->
+  <path d="M 65 370 C 50 200, 220 90, 440 180" fill="none" stroke="url(#orbitGrad)" stroke-width="5" stroke-linecap="round" filter="url(#glow)" />
+
+  <!-- Ascending Rocket -->
+  <g transform="translate(355, 165) rotate(-38)">
+    <!-- Exhaust Plume -->
+    <path d="M -15 0 Q -50 -12 -75 0 Q -50 12 -15 0 Z" fill="#ff7700" opacity="0.9" filter="url(#glow)" />
+    <path d="M -15 0 Q -35 -6 -50 0 Q -35 6 -15 0 Z" fill="#ffea00" />
+    <!-- Fins -->
+    <path d="M -10 -9 L -20 -18 L -18 -9 Z" fill="#00e5ff" />
+    <path d="M -10 9 L -20 18 L -18 9 Z" fill="#00e5ff" />
+    <!-- Fuselage -->
+    <path d="M 32 0 L 18 -9 L -15 -9 L -17 -6 L -17 6 L -15 9 L 18 9 Z" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1" />
+    <!-- Nose Cap -->
+    <path d="M 32 0 L 18 -9 L 18 9 Z" fill="#00ffcc" />
+    <!-- Stripe -->
+    <rect x="2" y="-9" width="4" height="18" fill="#00ffcc" />
+  </g>
+</svg>
+

@@ -796,13 +796,13 @@ button:hover { background: #444; }
 	}
 	.sidebar.open {
 		transform: translateY(0);
-		bottom: 30px;
+		bottom: calc(30px + env(safe-area-inset-bottom, 0px));
 	}
 
 	/* Compact Info-panel for Mobile: Match Minimal HUD aesthetics and compact sizing */
 	#info-panel {
 		left: 8px;
-		bottom: 35px;
+		bottom: calc(35px + env(safe-area-inset-bottom, 0px));
 		padding: 4px 8px;
 		font-size: 10px;
 		line-height: 1.25;
@@ -826,13 +826,14 @@ button:hover { background: #444; }
 
 	/* Shift Info-panel up when sidebar opens */
 	body:has(.sidebar.open) #info-panel {
-		bottom: calc(40dvh + 35px);
+		bottom: calc(40dvh + 35px + env(safe-area-inset-bottom, 0px));
 	}
 
 	/* Top UI Container behaves as a flex column to push buttons down */
 	#mobile-top-container {
 		display: flex;
 		flex-direction: column;
+		padding-top: env(safe-area-inset-top, 0px);
 	}
 
 	#top-buttons {
@@ -848,10 +849,11 @@ button:hover { background: #444; }
 		bottom: 0;
 		left: 0;
 		width: 100vw;
+		box-sizing: border-box;
 		background: rgba(0, 0, 0, 0.7);
 		color: #fff;
 		border: 1px solid #444;
-		padding: 5px 10px;
+		padding: 5px 10px calc(5px + env(safe-area-inset-bottom, 0px));
 		border-radius: 4px;
 		cursor: pointer;
 		font-weight: bold;
@@ -859,7 +861,7 @@ button:hover { background: #444; }
 	}
 	#telemetry-toggle-btn {
 		position: absolute;
-		top: 0; right: 0;
+		top: env(safe-area-inset-top, 0px); right: 0;
 		font-size: 14px;
 		width: 100vw;
 		border-radius: 0;
@@ -867,7 +869,7 @@ button:hover { background: #444; }
 
 	/* Minimal HUD Bar for Mobile: Positioned cleanly below top toggle button without overlap */
 	#minimal-hud-bar {
-		top: 36px;
+		top: calc(36px + env(safe-area-inset-top, 0px));
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
