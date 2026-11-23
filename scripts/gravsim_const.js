@@ -18,12 +18,12 @@ export const SIMULATION = {
 	REMOVE_DISTANCE_AU: 200,
 	CALC_INTERVAL: 60,
 	CALC_EXPAND_DIV_NUM: 20,
-	CALC_SUB_STEPS_BASE: 600,
-	CALC_SUB_STEPS_MAX: 480,
 	MIN_GRAVITY_CALC_MASS: 1e10, // t
 	DEFAULT_OBJECT_MASS: 1, // t
 	DEFAULT_OBJECT_RADIUS: 1, // m
 	MAX_FRAME_ELAPSED_MS: 1000, // ms
+	RUNTIME_SNAPSHOT_TIMEOUT_MS: 2000, // ms (save: wait for Worker runtime-state snapshot)
+	RUNTIME_RESTORE_MAX_TIME_S: 1e10, // s (upper bound accepted for restored timers / flight time, ~317 years)
 
 	// Adaptive sub-step configurations
 	SUB_STEPS: {
@@ -77,7 +77,11 @@ export const AERO_DYNAMIC = {
 	ROCKET_DEFAULT_CD: 0.2,
 	DEFAULT_SCALE_HEIGHT: 8500, // m
 	FADE_START_RATIO: 0.8,
-	LOW_VELOCITY_SQ: 0.01 // (m/s)^2
+	LOW_VELOCITY_SQ: 0.01, // (m/s)^2
+	TRANSONIC_MACH_MIN: 0.82,
+	TRANSONIC_MACH_MAX: 1.22,
+	TRANSONIC_PEAK_MACH: 1.00,
+	TRANSONIC_MIN_PRES_RATIO: 0.015
 };
 
 // Debris generation
@@ -265,8 +269,6 @@ export const RENDER = {
 		COLOR_PRE: "rgba(0, 200, 160, 0.65)",
 		COLOR_SOLID: "rgba(0, 255, 204, 0.95)",
 		COLOR_FLIGHT: "rgba(0, 200, 160, 0.65)",
-		COLOR_ORBIT: "rgba(100, 200, 255, 0.6)",
-		COLOR_FALL: "rgba(255, 100, 100, 0.6)",
 		MIN_SCREEN_DIST_SQ: 4.0,
 		SMOOTH_CURVE_ENABLED: false,
 		MIN_SMOOTH_SEGMENTS: 3,
@@ -301,9 +303,11 @@ export const RENDER = {
 export const TRAJECTORY_PREDICTION = {
 	MAX_SIM_TIME_SEC: 365.25 * 24 * 60 * 60, // 1 year (365.25 days)
 	DEFAULT_DURATION_MONTHS: 1.0,
-	MIN_DURATION_MONTHS: 0.2,
+	MIN_DURATION_MONTHS: 0.2, // #pred-duration slider min (index.html)
+	MAX_DURATION_MONTHS: 36, // #pred-duration slider max (index.html); a saved or mission period is clamped to [MIN, MAX] (design §4.13-18)
 	MAX_POINTS: 3000,
-	MAX_STEPS: 100000,
+	MAX_STEPS: 120000,
+	MAX_STEPS_CAP: 340000, // deterministic upper bound of integration steps per prediction; ~= main's near-host step count so the sync block stays close to main
 	DUMMY_ROCKET_ID: 999999,
 	DEFAULT_MAX_G: 4.0,
 	UPDATE_THROTTLE_MS: 150,
@@ -337,9 +341,22 @@ export const TRAJECTORY_PREDICTION = {
 		TIME_POST_BURNOUT_S: 1.0,
 		TIME_COAST_S: 1800.0,
 		ANGLE_DELTA_RAD: 0.02,
+		HEADING_DELTA_RAD: 0.035,
+		MIN_HEADING_SPEED_M_S: 5.0,
 		TIME_ANGLE_S: 5.0,
+		TIME_HEADING_COAST_S: 2.5,
+		TIME_APSIDAL_COAST_S: 2.0,
 		NEAR_BODY_DIST_M: 10000000,
-		TIME_NEAR_BODY_S: 15.0
+		TIME_NEAR_BODY_S: 15.0,
+		MIN_SAMPLE_DT_S: 0.05,
+		MAX_ANGLE_STEP_RAD: 0.12, // hard smoothness cap: never let position/heading angle advance more than this between samples
+		MIN_SAMPLE_DISPLACEMENT_M_SQ: 1e-4,
+		BUDGET_SOFT_THRESHOLD_RATIO: 0.55
+	},
+	// Drawn-frame switch (host-fixed -> host-centred inertial): besides orbit insertion, a vehicle above the
+	// atmosphere that is escaping (E >= 0) or farther than this altitude is no longer tied to the ground.
+	FRAME_SWITCH: {
+		MAX_HOST_FIXED_ALT_M: 50000000 // 50,000 km
 	},
 	// Event detection thresholds
 	EVENTS: {
@@ -355,8 +372,7 @@ export const TRAJECTORY_PREDICTION = {
 		APOAPSIS_MIN_STEP: 20,
 		ORBIT_MIN_ALT_M: 100000,
 		ORBIT_CIRC_RATIO: 0.95,
-		ORBIT_RADIAL_VEL_MIN: -50.0,
-		ORBIT_HORIZONTAL_VEL_MIN_M_S: 7500.0
+		ORBIT_RADIAL_VEL_MIN: -50.0
 	},
 	// Fallback synchronous simulation limits
 	SYNC: {
@@ -427,7 +443,6 @@ export const TELEMETRY = {
 // Flight computer
 export const FLIGHT_COMPUTER_CONFIG = {
 	TOWER_CLEARANCE_TIME: 10,
-	TOWER_CLEARANCE_MIN_Q: 0.1,
 	TOWER_CLEARANCE_MAX_ALT: 1000,
 	MAX_TURN_RATE_PER_SEC: 0.1,
 	COAST_TURN_RATE_PER_SEC: 1.5,
@@ -461,7 +476,7 @@ export const FLIGHT_COMPUTER_CONFIG = {
 
 // Communication buffer structure
 export const CALC_BUFFER_CONFIG = {
-	OBJ_ATTR_COUNT: 47
+	OBJ_ATTR_COUNT: 51
 };
 
 export const BUFFER_INDEX = {
@@ -476,8 +491,30 @@ export const BUFFER_INDEX = {
 	DOMINANT_BODY_ID: 37, DIST_TO_DOMINANT: 38, OXID_MASS: 39,
 	TM_TANK_PRES_FUEL: 40, TM_TANK_PRES_OXID: 41,
 	TM_STAGE_INDEX: 42, TM_TOTAL_STAGES: 43, DEBRIS_SUB_TYPE: 44,
-	TM_AMBIENT_PRES_RATIO: 45, TM_CURRENT_ISP: 46
+	TM_AMBIENT_PRES_RATIO: 45, TM_CURRENT_ISP: 46,
+	ROTATION_ANGLE: 47,
+	TM_MACH: 48,
+	STAGE_STATE_CODE: 49,
+	STG_TIMER: 50
 };
+
+export const STAGE_STATE_TO_CODE = Object.freeze({
+	PRE_LAUNCH: 0,
+	STG_BURNING: 1,
+	STG_MECO: 2,
+	INTERSTAGE_COAST: 3,
+	STG_COAST: 4,
+	ORBITAL_COAST: 5
+});
+
+export const CODE_TO_STAGE_STATE = Object.freeze([
+	'PRE_LAUNCH',
+	'STG_BURNING',
+	'STG_MECO',
+	'INTERSTAGE_COAST',
+	'STG_COAST',
+	'ORBITAL_COAST'
+]);
 
 export const OBJECT_STATE = {
 	"ACTIVE": 0,
@@ -517,7 +554,7 @@ export const LAUNCH_SEQUENCES = {
 				{ id: "tower_clear", type: "relativeAltM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
 				{ id: "pitch_roll", type: "relativeAltM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
 				{ id: "pitch_downrange", type: "relativeAltM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
-				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
+				{ id: "approach_maxq", type: "status", operator: "==", value: TELEMETRY.STATUS.MAX_Q, audio: "fl_approach_maxq", once: true },
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
 				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true },
 				{ id: "srb_sep", type: "isBoosterSeparated", operator: "==", value: true, audio: "fl_srb_sep", once: true },
@@ -607,7 +644,7 @@ export const LAUNCH_SEQUENCES = {
 				{ id: "tower_clear", type: "relativeAltM", operator: ">", value: 120, audio: "fl_tower_clear", once: true },
 				{ id: "pitch_roll", type: "relativeAltM", operator: ">", value: 500, audio: "fl_pitch_roll", once: true },
 				{ id: "pitch_downrange", type: "relativeAltM", operator: ">", value: 2000, audio: "fl_pitch_downrange", once: true },
-				{ id: "approach_maxq", type: "status", operator: "==", value: 2, audio: "fl_approach_maxq", once: true },
+				{ id: "approach_maxq", type: "status", operator: "==", value: TELEMETRY.STATUS.MAX_Q, audio: "fl_approach_maxq", once: true },
 				{ id: "traj_nominal", type: "met", operator: ">", value: 45, audio: "fl_traj_nominal", once: true },
 				{ id: "telemetry_good", type: "met", operator: ">", value: 80, audio: "fl_telemetry_good", once: true },
 				{ id: "srb_sep", type: "isBoosterSeparated", operator: "==", value: true, audio: "fl_srb_sep", once: true },
@@ -719,7 +756,6 @@ export const MULTISTAGE_ROCKET = {
 	ORBITAL_CUTOFF_CIRCULAR_MIN_PE_KM: 140.0,
 	COMMANDED_CUTOFF_MIN_FLIGHT_TIME_SEC: 15.0,
 	FAIRING_DEFAULT_ALT_KM: 110,
-	STG_SEP_LAMP_DURATION_SEC: 3.5,
 	STAGE_SEP_FORWARD_PUSH_M_S: 1.5,
 	FAIRING_SEP_LATERAL_SPEED_M_S: 8.0,
 	FAIRING_SEP_BACKWARD_SPEED_M_S: -2.0,
@@ -881,6 +917,12 @@ export const SOUND = {
 };
 
 // Pressure simulation parameters
+// Tank pressure state machine states (allow-list for save/load restore)
+export const TANK_PRESSURE_STATES = Object.freeze([
+	'ROLLOUT_FILL', 'UNPRESSURIZED', 'PRESSURIZING', 'NOMINAL', 'IGNITION_TRANSIENT',
+	'MECO_TRANSIENT', 'POST_MECO_VENT', 'POST_MECO_HOLD', 'DEPLETED'
+]);
+
 export const TANK_PRESSURE_SIM = {
 	GROUND_KPA: 101.3,
 	UNPRESSURIZED_KPA: 101.3,
@@ -1019,7 +1061,8 @@ export const DEPLOY_PROFILES = {
 		name: "Galactic Center",
 		clearPrevious: true,
 		staticObjects: [
-			{ template: "SgrAStar", x: 0, y: 0 },
+			// The body this world is built around: it replaces the world center (design §4.13-32)
+			{ template: "SgrAStar", x: 0, y: 0, worldCenter: true },
 			{ template: "Sun", host: "Sagittarius A*" },
 			{ template: "ProximaCentauri", host: "Sagittarius A*" },
 			{ template: "AlphaCentauriA", host: "Sagittarius A*" },
@@ -1057,5 +1100,22 @@ export const ROCKET_FLAG = Object.freeze({
 	FAIRING_SEPARATED:  1 << 12,
 	STAGE1_SEPARATED:   1 << 13,
 	STAGE2_SEPARATED:   1 << 14,
-	PAYLOAD_SEPARATED:  1 << 15
+	PAYLOAD_SEPARATED:  1 << 15,
+	RCS_CW:             1 << 16,
+	RCS_CCW:            1 << 17,
+	RCS_ULLAGE:         1 << 18,
+	HAS_PAYLOAD_PROP:   1 << 19
+});
+
+export const RCS_CONFIG = Object.freeze({
+	ATTITUDE_DEADBAND_RAD: 0.015,
+	SLEW_CONTINUOUS_RAD: 0.08,
+	LOW_AERO_PRES_RATIO: 0.35,
+	PULSE_PERIOD_S: 0.45,
+	PULSE_DUTY: 0.42,
+	POST_SEP_SETTLE_S: 2.5,
+	POST_SEP_DAMP_PERIOD_S: 0.35,
+	POST_SEP_DAMP_PULSE_S: 0.09,
+	ULLAGE_PRE_IGNITION_S: 1.5,
+	ULLAGE_POST_COAST_S: 1.2
 });

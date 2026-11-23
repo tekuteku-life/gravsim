@@ -1,0 +1,27 @@
+{
+	"env": {
+		"browser": true,
+		"es6": true,
+		"worker": true,
+		"node": true
+	},
+	"globals": {
+		"globalThis": "readonly"
+	},
+	"parserOptions": {
+		"ecmaVersion": 2022,
+		"sourceType": "module"
+	},
+	"rules": {
+		"no-undef": "error",
+		"no-dupe-class-members": "error",
+		"no-dupe-keys": "error",
+		"no-duplicate-case": "error",
+		"no-unreachable": "error",
+		"no-constant-condition": ["error", { "checkLoops": false }],
+		"no-redeclare": "error",
+		"no-self-assign": "error",
+		"no-unused-vars": ["warn", { "args": "none", "varsIgnorePattern": "^_" }],
+		"valid-typeof": "error"
+	}
+}

@@ -1,7 +1,7 @@
 
 // gravsim_camera.js
 
-import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { MathUtils, UnitConvertUtils, isLiveObject } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 import { ROCKET_LAUNCHER_CONFIG } from './gravsim_const.js';
 
@@ -14,6 +14,8 @@ export class Camera {
 	constructor() {
 		this.trackingTarget = null;
 		this.autoTrackHost = null;
+		/** @type {any} the rocket auto tracking follows (setAutoTracking) */
+		this.autoTrackRocket = null;
 
 		// Zoom limits
 		this.minZoomExp = -2;
@@ -108,12 +110,14 @@ export class Camera {
 
 	setAutoTracking(target, host) {
 		this.autoTrackHost = host;
+		this.autoTrackRocket = target;
 		this.setTrackingTarget(target);
 		this.setTargetOffset(0, 0);
 	}
 
 	stopAutoTracking(fallbackHost = null) {
 		this.autoTrackHost = null;
+		this.autoTrackRocket = null;
 		if (fallbackHost) {
 			this.fitToTarget(fallbackHost);
 		}
@@ -141,6 +145,14 @@ export class Camera {
 
 		const rocket = this.trackingTarget;
 		const host = this.autoTrackHost;
+		// The rocket the tracking was set for was removed or destroyed: stop, as a pan would (the zoom and the rotation
+		// stay). Earlier the tracking went on with whatever the camera was moved to (Clear Selected's next object, the
+		// fallback of Universe: the host), which was then tracked as the rocket (on the host: altitude -R, the closest
+		// zoom) until the user panned (design §4.13-31)
+		if (!isLiveObject(this.autoTrackRocket ?? rocket) || rocket === host) {
+			this.stopAutoTracking();
+			return;
+		}
 
 		const dx = rocket.x - host.x;
 		const dy = rocket.y - host.y;

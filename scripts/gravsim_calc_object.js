@@ -3,14 +3,15 @@
 
 import {
 	PHYSICS, ROCHE_LIMIT, AERO_DYNAMIC,
-	TANK_PRESSURE_SIM,
+	TANK_PRESSURE_SIM, TANK_PRESSURE_STATES,
 	OBJECT_TYPES, SIMULATION,
 	MULTISTAGE_ROCKET,
-	TRAJECTORY_PREDICTION
+	TRAJECTORY_PREDICTION,
+	RCS_CONFIG
 } from './gravsim_const.js';
 import { presetManager, ROCKET_FUELS } from './gravsim_preset_manager.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
-import { MathUtils, UnitConvertUtils, normalizeRocketConfig } from './gravsim_utils.js';
+import { MathUtils, UnitConvertUtils, normalizeRocketConfig, AeroUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * Calculation Object Class for Base
@@ -42,6 +43,9 @@ class GravSimCalcObject {
 
 		this.inAtmosphere = false;
 		this.isEscaping = false;
+		this.mach = 0;
+		/** @type {any} */
+		this.param = null;
 
 		this.maxGForce = -1;
 		this.dominantBody = null;
@@ -173,11 +177,13 @@ class GravSimCalcObject {
 
 		// Determine Area and Cd
 		const aeroDynamicParam = this._determinDynamicParam(vRelY, vRelX, vRelSq, rho);
+		this.mach = 0;
 		if (vRelSq === 0) {
 			return;
 		}
 
 		const vRel = Math.sqrt(vRelSq); // m/s
+		this.mach = AeroUtils.computeMach(vRel, altM, refParam);
 
 		// Dynamic Pressure & Drag Force
 		const q = 0.5 * rho * vRelSq; // Pa
@@ -194,8 +200,8 @@ class GravSimCalcObject {
 
 		const dragForce = q * aeroDynamicParam.cd * aeroDynamicParam.area; // N
 
-		// Division by mass in kg using invMassKg
-		const accelDrag = dragForce * (this.invMassKg || (this.invMass / 1000)); // m/s^2
+		// Division by mass in kg (invMass is 1/t)
+		const accelDrag = dragForce * (this.invMass / 1000); // m/s^2
 
 		this.ax -= (vRelX / vRel) * accelDrag;
 		this.ay -= (vRelY / vRel) * accelDrag;
@@ -205,8 +211,67 @@ class GravSimCalcObject {
 		this.inAtmosphere = false;
 		this.ambientPresRatio = 0.0;
 		this._currentQ = 0;
+		this.mach = 0;
 		if (this._qAxialKpa !== undefined) { this._qAxialKpa = 0; }
 		if (this._qLateralKpa !== undefined) { this._qLateralKpa = 0; }
+	}
+
+	/**
+	 * Exact integrator state for save/load (m, m/s, m/s^2; the main thread keeps pixels, whose round trip is not exact).
+	 * ax/ay is a(t) of the velocity-Verlet step and the aero cache belongs to the same force evaluation. Inside a step
+	 * both are evaluated with the velocity of the previous step, so a reload cannot re-derive them from the saved
+	 * velocity: PhysicsEngine.addObject re-applies them after its force evaluation (applyRestoredForces).
+	 */
+	getKinematicState() {
+		return { x: this.x, y: this.y, vx: this.vx, vy: this.vy, ax: this.ax, ay: this.ay, aero: this._getAeroCache() };
+	}
+
+	/** Velocity-dependent aerodynamic cache of the last force evaluation (position-only values are re-derived). */
+	_getAeroCache() {
+		return { currentQ: this._currentQ || 0, mach: this.mach || 0 };
+	}
+
+	/** @param {any} aero validated subset of _getAeroCache() */
+	_applyAeroCache(aero) {
+		if (aero.currentQ !== undefined) { this._currentQ = aero.currentQ; }
+		if (aero.mach !== undefined) { this.mach = aero.mach; }
+	}
+
+	/**
+	 * Validate and apply a getKinematicState() value: the position and velocity at once, the acceleration and the aero
+	 * cache are kept in _restoredForces for applyRestoredForces(). Partial or non-finite kinematics are ignored as a whole.
+	 * @param {any} k
+	 * @returns {boolean} true when applied
+	 */
+	restoreKinematicState(k) {
+		if (!k || typeof k !== 'object') { return false; }
+		const keys = ['x', 'y', 'vx', 'vy', 'ax', 'ay'];
+		if (!keys.every(key => Number.isFinite(k[key]))) { return false; }
+		this.x = k.x;
+		this.y = k.y;
+		this.vx = k.vx;
+		this.vy = k.vy;
+		const aero = {};
+		const src = (k.aero && typeof k.aero === 'object') ? k.aero : {};
+		const nonNeg = (v) => Number.isFinite(v) && v >= 0;
+		if (nonNeg(src.currentQ)) { aero.currentQ = src.currentQ; }
+		if (nonNeg(src.mach)) { aero.mach = src.mach; }
+		if (nonNeg(src.qAxialKpa)) { aero.qAxialKpa = src.qAxialKpa; }
+		if (nonNeg(src.qLateralKpa)) { aero.qLateralKpa = src.qLateralKpa; }
+		if (nonNeg(src.aoaDeg) && src.aoaDeg <= 180) { aero.aoaDeg = src.aoaDeg; }
+		if (Number.isFinite(src.progradeAngle)) { aero.progradeAngle = src.progradeAngle; }
+		this._restoredForces = { ax: k.ax, ay: k.ay, aero };
+		this.applyRestoredForces();
+		return true;
+	}
+
+	/** Re-apply the saved a(t) and aero cache (until the first step after a load, see PhysicsEngine._restoredPending). */
+	applyRestoredForces() {
+		const f = this._restoredForces;
+		if (!f) { return; }
+		this.ax = f.ax;
+		this.ay = f.ay;
+		this._applyAeroCache(f.aero);
 	}
 }
 
@@ -218,6 +283,23 @@ export class CalcCelestialBody extends GravSimCalcObject {
 		super(id, name, OBJECT_TYPES.CELESTIAL, x, y, vx, vy, ax, ay, radius, generation);
 		this.mass = mass; // t
 		this.invMass = mass > 0 ? 1.0 / mass : 0; // 1/t
+		this.rotationAngle = 0;
+		this.rotationPeriod = 0;
+	}
+
+	/** Worker-only state for save/load: exact kinematics and the mass in Worker units (no t <-> kg round trip). */
+	getRuntimeState() {
+		return { kinematics: this.getKinematicState(), mass: this.mass };
+	}
+
+	/** @param {any} state value previously produced by getRuntimeState() */
+	restoreRuntimeState(state) {
+		if (!state || typeof state !== 'object') return;
+		this.restoreKinematicState(state.kinematics);
+		if (Number.isFinite(state.mass) && state.mass > 0) {
+			this.mass = state.mass;
+			this.invMass = 1.0 / state.mass;
+		}
 	}
 }
 
@@ -269,6 +351,7 @@ export class CalcRocket extends GravSimCalcObject {
 		this.stageState = this.isHoldDown ? 'PRE_LAUNCH' : 'STG_BURNING';
 		this.stgTimer = 0;
 		this.isPayloadSeparated = false;
+		this.isStage2Separated = false;
 		this._pendingDebris = [];
 
 		this.thrustAngle = thrustData?.thrustAngle || 0; // rad
@@ -279,6 +362,7 @@ export class CalcRocket extends GravSimCalcObject {
 		this.disableOrbitalCutoff = thrustData?.disableOrbitalCutoff || false;
 		this.targetApogeeKm = thrustData?.targetApogeeKm || 0;
 		this.targetPerigeeKm = thrustData?.targetPerigeeKm || 0;
+		this.targetVInfKmS = Number(thrustData?.targetVInfKmS) || 0;
 		this.hostId = thrustData?.hostId !== undefined ? thrustData.hostId : null;
 		this.hostAngleRad = thrustData?.hostAngleRad || 0; // rad
 		this.hostAltM = thrustData?.hostAltM || 0; // m
@@ -290,6 +374,14 @@ export class CalcRocket extends GravSimCalcObject {
 		this._aoaDeg = 0; // deg
 		this._progradeAngle = this.thrustAngle; // rad (aligned with initial thrust angle)
 		this._lastDominantBody = null;
+		this.rcsCw = false;
+		this.rcsCcw = false;
+		this.rcsUllage = false;
+		this._postSepRcsTimer = 0;
+		this._ullageRestartTimer = 0;
+		// RCS thruster flags/timers are render-only (renderer + worker bridge flags). The trajectory predictor
+		// disables them to keep its per-step cost down; physics never reads them.
+		this.trackRcsVisualState = thrustData?.trackRcsVisualState !== false;
 
 		this.ambientPresRatio = this.isHoldDown ? 1.0 : (thrustData?.ambientPresRatio !== undefined ? thrustData.ambientPresRatio : 0.0);
 		this.currentIsp = 0;
@@ -302,10 +394,76 @@ export class CalcRocket extends GravSimCalcObject {
 			this.coreThrustVac = UnitConvertUtils.kn2n(this.boosters.coreThrustKN || 2940);
 		}
 
-		// Activate initial stage
-		this._activateStage(0);
+		// Restore branch is taken only on explicit save/load contract (never inferred from transient fields)
+		const hasRestoredRuntime = thrustData?.restoredRuntimeState === true;
 
-		this.objParam = thrustData?.objParam || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(name) : null);
+		if (hasRestoredRuntime) {
+			this.currentStageIndex = Math.max(0, Math.min(Number(thrustData?.currentStageIndex) || 0, this.totalStages));
+			this.isPayloadSeparated = Boolean(thrustData?.isPayloadSeparated);
+			this.isStage2Separated = Boolean(
+				thrustData?.isStage2Separated ||
+				this.currentStageIndex >= 2 ||
+				(this.isPayloadSeparated && this.totalStages <= 2)
+			);
+			this.isBoosterBurnout = Boolean(thrustData?.isBoosterBurnout);
+			this.isBoosterSeparated = Boolean(thrustData?.isBoosterSeparated);
+			this.isBoosterIgnited = Boolean(this.hasBoosters && this.currentStageIndex === 0 && !this.isBoosterBurnout && !this.isBoosterSeparated && !this.isHoldDown && this.isIgnited);
+			this.hasPayloadPropulsion = Boolean(thrustData?.hasPayloadPropulsion || (this.isPayloadSeparated && this.payload?.propulsion?.enabled));
+			this.stageState = thrustData?.stageState || (this.isHoldDown ? 'PRE_LAUNCH' : 'STG_BURNING');
+			this.stgTimer = Number.isFinite(thrustData?.stgTimer) ? thrustData.stgTimer : 0;
+
+			if (this.isPayloadSeparated && this.hasPayloadPropulsion && this.payload?.propulsion) {
+				const prop = this.payload.propulsion;
+				const fuel = ROCKET_FUELS[prop.fuelType] || ROCKET_FUELS['liquid'] || { isp: 320, ispVac: 320, ispSl: 282, ofRatio: 2.5 };
+				this.fuelType = prop.fuelType || 'liquid';
+				this.thrustForceVac = ((prop.thrustKN ?? prop.thrustKn ?? 0)) * 1000;
+				this.ispVac = prop.ispVac || prop.isp || fuel.ispVac || fuel.isp || 320;
+				this.ispSl = prop.ispSl !== undefined ? prop.ispSl : (fuel.ispSl !== undefined ? fuel.ispSl : Math.round(this.ispVac * 0.88));
+				this.ofRatio = prop.ofRatio !== undefined ? prop.ofRatio : (fuel.ofRatio || 0);
+				if (this.payload?.radius) { this.radius = this.payload.radius; }
+			} else if (this.isPayloadSeparated) {
+				this.fuelType = 'liquid';
+				this.thrustForceVac = 0;
+				this.ispVac = 320;
+				this.ispSl = 320;
+				this.ofRatio = 0;
+				if (this.payload?.radius) { this.radius = this.payload.radius; }
+			} else {
+				const stg = this.stages[Math.min(this.currentStageIndex, this.stages.length - 1)] || this.stages[0];
+				const fuel = ROCKET_FUELS[stg.fuelType] || ROCKET_FUELS['liquid'] || { isp: 300, ispVac: 300, ispSl: 260, ofRatio: 2.5 };
+				this.fuelType = stg.fuelType || 'liquid';
+				const nomThrustKN = (this.currentStageIndex === 0 && this.hasBoosters && this.isBoosterBurnout && this.boosters?.coreThrustKN)
+					? this.boosters.coreThrustKN
+					: stg.thrustKN;
+				this.thrustForceVac = UnitConvertUtils.kn2n(nomThrustKN || 0);
+				this.ispVac = stg.ispVac || stg.isp || fuel.ispVac || fuel.isp || 300;
+				this.ispSl = stg.ispSl !== undefined ? stg.ispSl : (fuel.ispSl !== undefined ? fuel.ispSl : Math.round(this.ispVac * 0.88));
+				this.ofRatio = stg.ofRatio !== undefined ? stg.ofRatio : (fuel.ofRatio || 0);
+				// separateBoosters() removed the casings' dry mass from stages[0] in the Worker only (the saved stages are the
+				// main-thread copy): repeat it so the later stage-1 debris and the upper-stage mass sum match the saved flight
+				if (this.currentStageIndex === 0 && this.hasBoosters && this.isBoosterSeparated && this.stages[0]) {
+					const boosterDryMass = this.boosters.dryMassT || (this.boosters.count === 4 ? 40.0 : 20.0);
+					this.stages[0].dryMassT = Math.max(0, (this.stages[0].dryMassT || 0) - boosterDryMass);
+				}
+			}
+
+			this.dryMass = Number.isFinite(dryMass) ? dryMass : (thrustData?.dryMass || 0);
+			this.fuelMass = Math.max(0, Number.isFinite(fuelMass) ? fuelMass : 0);
+			this.oxidMass = Math.max(0, Number.isFinite(oxidMass) ? oxidMass : 0);
+			this.burnTime = Math.max(0, Number.isFinite(thrustData?.burnTime) ? thrustData.burnTime : 0);
+			this.massLossRate = this.burnTime > 0 ? ((this.fuelMass + this.oxidMass) / this.burnTime) : 0;
+			this.thrustForce = (this.stageState === 'ORBITAL_COAST' || (this.isPayloadSeparated && !this.hasPayloadPropulsion)) ? 0 : this.thrustForceVac;
+			this.currentIsp = this.getEffectiveIsp(this.ambientPresRatio);
+			this.updateTotalMass();
+		} else {
+			// Activate initial stage
+			this._activateStage(0);
+		}
+
+		// Name the aero/structure parameters were resolved from. It is kept across saves because the rocket is renamed to
+		// the payload at separation (PhysicsEngine.addObject resolves a restored rocket's objParam from it).
+		this._paramName = (typeof thrustData?.paramName === 'string' && thrustData.paramName) ? thrustData.paramName : name;
+		this.objParam = thrustData?.objParam || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(this._paramName) : null);
 
 		this.flightComputer = new FlightComputer({
 			maxGLimit: this.maxGLimit,
@@ -314,7 +472,9 @@ export class CalcRocket extends GravSimCalcObject {
 			thrustAngle: this.thrustAngle,
 			flightProfile: this.flightProfile,
 			hostAngleRad: this.hostAngleRad,
-			disableOrbitalCutoff: this.disableOrbitalCutoff
+			disableOrbitalCutoff: this.disableOrbitalCutoff,
+			targetApogeeKm: this.targetApogeeKm,
+			targetPerigeeKm: this.targetPerigeeKm
 		});
 
 		// Pressure simulation parameters
@@ -331,8 +491,125 @@ export class CalcRocket extends GravSimCalcObject {
 			dt: 0, mass: 0, dryMass: 0, fuelMass: 0, thrustForce: 0, thrustRatio: 0,
 			burnTime: 0, massLossRate: 0, x: 0, y: 0, vx: 0, vy: 0, ax: 0, ay: 0,
 			qAxialKpa: 0, qLateralKpa: 0, aoaDeg: 0, progradeAngle: 0, refBody: null,
-			distToRefM: 0, isHoldDown: false, isIgnited: false
+			distToRefM: 0, isHoldDown: false, isIgnited: false, stageState: this.stageState,
+			targetApogeeKm: this.targetApogeeKm, targetPerigeeKm: this.targetPerigeeKm,
+			disableOrbitalCutoff: this.disableOrbitalCutoff
 		};
+
+		if (hasRestoredRuntime && thrustData?.runtimeState) {
+			this.restoreRuntimeState(thrustData.runtimeState);
+		}
+	}
+
+	/**
+	 * Worker-only runtime state that is not carried by the per-frame buffer (save/load snapshot).
+	 */
+	getRuntimeState() {
+		return {
+			flightComputer: this.flightComputer ? this.flightComputer.getRuntimeState() : null,
+			isBoosterIgnited: Boolean(this.isBoosterIgnited),
+			boosterBurnTimer: this.boosterBurnTimer || 0,
+			boosterSepTimer: this.boosterSepTimer || 0,
+			presState: this.presState,
+			presTimer: this.presTimer || 0,
+			tankPresFuel: this.tankPresFuel || 0,
+			tankPresOxid: this.tankPresOxid || 0,
+			presStartF: this._presStartF || 0,
+			presStartO: this._presStartO || 0,
+			postSepRcsTimer: this._postSepRcsTimer || 0,
+			ullageRestartTimer: this._ullageRestartTimer || 0,
+			// Rev 6.11 (G3-1-01): the remaining Worker-only state that the next step reads before rewriting it
+			thrustRatio: this._thrustRatio || 0,
+			wasFiring: Boolean(this._wasFiring),
+			massLossRate: this.massLossRate || 0,
+			thrustForce: this.thrustForce || 0,
+			thrustForceVac: this.thrustForceVac || 0,
+			ispVac: this.ispVac || 0,
+			ispSl: this.ispSl || 0,
+			ofRatio: this.ofRatio || 0,
+			fuelType: typeof this.fuelType === 'string' ? this.fuelType : null,
+			hostAngleRad: this.hostAngleRad || 0,
+			ventStartF: Number.isFinite(this._ventStartF) ? this._ventStartF : null,
+			ventStartO: Number.isFinite(this._ventStartO) ? this._ventStartO : null,
+			noiseFiltF: this._noiseFiltF || 0,
+			noiseFiltO: this._noiseFiltO || 0,
+			paramName: this._paramName || null,
+			kinematics: this.getKinematicState()
+		};
+	}
+
+	_getAeroCache() {
+		return {
+			currentQ: this._currentQ || 0,
+			mach: this.mach || 0,
+			qAxialKpa: this._qAxialKpa || 0,
+			qLateralKpa: this._qLateralKpa || 0,
+			aoaDeg: this._aoaDeg || 0,
+			progradeAngle: this._progradeAngle || 0
+		};
+	}
+
+	/** @param {any} aero */
+	_applyAeroCache(aero) {
+		super._applyAeroCache(aero);
+		if (aero.qAxialKpa !== undefined) { this._qAxialKpa = aero.qAxialKpa; }
+		if (aero.qLateralKpa !== undefined) { this._qLateralKpa = aero.qLateralKpa; }
+		if (aero.aoaDeg !== undefined) { this._aoaDeg = aero.aoaDeg; }
+		if (aero.progradeAngle !== undefined) { this._progradeAngle = aero.progradeAngle; }
+	}
+
+	/** @param {any} state value previously produced by getRuntimeState() */
+	restoreRuntimeState(state) {
+		if (!state || typeof state !== 'object') return;
+		const maxT = SIMULATION.RUNTIME_RESTORE_MAX_TIME_S;
+		const num = (v) => (Number.isFinite(v) ? Math.min(maxT, Math.max(0, v)) : 0);
+		const kpa = (v) => (Number.isFinite(v) ? Math.min(TANK_PRESSURE_SIM.MAX_SCALE_KPA * 2, Math.max(0, v)) : 0);
+		if (this.flightComputer && state.flightComputer) {
+			this.flightComputer.restoreRuntimeState(state.flightComputer);
+		}
+		if (this.hasBoosters && this.currentStageIndex === 0 && !this.isBoosterBurnout && !this.isBoosterSeparated) {
+			this.isBoosterIgnited = Boolean(state.isBoosterIgnited) && !this.isHoldDown && this.isIgnited;
+		} else if (this.hasBoosters && (this.isBoosterBurnout || this.currentStageIndex >= 1) && typeof state.isBoosterIgnited === 'boolean') {
+			// Rev 6.11: after burnout (or on an upper stage) the flag no longer selects the thrust model; keep the saved
+			// value so that the restored state equals the saved one
+			this.isBoosterIgnited = state.isBoosterIgnited;
+		}
+		this.boosterBurnTimer = num(state.boosterBurnTimer);
+		this.boosterSepTimer = num(state.boosterSepTimer);
+		if (TANK_PRESSURE_STATES.includes(state.presState)) {
+			this.presState = state.presState;
+		}
+		this.presTimer = num(state.presTimer);
+		this.tankPresFuel = kpa(state.tankPresFuel);
+		this.tankPresOxid = kpa(state.tankPresOxid);
+		this._presStartF = kpa(state.presStartF);
+		this._presStartO = kpa(state.presStartO);
+		this._postSepRcsTimer = num(state.postSepRcsTimer);
+		this._ullageRestartTimer = num(state.ullageRestartTimer);
+
+		// Rev 6.11 (G3-1-01). Each entry is optional (saves before Rev 6.11 keep the values derived by the constructor).
+		// Thrust state of the last step: applyThrust() and the engine-start detection of updatePressure() read it first
+		if (Number.isFinite(state.thrustRatio)) { this._thrustRatio = Math.min(1, Math.max(0, state.thrustRatio)); }
+		if (typeof state.wasFiring === 'boolean') { this._wasFiring = state.wasFiring; }
+		// Constant within a burn (not (fuel + oxid) / burnTime of the reduced values); hold-down and SRB phases set the forces
+		const nonNeg = (v) => Number.isFinite(v) && v >= 0;
+		if (nonNeg(state.massLossRate)) { this.massLossRate = state.massLossRate; }
+		if (nonNeg(state.thrustForce)) { this.thrustForce = state.thrustForce; }
+		if (nonNeg(state.thrustForceVac)) { this.thrustForceVac = state.thrustForceVac; }
+		// Engine specs of the active stage / payload (a passive payload keeps those of the jettisoned upper stage)
+		if (nonNeg(state.ispVac)) { this.ispVac = state.ispVac; }
+		if (nonNeg(state.ispSl)) { this.ispSl = state.ispSl; }
+		if (nonNeg(state.ofRatio)) { this.ofRatio = state.ofRatio; }
+		if (typeof state.fuelType === 'string' && (state.fuelType in ROCKET_FUELS)) { this.fuelType = state.fuelType; }
+		// The pad angle advances with the host's rotation during hold-down (the main thread keeps the rollout angle)
+		if (Number.isFinite(state.hostAngleRad)) { this.hostAngleRad = state.hostAngleRad; }
+		if (Number.isFinite(state.ventStartF)) { this._ventStartF = kpa(state.ventStartF); }
+		if (Number.isFinite(state.ventStartO)) { this._ventStartO = kpa(state.ventStartO); }
+		// Low-pass state of the sensor noise, in [-1, 1] by construction
+		const unit = (v) => Math.min(1, Math.max(-1, v));
+		if (Number.isFinite(state.noiseFiltF)) { this._noiseFiltF = unit(state.noiseFiltF); }
+		if (Number.isFinite(state.noiseFiltO)) { this._noiseFiltO = unit(state.noiseFiltO); }
+		this.restoreKinematicState(state.kinematics);
 	}
 
 	_activateStage(stageIdx) {
@@ -433,6 +710,8 @@ export class CalcRocket extends GravSimCalcObject {
 		const stage = this.stages[this.currentStageIndex];
 		if (!stage) { return; }
 
+		this._postSepRcsTimer = RCS_CONFIG.POST_SEP_SETTLE_S;
+
 		// 1. Calculate jettison velocity & position
 		const sepAngle = this.thrustAngle + Math.PI; // Backward
 		const sepSpeedM = stage.jettisonSpeedM_S || MULTISTAGE_ROCKET.DEFAULT_JETTISON_SPEED_M_S;
@@ -507,6 +786,9 @@ export class CalcRocket extends GravSimCalcObject {
 		// 4. Advance to next stage or finish with payload separation
 		if (!isFinalStage) {
 			this.currentStageIndex++;
+			if (this.currentStageIndex >= 2) {
+				this.isStage2Separated = true;
+			}
 			this._activateStage(this.currentStageIndex);
 			this.isIgnited = false;
 			this.stageState = 'INTERSTAGE_COAST';
@@ -517,6 +799,7 @@ export class CalcRocket extends GravSimCalcObject {
 			// Final stage jettisoned: The remaining craft is the payload
 			this.currentStageIndex = this.totalStages;
 			this.isPayloadSeparated = true;
+			this.isStage2Separated = Boolean(this.isStage2Separated || this.totalStages <= 2 || this.currentStageIndex >= 2);
 			if (this.payload?.radius) {
 				this.radius = this.payload.radius;
 			}
@@ -577,6 +860,7 @@ export class CalcRocket extends GravSimCalcObject {
 		const sepAltM = (this.fairing.separationAltKm || MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM) * 1000;
 		if (force || curAltM >= sepAltM) {
 			this.fairing.isSeparated = true;
+			this._postSepRcsTimer = RCS_CONFIG.POST_SEP_SETTLE_S;
 			this.updateTotalMass();
 
 			const latAngle1 = this.thrustAngle + Math.PI / 2;
@@ -627,6 +911,7 @@ export class CalcRocket extends GravSimCalcObject {
 		if (this.disableStaging || this.isBoosterSeparated || !this.hasBoosters) { return; }
 
 		this.isBoosterSeparated = true;
+		this._postSepRcsTimer = RCS_CONFIG.POST_SEP_SETTLE_S;
 		const boosterDryMass = this.boosters.dryMassT || (this.boosters.count === 4 ? 40.0 : 20.0);
 
 		if (this.stages && this.stages[0]) {
@@ -688,6 +973,143 @@ export class CalcRocket extends GravSimCalcObject {
 				color: this.boosters.casingColor || '#f0f2f5',
 				parentRocketId: this.id
 			});
+		}
+	}
+
+	_isCurrentStageSepDeferred() {
+		const fc = this.flightComputer;
+		if (!fc || this.isPayloadSeparated) return false;
+		const cur = this.currentStageIndex || 0;
+		const total = this.totalStages || 1;
+		if (cur === 0 && total >= 2) {
+			return fc.hasScheduledAction('sep_stage1');
+		}
+		if (cur === 1 && total >= 3) {
+			return fc.hasScheduledAction('sep_stage2');
+		}
+		if (cur === total - 1) {
+			return fc.hasScheduledAction('sep_payload') || (total === 2 && cur === 1 && fc.hasScheduledAction('sep_stage2'));
+		}
+		return false;
+	}
+
+	_isPayloadSepDeferred() {
+		const fc = this.flightComputer;
+		if (!fc || this.isPayloadSeparated) return false;
+		if (fc.hasScheduledAction('sep_payload')) return true;
+		return Boolean((this.totalStages || 1) === 2 && (this.currentStageIndex || 0) === 1 && fc.hasScheduledAction('sep_stage2'));
+	}
+
+	separatePayload() {
+		if (this.disableStaging || this.isPayloadSeparated) { return; }
+
+		if (this.fairing?.enabled && !this.fairing.isSeparated) {
+			let curAltM = Infinity;
+			if (this._lastDominantBody && this._lastDistToRefM !== undefined) {
+				curAltM = this._lastDistToRefM - this._lastDominantBody.radius;
+			} else if (this._lastDominantBody) {
+				curAltM = Math.hypot(this.x - this._lastDominantBody.x, this.y - this._lastDominantBody.y) - this._lastDominantBody.radius;
+			}
+			this.separateFairing(curAltM, true);
+		}
+
+		let guard = 0;
+		const maxGuard = (this.totalStages || 1) + 2;
+		while (!this.isPayloadSeparated && this.currentStageIndex < this.totalStages && guard < maxGuard) {
+			guard++;
+			this.fuelMass = 0;
+			this.oxidMass = 0;
+			this.burnTime = 0;
+			this.isIgnited = false;
+			this._thrustRatio = 0;
+			this.separateCurrentStage();
+		}
+		this._postSepRcsTimer = RCS_CONFIG.POST_SEP_SETTLE_S;
+	}
+
+	executeProfileAction(action) {
+		if (this.disableStaging || !action) { return; }
+
+		if (action === 'sep_stage1') {
+			if (!this.isPayloadSeparated && this.currentStageIndex === 0 && this.totalStages >= 2) {
+				this.fuelMass = 0;
+				this.oxidMass = 0;
+				this.burnTime = 0;
+				this.isIgnited = false;
+				this._thrustRatio = 0;
+				this.separateCurrentStage();
+			}
+		} else if (action === 'sep_stage2') {
+			if (!this.isPayloadSeparated && this.currentStageIndex === 1) {
+				this.fuelMass = 0;
+				this.oxidMass = 0;
+				this.burnTime = 0;
+				this.isIgnited = false;
+				this._thrustRatio = 0;
+				this.separateCurrentStage();
+			}
+		} else if (action === 'sep_payload') {
+			this.separatePayload();
+		}
+	}
+
+	_updateRcsState(dt, currentThrustN, preUpdateAngle) {
+		this._postSepRcsTimer = Math.max(0, (this._postSepRcsTimer || 0) - dt);
+		this._ullageRestartTimer = Math.max(0, (this._ullageRestartTimer || 0) - dt);
+
+		if (this.isHoldDown || this.collided || this.shattered) {
+			this.rcsCw = false;
+			this.rcsCcw = false;
+			this.rcsUllage = false;
+			if (this.flightComputer?.telemetryCache) {
+				this.flightComputer.telemetryCache.rcsCw = false;
+				this.flightComputer.telemetryCache.rcsCcw = false;
+				this.flightComputer.telemetryCache.rcsUllage = false;
+			}
+			return;
+		}
+
+		const targetAngle = this.autoControl
+			? (this.flightComputer?.desiredThrustAngleRad ?? preUpdateAngle)
+			: preUpdateAngle;
+		const err = MathUtils.normalizeAngle(targetAngle - preUpdateAngle);
+
+		const allowRcs = (this.ambientPresRatio <= RCS_CONFIG.LOW_AERO_PRES_RATIO)
+			|| (currentThrustN <= 0)
+			|| (Math.abs(err) > RCS_CONFIG.SLEW_CONTINUOUS_RAD)
+			|| (this._postSepRcsTimer > 0);
+
+		const tPulse = this.flightComputer?.flightTime || 0;
+		const pulseOn = (tPulse % RCS_CONFIG.PULSE_PERIOD_S) < (RCS_CONFIG.PULSE_PERIOD_S * RCS_CONFIG.PULSE_DUTY);
+
+		let rcsCw = false;
+		let rcsCcw = false;
+		if (allowRcs) {
+			if (err > RCS_CONFIG.ATTITUDE_DEADBAND_RAD) {
+				rcsCw = (err >= RCS_CONFIG.SLEW_CONTINUOUS_RAD || this._postSepRcsTimer > 0) ? true : pulseOn;
+			} else if (err < -RCS_CONFIG.ATTITUDE_DEADBAND_RAD) {
+				rcsCcw = (-err >= RCS_CONFIG.SLEW_CONTINUOUS_RAD || this._postSepRcsTimer > 0) ? true : pulseOn;
+			} else if (this._postSepRcsTimer > 0) {
+				const period = RCS_CONFIG.POST_SEP_DAMP_PERIOD_S;
+				const pulseW = RCS_CONFIG.POST_SEP_DAMP_PULSE_S;
+				const phase = this._postSepRcsTimer % period;
+				rcsCw = phase < pulseW;
+				rcsCcw = (phase >= period * 0.5) && (phase < period * 0.5 + pulseW);
+			}
+		}
+
+		const nextStage = this.stages[this.currentStageIndex];
+		const ignDelay = nextStage?.ignitionDelaySec ?? MULTISTAGE_ROCKET.DEFAULT_IGNITION_DELAY_SEC;
+		const isPreIgnUllage = (this.stageState === 'INTERSTAGE_COAST') && ((ignDelay - this.stgTimer) <= RCS_CONFIG.ULLAGE_PRE_IGNITION_S);
+		const rcsUllage = isPreIgnUllage || (this._ullageRestartTimer > 0);
+
+		this.rcsCw = rcsCw;
+		this.rcsCcw = rcsCcw;
+		this.rcsUllage = rcsUllage;
+		if (this.flightComputer?.telemetryCache) {
+			this.flightComputer.telemetryCache.rcsCw = rcsCw;
+			this.flightComputer.telemetryCache.rcsCcw = rcsCcw;
+			this.flightComputer.telemetryCache.rcsUllage = rcsUllage;
 		}
 	}
 
@@ -994,19 +1416,36 @@ export class CalcRocket extends GravSimCalcObject {
 		this._sensorData.distToRefM = distToRefM;
 		this._sensorData.isHoldDown = this.isHoldDown;
 		this._sensorData.isIgnited = this.isIgnited;
+		this._sensorData.stageState = this.stageState;
 		this._sensorData.stageIndex = this.currentStageIndex !== undefined ? this.currentStageIndex : 0;
 		this._sensorData.stages = this.stages;
 		this._sensorData.isPayloadSeparated = this.isPayloadSeparated;
+		this._sensorData.targetApogeeKm = this.targetApogeeKm;
+		this._sensorData.targetPerigeeKm = this.targetPerigeeKm;
+		this._sensorData.disableOrbitalCutoff = this.disableOrbitalCutoff;
 		this._sensorData.sunX = effectiveSun ? effectiveSun.x : undefined;
 		this._sensorData.sunY = effectiveSun ? effectiveSun.y : undefined;
 
+		const preUpdateAngle = this.thrustAngle;
 		this.flightComputer.update(this._sensorData);
+		this.flightComputer.telemetryCache.mach = this.mach || 0;
 
 		if (this.autoControl) {
 			throttle = this.flightComputer.currentThrottle;
 			this.thrustAngle = this.flightComputer.currentThrustAngleRad;
 		} else {
 			throttle = 1.0;
+		}
+
+		// Execute discrete separation actions triggered by flight profile (independent latch), in a flight step only
+		// (design §3.4-1): the MET stays 0 on the pad, so a row at time 0 (or alt / vel below the pad's) latches while
+		// the rocket is held down, and its action waits there until the first step after the release. An evaluation
+		// that advances no time (dt = 0: the predictor's evaluation at liftoff, which stands for the pad) waits too
+		if (!this.isHoldDown && dt > 0) {
+			const pendingActions = this.flightComputer.consumePendingActions();
+			for (let i = 0; i < pendingActions.length; i++) {
+				this.executeProfileAction(pendingActions[i]);
+			}
 		}
 
 		// Check fairing separation
@@ -1019,19 +1458,7 @@ export class CalcRocket extends GravSimCalcObject {
 		if (this.autoControl && !this.disableStaging) {
 			const isFinalStage = (this.currentStageIndex + 1 >= this.totalStages);
 
-			let hasPendingProfileBurns = false;
-			if (this.flightComputer && Array.isArray(this.flightComputer.flightProfile)) {
-				const curTime = this.flightComputer.flightTime || 0;
-				const curAlt = this.flightComputer.telemetryCache?.altM || 0;
-				hasPendingProfileBurns = this.flightComputer.flightProfile.some(step => {
-					if (step.thrust > 0) {
-						if (step.type === 'time' && step.value > curTime) return true;
-						if (step.type === 'alt' && step.value > curAlt) return true;
-						if (step.type === 'apogee') return true;
-					}
-					return false;
-				});
-			}
+			const hasPendingProfileBurns = Boolean(this.flightComputer?.hasPendingBurnStep());
 
 			// 1. Autonomous orbital insertion cutoff outside dense atmosphere
 			const isPayloadBurning = (this.isPayloadSeparated && this.hasPayloadPropulsion && this.stageState === 'STG_BURNING');
@@ -1056,7 +1483,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 						// Cutoff when:
 						// 1. Target Apogee is reached outside atmosphere (e.g. GTO at 35,786 km, Lunar at 384,400 km, or circular rendezvous at 400 km)
-						const isCircularTarget = Boolean(this.targetApogeeKm > 0 && this.targetPerigeeKm > 0 && Math.abs(this.targetApogeeKm - this.targetPerigeeKm) <= 50);
+						const isCircularTarget = Boolean(this.targetApogeeKm > 0 && this.targetPerigeeKm > 0 && (this.targetApogeeKm / this.targetPerigeeKm) <= 1.5);
 						const isTargetApogeeReached = isCircularTarget
 							? (apKm >= this.targetApogeeKm * 0.95 && (peKm >= this.targetPerigeeKm * 0.95 || (ecc <= 0.04 && peKm >= 140)))
 							: (this.targetApogeeKm > 0 && apKm >= this.targetApogeeKm && peKm >= 100);
@@ -1069,7 +1496,28 @@ export class CalcRocket extends GravSimCalcObject {
 							this.oxidMass = 0;
 							this.thrustForce = 0;
 							this.isIgnited = false;
-							if (this.isPayloadSeparated) {
+							if (this.isPayloadSeparated || this._isPayloadSepDeferred()) {
+								this.stageState = 'ORBITAL_COAST';
+								this.presState = 'POST_MECO_VENT';
+							} else {
+								this.stageState = 'STG_MECO';
+								this.stgTimer = 0;
+								if (this.presState === 'NOMINAL' || this.presState === 'IGNITION_TRANSIENT') {
+									this.presState = 'MECO_TRANSIENT';
+									this.presTimer = 0;
+								}
+							}
+							this.updateTotalMass();
+						}
+					} else if (!this.isPayloadSeparated && (this.disableOrbitalCutoff || this.targetVInfKmS > 0) && E >= 0 && this.targetVInfKmS > 0) {
+						const vInfKmS = Math.sqrt(2 * E) / 1000;
+						if (vInfKmS >= this.targetVInfKmS) {
+							this.burnTime = 0;
+							this.fuelMass = 0;
+							this.oxidMass = 0;
+							this.thrustForce = 0;
+							this.isIgnited = false;
+							if (this._isPayloadSepDeferred()) {
 								this.stageState = 'ORBITAL_COAST';
 								this.presState = 'POST_MECO_VENT';
 							} else {
@@ -1129,6 +1577,7 @@ export class CalcRocket extends GravSimCalcObject {
 				// Re-ignite engine from Coast mode!
 				this.stageState = 'STG_BURNING';
 				this.isIgnited = true;
+				this._ullageRestartTimer = RCS_CONFIG.ULLAGE_POST_COAST_S;
 				this.presState = 'IGNITION_TRANSIENT';
 				this.presTimer = 0;
 			}
@@ -1145,7 +1594,7 @@ export class CalcRocket extends GravSimCalcObject {
 			} else if (this.stageState === 'STG_MECO') {
 				this.stgTimer += dt;
 				const sepDelay = curStage ? curStage.separationDelaySec : MULTISTAGE_ROCKET.DEFAULT_SEPARATION_DELAY_SEC;
-				if (this.stgTimer >= sepDelay) {
+				if (!this._isCurrentStageSepDeferred() && this.stgTimer >= sepDelay) {
 					this.separateCurrentStage();
 				}
 			} else if (this.stageState === 'INTERSTAGE_COAST') {
@@ -1166,6 +1615,9 @@ export class CalcRocket extends GravSimCalcObject {
 		if (!this.isIgnited || this.stageState === 'INTERSTAGE_COAST' || this.stageState === 'STG_MECO' || this.stageState === 'STG_COAST' || this.stageState === 'ORBITAL_COAST') {
 			throttle = 0;
 		}
+
+		const currentThrustN = (this.burnTime > 0 && throttle > 0) ? (this.thrustForce || 0) * throttle : 0;
+		if (this.trackRcsVisualState) this._updateRcsState(dt, currentThrustN, preUpdateAngle);
 
 		if (this.burnTime > 0 && throttle > 0) {
 			// The time consumed is proportional to the throttle
@@ -1284,6 +1736,7 @@ export class CalcRocket extends GravSimCalcObject {
 		this._currentQ = 0;
 		this._qAxialKpa = 0;
 		this._qLateralKpa = 0;
+		this.mach = 0;
 	}
 }
 
@@ -1297,5 +1750,19 @@ export class CalcDebris extends GravSimCalcObject {
 		this.invMass = mass > 0 ? 1.0 / mass : 0; // 1/t
 		this.debrisSubType = debrisSubType;
 		this.parentRocketId = parentRocketId;
+	}
+
+	/** Worker-only state for save/load: exact kinematics and the parent rocket (no self-collision after a reload). */
+	getRuntimeState() {
+		return { kinematics: this.getKinematicState(), parentRocketId: this.parentRocketId ?? null };
+	}
+
+	/** @param {any} state value previously produced by getRuntimeState() */
+	restoreRuntimeState(state) {
+		if (!state || typeof state !== 'object') return;
+		this.restoreKinematicState(state.kinematics);
+		if (Number.isFinite(state.parentRocketId)) {
+			this.parentRocketId = state.parentRocketId;
+		}
 	}
 }

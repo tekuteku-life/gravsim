@@ -164,7 +164,7 @@ export class OverlayRenderer {
 		const drawPx = Math.round(UnitConvertUtils.m2pix(niceM) * zoomScale);
 
 		// Generate indicator number text
-		let textVal = niceVal;
+		let textVal = '';
 		if (niceVal >= 10000) {
 			textVal = niceVal.toLocaleString('en-US'); 
 		} else {

@@ -948,14 +948,17 @@ button:hover { background: #444; }
 /* Flight Profile Table */
 .profile-table {
 	width: 100%;
+	table-layout: fixed;
 	border-collapse: collapse;
 	margin-top: 5px;
 	font-size: 11px;
 }
 .profile-table th, .profile-table td {
 	border: 1px solid #444;
-	padding: 4px;
+	padding: 2px 1px;
 	text-align: center;
+	box-sizing: border-box;
+	overflow: hidden;
 }
 .profile-table th {
 	background-color: #222;
@@ -963,21 +966,36 @@ button:hover { background: #444; }
 }
 .profile-table select, .profile-table input {
 	width: 100%;
+	min-width: 0;
 	box-sizing: border-box;
 	background: #111;
 	color: #00ffcc;
 	border: 1px solid #333;
 	font-family: monospace;
+	font-size: 11px;
+	padding: 2px 2px;
 	text-align: center;
 }
-.profile-table button.remove-step-btn {
+.profile-table input[type="number"]::-webkit-inner-spin-button,
+.profile-table input[type="number"]::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+.profile-table input[type="number"] {
+	-moz-appearance: textfield;
+}
+.profile-table button.remove-step-btn,
+.profile-table button.fp-del {
+	width: 100%;
+	box-sizing: border-box;
 	background: #5a1a1a;
 	color: #ff5555;
 	border: 1px solid #ff5555;
-	padding: 2px 5px;
+	padding: 2px 2px;
 	cursor: pointer;
 }
-.profile-table button.remove-step-btn:hover {
+.profile-table button.remove-step-btn:hover,
+.profile-table button.fp-del:hover {
 	background: #7a2020;
 }
 

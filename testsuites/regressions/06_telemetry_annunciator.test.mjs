@@ -53,8 +53,7 @@ describe('Regression 06: Telemetry Annunciator 16-Lamp Panel', () => {
 			burnTime: 120.0,
 			isIgnited: true,
 			autoControl: true,
-			presState: 'NOMINAL',
-			stgSepLampTimer: 0
+			presState: 'NOMINAL'
 		};
 
 		const tm = {
@@ -79,7 +78,8 @@ describe('Regression 06: Telemetry Annunciator 16-Lamp Panel', () => {
 		assert.equal(getLampState('twr'), true, 'TWR lamp must be ON after clearing 1000m');
 	});
 
-	it('should verify Stage 1 MECO and separation (MECO ON, 1-SEP ON, 1-ENG OFF)', () => {
+	it('should verify Stage 1 MECO and separation (MECO ON, 1-SEP OFF before and ON from the separation, 1-ENG OFF)', () => {
+		// MECO, stage 1 still attached (STG_MECO waits separationDelaySec)
 		const target = {
 			currentStageIndex: 0,
 			totalStages: 2,
@@ -89,7 +89,7 @@ describe('Regression 06: Telemetry Annunciator 16-Lamp Panel', () => {
 			isIgnited: false,
 			autoControl: true,
 			presState: 'POST_MECO_HOLD',
-			stgSepLampTimer: 1.5 // Separation active
+			stageState: 'STG_MECO'
 		};
 
 		const tm = {
@@ -98,16 +98,26 @@ describe('Regression 06: Telemetry Annunciator 16-Lamp Panel', () => {
 			totalStages: 2,
 			altM: 75000,
 			vV: 1800,
-			vH: 1200,
-			isStgSepActive: true
+			vH: 1200
 		};
 
 		panel._updateAnnunciator(target, tm);
 
 		assert.equal(getLampState('1eng'), false, '1-ENG lamp must turn OFF at MECO');
 		assert.equal(getLampState('meco'), true, 'MECO lamp must turn ON at Stage 1 cutoff');
-		assert.equal(getLampState('1sep'), true, '1-SEP lamp must illuminate during separation');
+		assert.equal(getLampState('1sep'), false, '1-SEP lamp must be OFF while Stage 1 is attached');
 		assert.equal(getLampState('2eng'), false, '2-ENG lamp must remain OFF before ignition');
+
+		// The separation: the Worker advances the stage index in the same step (CalcRocket.separateCurrentStage) and
+		// coasts until the next ignition (INTERSTAGE_COAST). The SEP lamps are steady (design §4.13-14).
+		panel._updateAnnunciator({ ...target, currentStageIndex: 1, stageState: 'INTERSTAGE_COAST', presState: 'POST_MECO_HOLD' }, { ...tm, stageIndex: 1 });
+
+		assert.equal(getLampState('1eng'), false, '1-ENG lamp stays OFF');
+		assert.equal(getLampState('meco'), true, 'MECO lamp stays ON');
+		assert.equal(getLampState('1sep'), true, '1-SEP lamp must illuminate from the separation');
+		assert.equal(panel.lamps['1sep'].classList.contains('blink'), false, '1-SEP lamp is steady');
+		assert.equal(getLampState('2eng'), false, '2-ENG lamp must remain OFF before ignition');
+		assert.equal(getLampState('2sep'), false, '2-SEP lamp must stay OFF at the Stage 1 separation');
 	});
 
 	it('should verify Stage 2 active burn (2-ENG ON, 1-SEP ON, SECO OFF)', () => {
@@ -118,8 +128,7 @@ describe('Regression 06: Telemetry Annunciator 16-Lamp Panel', () => {
 			fuelMass: 25.0,
 			burnTime: 300.0,
 			isIgnited: true,
-			autoControl: true,
-			stgSepLampTimer: 0
+			autoControl: true
 		};
 
 		const tm = {
@@ -151,8 +160,7 @@ describe('Regression 06: Telemetry Annunciator 16-Lamp Panel', () => {
 			isIgnited: false,
 			isPayloadSeparated: true,
 			stageState: 'ORBITAL_COAST',
-			autoControl: true,
-			stgSepLampTimer: 0
+			autoControl: true
 		};
 
 		const tm = {

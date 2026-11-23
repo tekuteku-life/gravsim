@@ -4,13 +4,18 @@
   "description": "Gravitational and Multi-Stage Rocket Physics Simulator",
   "type": "module",
   "scripts": {
+    "check:syntax": "find scripts testsuites -type f \\( -name '*.js' -o -name '*.mjs' \\) -exec sh -c 'for f do node --check \"$f\" || exit 1; done' sh {} +",
+    "check:lint": "eslint --ext .js,.mjs scripts testsuites",
+    "check:types": "tsc -p jsconfig.json",
+    "check": "npm run check:syntax && npm run check:lint && npm run check:types",
     "test": "node testsuites/run_all.mjs",
     "test:regressions": "node testsuites/run_all.mjs --regressions",
     "test:unit": "node testsuites/run_all.mjs --unit",
     "test:integration": "node testsuites/run_all.mjs --integration",
     "test:system": "node testsuites/run_all.mjs --system",
     "test:coverage": "node testsuites/run_all.mjs --coverage",
-    "test:verbose": "node testsuites/run_all.mjs --verbose"
+    "test:verbose": "node testsuites/run_all.mjs --verbose",
+    "perf:rollout": "node testsuites/perf/rollout_timing.mjs"
   },
   "keywords": [
     "physics",

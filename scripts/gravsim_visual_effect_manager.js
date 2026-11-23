@@ -1,8 +1,8 @@
 
 // gravsim_visual_effect_manager.js
 
-import { DEBRIS, ROCKET_LAUNCHER_CONFIG, EVENT_PRIORITY } from './gravsim_const.js';
-import { ColorUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { DEBRIS, ROCKET_LAUNCHER_CONFIG, EVENT_PRIORITY, OBJECT_STATE } from './gravsim_const.js';
+import { ColorUtils, UnitConvertUtils, isLiveObject } from './gravsim_utils.js';
 import { PadEffectRenderer } from './gravsim_pad_effect.js';
 import { EventBus } from './gravsim_event_bus.js';
 
@@ -82,23 +82,42 @@ export class VisualEffectManager {
 	update(dt) {
 		if (this.padEffect && this.padEffect.isActive) {
 			const context = this._buildPadContext();
-			if (context) { this.padEffect.update(dt, context); }
-			
-			if (this.padEffect.targetRocketId) {
-				const rocket = this.universe.objects.find(o => o.id === this.padEffect.targetRocketId);
-				// Stop pad effect if rocket exceeds a certain altitude or is destroyed
-				if (rocket && rocket.telemetry && rocket.telemetry.altM > ROCKET_LAUNCHER_CONFIG.EFFECT_STOP_ALT_M) {
+			// The pad stands on its host: without the host in the simulation (removed or destroyed, listed while its trail
+			// fades) the pad is gone. Earlier only the rocket was checked, so while the rocket flew below the stop altitude
+			// the effect went on at the removed host (design §4.13-31)
+			if (!context) {
+				this.padEffect.stop();
+				return;
+			}
+			this.padEffect.update(dt, context);
+
+			// Ids start at 0: a rocket with id 0 is a target too (design §4.13-24)
+			const targetRocketId = this.padEffect.targetRocketId;
+			if (targetRocketId !== null && targetRocketId !== undefined) {
+				const rocket = this.universe.objects.find(o => o.id === targetRocketId);
+				// Stop pad effect if rocket exceeds a certain altitude or is destroyed. Destroyed: gone from the list, or
+				// still listed while its trail fades (state REMOVED / isDestroyed); only the gone case was caught, so the
+				// pad kept steaming for a destroyed rocket (design §4.13-30, the rule of SoundEffects)
+				const isFlying = Boolean(rocket && rocket.state === OBJECT_STATE.ACTIVE && !rocket.isDestroyed);
+				if (isFlying && rocket.telemetry && rocket.telemetry.altM > ROCKET_LAUNCHER_CONFIG.EFFECT_STOP_ALT_M) {
 					this.padEffect.stop();
-				} else if (!rocket) {
+				} else if (!isFlying) {
 					this.padEffect.stop();
 				}
 			}
 		}
 	}
 
+	/**
+	 * The pad's rocket and host. Null when the pad has a host (a rollout always gives one) that is not in the simulation:
+	 * the pad is gone with it. A pad without a host id has no host to follow, as before.
+	 */
 	_buildPadContext(renderContext = null) {
 		const rocket = this.universe.objects.find(o => o.id === this.padEffect.targetRocketId);
-		const host = this.universe.objects.find(o => o.id === this.padEffect.hostId);
+		const hostId = this.padEffect.hostId;
+		const hasHost = hostId !== null && hostId !== undefined;
+		const host = hasHost ? this.universe.objects.find(o => o.id === hostId && isLiveObject(o)) : undefined;
+		if (hasHost && !host) { return null; }
 		const zoomScale = renderContext ? renderContext.zoomScale : this.universe.camera.getRenderState().zoomScale;
 		
 		return {

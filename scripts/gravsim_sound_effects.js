@@ -1,7 +1,8 @@
 
 // gravsim_sound_effects.js
 
-import { OBJECT_TYPES, EVENT_PRIORITY } from './gravsim_const.js';
+import { OBJECT_TYPES, OBJECT_STATE, EVENT_PRIORITY } from './gravsim_const.js';
+import { AeroUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 /*******************************************************************
@@ -296,11 +297,34 @@ export class SoundEffects {
 			this.isLiftoffOccurred = true;
 		});
 
-		// Stop all audio on reset, abort, or destruction
+		// Stop all audio on reset or abort. The destruction of a rocket (ObjectManager emits 'rocket:destroyed'; git
+		// 0dbb27e added this listener without an emitter and stopped everything) stops the deluge of its launch sequence
+		// (design §4.13-28). The listener of 'audio:stop-all' of the same commit had no emitter either and was removed.
 		EventBus.on('simulation:reset', () => this.stopAll());
-		EventBus.on('sequencer-abort', () => this.stopAll());
-		EventBus.on('rocket:destroyed', () => this.stopAll());
-		EventBus.on('audio:stop-all', () => this.stopAll());
+		// The user's Abort stops every sound; a sequence that stops because its rocket was destroyed (LaunchSequencer,
+		// design §4.13-31) leaves them: its deluge stopped with the rocket (_onRocketDestroyed), its roar and whine stop at
+		// the next update, and another rocket that still fires keeps its sound (§4.13-28)
+		EventBus.on('sequencer-abort', (detail) => {
+			if (detail && detail.reason === 'rocket-destroyed') { return; }
+			this.stopAll();
+		});
+		EventBus.on('rocket:destroyed', (rocket) => this._onRocketDestroyed(rocket));
+	}
+
+	/**
+	 * The water deluge belongs to the launch sequence (its 'WATER DELUGE' event) and fades only with the altitude of
+	 * the rocket in flight, so once the sequence's rocket is destroyed nothing else stops it (it played on at full gain
+	 * after the rocket was cleaned up): its destruction stops the deluge and clears its state. The roar and the whine
+	 * need no stop here: update() voices only a flying rocket (design §4.13-23), so they stop at the next update, and a
+	 * stop of every voice would also cut another rocket that still fires. Another rocket's destruction changes nothing.
+	 * @param {any} rocket the destroyed rocket
+	 */
+	_onRocketDestroyed(rocket) {
+		const sequencerId = this.universe?.LaunchSequencer?.rocketId;
+		if (!rocket || sequencerId === null || sequencerId === undefined || rocket.id !== sequencerId) { return; }
+		this.isDelugeTriggered = false;
+		this.isLiftoffOccurred = false;
+		if (this.voices.waterDeluge) { this.voices.waterDeluge.stop(); }
 	}
 
 	/**
@@ -315,7 +339,10 @@ export class SoundEffects {
 		const roarCfg = SOUND_FX_CONFIG.engineRoar;
 		const roarVoice = this.voices.engineRoar;
 
-		if (rocket && rocket.type === OBJECT_TYPES.ROCKET && !rocket.collided && !rocket.shattered) {
+		// Only a rocket that is still flying: a destroyed or removed rocket stays in universe.objects until its trail has
+		// faded (state REMOVED, isDestroyed). The Worker's collided / shattered never reach the main thread (design
+		// §4.13-23: git 0dbb27e read them here, so the roar of a destroyed rocket kept running).
+		if (rocket && rocket.type === OBJECT_TYPES.ROCKET && rocket.state === OBJECT_STATE.ACTIVE && !rocket.isDestroyed) {
 			const throttle = Number(rocket.thrustRatio) || 0;
 			const isFiring = Boolean(rocket.isIgnited && throttle > 0.01);
 			const inAtmosphere = Boolean(rocket.inAtmosphere);
@@ -341,10 +368,12 @@ export class SoundEffects {
 			const whineCfg = SOUND_FX_CONFIG.supersonicWhine;
 			const whineVoice = this.voices.supersonicWhine;
 
-			const vV = rocket.telemetry?.vV || 0;
-			const vH = rocket.telemetry?.vH || 0;
-			const mach = Math.hypot(vV, vH) / 340.0;
-			const qRatio = (rocket.telemetry?.qAxialKpa || 0) / whineCfg.qRatioNorm;
+			const telemetry = rocket.telemetry;
+			const atmParam = this.universe?.objects?.find(o => o.id === rocket.dominantBodyId)?.param ?? null;
+			const mach = Number.isFinite(telemetry?.mach)
+				? telemetry.mach
+				: AeroUtils.computeMach(Math.hypot(telemetry?.vV || 0, telemetry?.vH || 0), telemetry?.altM || 0, atmParam);
+			const qRatio = (telemetry?.qAxialKpa || 0) / whineCfg.qRatioNorm;
 
 			if (mach > whineCfg.machMin && inAtmosphere && qRatio > 0.03) {
 				if (!whineVoice.isRunning) {
@@ -393,16 +422,22 @@ export class SoundEffects {
 		}
 	}
 
+	/**
+	 * The rocket the sounds follow: the launch sequence's rocket, else the camera's target, else the first rocket, each
+	 * only while it is flying (state ACTIVE and not destroyed, the rule of update()). A destroyed or removed rocket
+	 * stays in universe.objects until its trail has faded; choosing it kept another rocket that still fires silent
+	 * until then (design §4.13-30).
+	 */
 	_getActiveRocket() {
 		if (!this.universe) { return null; }
-		const targetId = this.universe.LaunchSequencer?.rocketId || this.universe.camera?.trackingTarget?.id;
-
-		if (targetId !== null && targetId !== undefined) {
-			const obj = this.universe.objects.find(o => o.id === targetId);
-			if (obj && obj.type === OBJECT_TYPES.ROCKET) { return obj; }
-		}
-
-		return this.universe.objects.find(o => o.type === OBJECT_TYPES.ROCKET) || null;
+		const objects = this.universe.objects || [];
+		const isFlyingRocket = (o) => Boolean(o && o.type === OBJECT_TYPES.ROCKET && o.state === OBJECT_STATE.ACTIVE && !o.isDestroyed);
+		const flyingRocketById = (id) => ((id !== null && id !== undefined) ? (objects.find(o => o.id === id && isFlyingRocket(o)) || null) : null);
+		// Ids start at 0: the sequencer's rocket id 0 is a rocket, not "none" (design §4.13-24)
+		return flyingRocketById(this.universe.LaunchSequencer?.rocketId)
+			|| flyingRocketById(this.universe.camera?.trackingTarget?.id)
+			|| objects.find(isFlyingRocket)
+			|| null;
 	}
 
 	stopAll() {

@@ -2,9 +2,10 @@
 // gravsim_tab_navi.js
 
 import { PHYSICS, UI, OBJECT_TYPES } from './gravsim_const.js';
-import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { DOMUtils, UnitConvertUtils, isLiveObject } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 import { presetManager } from './gravsim_preset_manager.js';
+import { NavigationCameraCard } from './gravsim_telemetry_card.js';
 
 export class NaviTab {
 	constructor(universe) {
@@ -52,7 +53,7 @@ export class NaviTab {
 	}
 
 	_bindEvents() {
-		this.ui.nvTargetSelect.addEventListener('change', (e) => {
+		this.ui.nvTargetSelect.addEventListener('change', (/** @type {any} */ e) => {
 			this.naviTargetId = parseInt(e.target.value, 10);
 			this._updateNaviStats();
 		});
@@ -61,8 +62,9 @@ export class NaviTab {
 	updateTargetOptions() {
 		const currentId = this.naviTargetId;
 		this.ui.nvTargetSelect.innerHTML = '';
+		// Bodies and debris in the simulation (a removed one stays listed until its trail has faded, design §4.13-31)
 		for (const obj of this.universe.objects) {
-			if (obj.type === OBJECT_TYPES.ROCKET) { continue; }
+			if (obj.type === OBJECT_TYPES.ROCKET || !isLiveObject(obj)) { continue; }
 
 			const option = document.createElement('option');
 			option.value = obj.id;
@@ -76,9 +78,9 @@ export class NaviTab {
 	}
 
 	_updateNaviStats() {
-		let target = this.universe.objects.find(o => o.id === this.naviTargetId);
+		let target = this.universe.objects.find(o => o.id === this.naviTargetId && isLiveObject(o));
 		if (!target) {
-			target = this.universe.objects.find(o => o.id === this.currentCameraTargetId);
+			target = this.universe.objects.find(o => o.id === this.currentCameraTargetId && isLiveObject(o));
 			if(target) {
 				this.naviTargetId = target.id;
 			} else {
@@ -95,20 +97,19 @@ export class NaviTab {
 		const escapeV = Math.sqrt(2 * PHYSICS.G * UnitConvertUtils.ton2kg(target.mass) / target.radius);
 		DOMUtils.setText(this.ui.nvEscapeV, UnitConvertUtils.m2km(escapeV).toFixed(2) + " km/s");
 
-		let refBody = null;
-		let distToRefM = 0;
-		if (target.dominantBodyId !== undefined && target.dominantBodyId !== -1) {
-			refBody = this.universe.objects.find(o => o.id === target.dominantBodyId);
-			distToRefM = target.distToDominantM || 0;
+		// The reference body by the rule of the Navigation & Camera card (the celestial body the Worker's dominantBodyId
+		// names). ALT and VEL are relative to it: without a resolved body (none, or an id naming no body of the universe,
+		// e.g. one removed while paused) all three read as for none, instead of keeping the values of the last body
+		// (design §4.13-26)
+		const refBody = NavigationCameraCard.resolveDominantBody(target, this.universe.objects);
+		if (refBody) {
+			const distToRefM = target.distToDominantM || 0;
+			DOMUtils.setText(this.ui.nvRefBody, refBody.name);
+			DOMUtils.setText(this.ui.nvAlt, UnitConvertUtils.m2km(distToRefM - refBody.radius).toLocaleString('en-US', {maximumFractionDigits:0}) + " km");
 
-			if (refBody) {
-				DOMUtils.setText(this.ui.nvRefBody, refBody.name);
-				DOMUtils.setText(this.ui.nvAlt, UnitConvertUtils.m2km(distToRefM - refBody.radius).toLocaleString('en-US', {maximumFractionDigits:0}) + " km");
-
-				const vx = UnitConvertUtils.pix2m(target.vx - refBody.vx);
-				const vy = UnitConvertUtils.pix2m(target.vy - refBody.vy);
-				DOMUtils.setText(this.ui.nvVel, UnitConvertUtils.m2km(Math.sqrt(vx*vx + vy*vy)).toFixed(2) + " km/s");
-			}
+			const vx = UnitConvertUtils.pix2m(target.vx - refBody.vx);
+			const vy = UnitConvertUtils.pix2m(target.vy - refBody.vy);
+			DOMUtils.setText(this.ui.nvVel, UnitConvertUtils.m2km(Math.sqrt(vx*vx + vy*vy)).toFixed(2) + " km/s");
 		} else {
 			DOMUtils.setText(this.ui.nvRefBody, "NONE");
 			DOMUtils.setText(this.ui.nvAlt, "--- km");

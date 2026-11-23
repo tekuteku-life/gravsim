@@ -16,6 +16,22 @@ export class LaunchSequencer {
 
 		// Register update hook
 		EventBus.onUpdate((dt, scaledDt) => this.update(scaledDt), EVENT_PRIORITY.LOGIC);
+
+		// The sequence's rocket removed (System › Clear Selected, Reset) or destroyed (a collision): ObjectManager
+		// announces it once (design §4.13-28)
+		EventBus.on('rocket:destroyed', (rocket) => this._onRocketDestroyed(rocket));
+	}
+
+	/**
+	 * A launch sequence belongs to its rocket: when that rocket is gone the sequence aborts. Earlier it ran on with no
+	 * rocket (the countdown, its callouts, and the 'WATER DELUGE' event started the deluge for the empty pad, which then
+	 * played until Reset, design §4.13-31). The abort says why: the sounds of the destroyed rocket stop by their own rule
+	 * (§4.13-23 / -28), so the abort must not stop those of another rocket that still fires.
+	 * @param {any} rocket the destroyed rocket
+	 */
+	_onRocketDestroyed(rocket) {
+		if (!this.isActive || !rocket || this.rocketId === null || this.rocketId === undefined || rocket.id !== this.rocketId) { return; }
+		this.abort({ reason: 'rocket-destroyed', rocketId: rocket.id });
 	}
 
 	start(sequenceData, rocketId) {
@@ -34,11 +50,15 @@ export class LaunchSequencer {
 		EventBus.emit('sequencer-start', sequenceData);
 	}
 
-	abort() {
+	/**
+	 * @param {{ reason: string, rocketId: number } | undefined} [detail] why the sequence stops when it is not the user's
+	 *   Abort (then undefined): 'rocket-destroyed' when its rocket is gone
+	 */
+	abort(detail = undefined) {
 		if (!this.isActive) { return; }
 		this.isActive = false;
 		this.isAutoSequence = false;
-		EventBus.emit('sequencer-abort');
+		EventBus.emit('sequencer-abort', detail);
 	}
 
 	update(dtSec) {

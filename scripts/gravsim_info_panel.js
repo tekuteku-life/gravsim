@@ -17,7 +17,8 @@ export class InfoPanel {
 		}
 
 		this.elapsedTime = 0; // in years
-		this.lastTime = new Date();
+		/** @type {number | Date} */
+		this.lastTime = Date.now();
 		this.fpsCount = 0;
 		this.physFpsCount = 0;
 
@@ -54,7 +55,10 @@ export class InfoPanel {
 
 		// Register to the main logic update loop
 		EventBus.onUpdate((dt, scaledDt) => {
-			if (this.universe.objects.length === 1) {
+			// Only one object in the simulation (the Sun of Reset); removed objects fading out do not count (§4.13-31)
+			const om = this.universe.ObjectManager;
+			const count = (om && typeof om.countLive === 'function') ? om.countLive() : this.universe.objects.length;
+			if (count === 1) {
 				this.resetElapsedTime();
 			} else {
 				this.updateElapsedTime(scaledDt);
@@ -86,8 +90,9 @@ export class InfoPanel {
 	}
 
 	updateFPS() {
-		const now = new Date();
-		const elapsed = now - this.lastTime;
+		const now = Date.now();
+		const lastTimeMs = this.lastTime instanceof Date ? this.lastTime.getTime() : (Number(this.lastTime) || 0);
+		const elapsed = now - lastTimeMs;
 		this.fpsCount++;
 
 		// Keep local interval check because frame counting is required

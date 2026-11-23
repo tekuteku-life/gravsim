@@ -11,7 +11,38 @@
  * and robust embedded fallbacks for zero-dependency offline/test environments.
  */
 
-import { PHYSICS } from './gravsim_const.js';
+import { PHYSICS, TRAJECTORY_PREDICTION } from './gravsim_const.js';
+
+/**
+ * Validate a prediction period [months] from outside the slider (a save file, a mission preset): a finite positive
+ * number, clamped to TRAJECTORY_PREDICTION.MIN_DURATION_MONTHS..MAX_DURATION_MONTHS (the #pred-duration slider range of
+ * index.html); anything else (missing, null, a string, a boolean, NaN, +-Infinity, 0, a negative value) is null.
+ * A value inside the range is returned as is (not rounded to the slider step).
+ * @param {any} months
+ * @returns {number | null}
+ */
+export function normalizePredictionDurationMonths(months) {
+	if (typeof months !== 'number' || !Number.isFinite(months) || months <= 0) { return null; }
+	return Math.min(TRAJECTORY_PREDICTION.MAX_DURATION_MONTHS, Math.max(TRAJECTORY_PREDICTION.MIN_DURATION_MONTHS, months));
+}
+
+/**
+ * Apply a prediction period from outside the slider to a launcher: a valid value (normalizePredictionDurationMonths)
+ * sets predictionDurationMonths and the derived maxSimTimeSec (months x 365.25 / 12 days x 86400 s, the expression of the
+ * slider handler); an invalid one leaves both as they are. The caller shows an applied value on the slider.
+ * The one rule of RocketLauncher.loadState and PresetManager.applyToLauncher.
+ * @param {any} launcher
+ * @param {any} months
+ * @returns {number | null} the applied period, or null when nothing was applied
+ */
+export function applyPredictionDurationMonths(launcher, months) {
+	const m = normalizePredictionDurationMonths(months);
+	if (m !== null) {
+		launcher.predictionDurationMonths = m;
+		launcher.maxSimTimeSec = m * (365.25 / 12) * 86400;
+	}
+	return m;
+}
 
 export class PresetManager {
 	constructor(options = {}) {
@@ -352,6 +383,7 @@ export class PresetManager {
 				PAYLOAD_OFFSET_RATIO: 0.35,
 				UPPER_PLUME_SCALE: 0.65,
 				STAGE3_PLUME_SCALE: 0.50,
+				PAYLOAD_PLUME_SCALE: 0.35,
 				MAIN_PLUME_SCALE: 1.0,
 				NOZZLE_BOTTOM_OFFSET: {
 					SINGLE_STAGE: 1.85,
@@ -404,6 +436,26 @@ export class PresetManager {
 				SATELLITE_PANEL_FILL: '#004488',
 				SATELLITE_PANEL_STROKE: '#00aaff',
 				SATELLITE_PANEL_MARGIN: 2
+			},
+			COLD_GAS_RCS: {
+				FWD_STATION_FRACTION: 0.84,
+				AFT_STATION_FRACTION: 0.14,
+				PLUME_LEN_WIDTH_RATIO: 2.4,
+				MIN_PLUME_PX: 4.0,
+				PLUME_SPREAD_RAD: 0.34,
+				ULLAGE_CANT_RAD: 0.28,
+				CORE_COLOR: 'rgba(235, 248, 255, 0.85)',
+				MIST_COLOR: 'rgba(195, 228, 255, 0.28)'
+			},
+			VAPOR_CONE: {
+				PRIMARY_STATION_FRACTION: 0.72,
+				SECONDARY_STATION_FRACTION: 0.44,
+				SECONDARY_INTENSITY_MIN: 0.55,
+				CONE_LENGTH_RATIO: 2.2,
+				MAX_WIDTH_MULTIPLIER: 2.8,
+				CORE_COLOR: 'rgba(240, 248, 255, 0.70)',
+				EDGE_COLOR: 'rgba(185, 215, 255, 0.0)',
+				RIM_COLOR: 'rgba(255, 255, 255, 0.55)'
 			}
 		};
 		this.visuals.set('rocket', fallbackVisual);
@@ -588,6 +640,7 @@ export class PresetManager {
 
 	/**
 	 * Dynamically calculate optimal propellant loads and burn times for Rocket A + Payload B + Mission C
+	 * @param {{ vehicle?: any, payload?: any, mission?: any }} [opts]
 	 */
 	calculateMissionFlightPlan({ vehicle, payload, mission } = {}) {
 		if (!vehicle) return null;
@@ -654,6 +707,8 @@ export class PresetManager {
 
 		// 2. Sizing Rocket Stage Propellant
 		const targetDeltaV = (mission?.targetDeltaVM_S || 9300) * 1.12;
+		const isDeepSpaceMission = Boolean(mission?.disableOrbitalCutoff || (mission?.targetVInfKmS && mission.targetVInfKmS > 0));
+		const hasSrbBoosters = Boolean(boosters && ((boosters.count > 0) || (boosters.burnTimeSec > 0)));
 
 		for (let i = 0; i < stages.length; i++) {
 			const stg = stages[i];
@@ -683,15 +738,141 @@ export class PresetManager {
 			if (propMass === capProp && stg.burnTime > 0) {
 				// Keep designed burn time when propellant is at nominal full capacity
 			} else {
-				const effectiveThrustKN = (i === 0 && boosters?.coreThrustKN) ? boosters.coreThrustKN : stg.thrustKN;
+				const effectiveThrustKN = (i === 0 && hasSrbBoosters && boosters?.coreThrustKN) ? boosters.coreThrustKN : stg.thrustKN;
 				if (effectiveThrustKN > 0 && totalPropT > 0) {
 					stg.burnTime = Math.round(((totalPropT * 1000 * isp * PHYSICS.G0) / (effectiveThrustKN * 1000)) * 10) / 10;
 				}
 			}
 		}
 
+		// 2B. Deep-space mission upper-stage propellant expansion & TWR-coupled thrust sizing
+		if (isDeepSpaceMission && stages.length >= 2) {
+			const last = stages[stages.length - 1];
+			if (last.fuelType !== 'solid') {
+				const lastFuelDef = this.getFuel(last.fuelType || 'liquid') || { ispVac: 320, ofRatio: 2.5 };
+				const lastIsp = last.ispVac || last.isp || lastFuelDef.ispVac || lastFuelDef.isp || 320;
+				const lastOfRatio = last.ofRatio !== undefined ? last.ofRatio : (lastFuelDef.ofRatio || 0);
+				const vInfMs = (mission?.targetVInfKmS || 0) * 1000;
+				const reqDv = Math.max(mission?.targetDeltaVM_S || 0, Math.round(11500 + (Math.hypot(11200, vInfMs) - 7800)));
+
+				const payloadMassT = payloadObj?.massT || 3.0;
+				const fairingMassT = (payload?.fairing ? (payload.fairing.enabled !== false ? (payload.fairing.massT || 1.5) : 0) : (vehicle.defaultFairing?.enabled ? (vehicle.defaultFairing.massT || 1.5) : 0));
+				const boosterDryT = hasSrbBoosters ? (boosters.dryMassT || 0) : 0;
+				const boosterPropT = hasSrbBoosters ? ((boosters.fuelMassT || 0) + (boosters.oxidMassT || 0)) : 0;
+
+				const computeTotalDv = (upperPropT) => {
+					let dv = 0;
+					for (let i = 0; i < stages.length; i++) {
+						const s = stages[i];
+						const f = this.getFuel(s.fuelType || 'liquid') || { ispVac: 300 };
+						const sIsp = s.ispVac || s.isp || f.ispVac || f.isp || 300;
+						const sProp = (i === stages.length - 1) ? upperPropT : ((s.fuelMassT || 0) + (s.oxidMassT || 0));
+						let mAbove = payloadMassT + (i === 0 ? fairingMassT : 0);
+						for (let j = i + 1; j < stages.length; j++) {
+							const sj = stages[j];
+							mAbove += (sj.dryMassT || 0) + (j === stages.length - 1 ? upperPropT : ((sj.fuelMassT || 0) + (sj.oxidMassT || 0)));
+						}
+						const extraSrb = (i === 0 && hasSrbBoosters) ? (boosterDryT + boosterPropT) : 0;
+						const m0 = mAbove + (s.dryMassT || 0) + sProp + extraSrb;
+						const mf = mAbove + (s.dryMassT || 0) + (i === 0 && hasSrbBoosters ? boosterDryT : 0);
+						if (m0 > mf && mf > 0) {
+							dv += sIsp * PHYSICS.G0 * Math.log(m0 / mf);
+						}
+					}
+					return dv;
+				};
+
+				const origUpperProp = (last.fuelMassT || 0) + (last.oxidMassT || 0);
+				if (computeTotalDv(origUpperProp) < reqDv) {
+					const origStg0Thrust = stages[0].thrustKN || 1000;
+					const origCoreThrust = (hasSrbBoosters && boosters?.coreThrustKN) ? boosters.coreThrustKN : origStg0Thrust;
+					const maxStg0Thrust = Math.max(origStg0Thrust, 10000);
+					const maxCoreThrust = Math.max(origCoreThrust, 10000);
+
+					const stg0Prop = (stages[0].fuelMassT || 0) + (stages[0].oxidMassT || 0);
+					const stg0BurnT = stages[0].burnTime || 290;
+					const srbBurnT = hasSrbBoosters ? (boosters.burnTimeSec || 105) : 0;
+					const remStg0PropAtSrbOut = hasSrbBoosters
+						? Math.max(0, stg0Prop * (1 - srbBurnT / Math.max(1, stg0BurnT)))
+						: stg0Prop;
+
+					let midStagesMass = 0;
+					for (let i = 0; i < stages.length - 1; i++) {
+						midStagesMass += (stages[i].dryMassT || 0) + (stages[i].fuelMassT || 0) + (stages[i].oxidMassT || 0);
+					}
+					let midStagesAboveCore = 0;
+					for (let i = 1; i < stages.length - 1; i++) {
+						midStagesAboveCore += (stages[i].dryMassT || 0) + (stages[i].fuelMassT || 0) + (stages[i].oxidMassT || 0);
+					}
+
+					const baseMassLiftoff = payloadMassT + fairingMassT + boosterDryT + boosterPropT + midStagesMass + (last.dryMassT || 0);
+					const baseMassPostSrb = hasSrbBoosters
+						? (payloadMassT + (stages[0].dryMassT || 0) + remStg0PropAtSrbOut + midStagesAboveCore + (last.dryMassT || 0))
+						: baseMassLiftoff;
+
+					const maxLiftoffMassT = maxStg0Thrust / (PHYSICS.G0 * 1.25);
+					const maxPostSrbMassT = maxCoreThrust / (PHYSICS.G0 * 1.15);
+					const maxByTwr = Math.max(origUpperProp, Math.min(maxLiftoffMassT - baseMassLiftoff, maxPostSrbMassT - baseMassPostSrb));
+					const maxByTank = lastOfRatio > 0
+						? Math.min(1500 * (1 + lastOfRatio), 3000 * (1 + 1 / lastOfRatio))
+						: 1500;
+					const hardCap = Math.max(origUpperProp, Math.min(maxByTwr, maxByTank));
+
+					let lo = origUpperProp;
+					let hi = hardCap;
+					for (let k = 0; k < 28; k++) {
+						const mid = (lo + hi) * 0.5;
+						if (computeTotalDv(mid) < reqDv) lo = mid; else hi = mid;
+					}
+					const newUpperProp = Math.round(hi * 10) / 10;
+					if (lastOfRatio > 0) {
+						last.oxidMassT = Math.round((newUpperProp * lastOfRatio / (1 + lastOfRatio)) * 10) / 10;
+						last.fuelMassT = Math.round((newUpperProp / (1 + lastOfRatio)) * 10) / 10;
+					} else {
+						last.fuelMassT = newUpperProp;
+						last.oxidMassT = 0;
+					}
+
+					const upperMass0 = payloadMassT + (last.dryMassT || 0) + last.fuelMassT + last.oxidMassT;
+					const minThrustForBurn = (newUpperProp * lastIsp * PHYSICS.G0) / 420;
+					const minThrustForTwr = upperMass0 * PHYSICS.G0 * 0.60;
+					const maxUpperThrust = Math.max(last.thrustKN || 0, 10000);
+					last.thrustKN = Math.ceil(Math.min(maxUpperThrust, Math.max(last.thrustKN || 0, minThrustForBurn, minThrustForTwr)));
+					last.burnTime = last.thrustKN > 0
+						? Math.round(((newUpperProp * 1000 * lastIsp * PHYSICS.G0) / (last.thrustKN * 1000)) * 10) / 10
+						: last.burnTime;
+
+					const actualUpperProp = last.fuelMassT + last.oxidMassT;
+					const newLiftoffMass = baseMassLiftoff + actualUpperProp;
+					const newPostSrbMass = baseMassPostSrb + actualUpperProp;
+
+					if (hasSrbBoosters) {
+						const reqCore = newPostSrbMass * PHYSICS.G0 * 1.15;
+						const newCore = Math.ceil(Math.min(maxCoreThrust, Math.max(origCoreThrust, reqCore)));
+						const srbPlusCore = newCore + (boosters.thrustKN || 0);
+						const reqLiftoff = newLiftoffMass * PHYSICS.G0 * 1.25;
+						const newTotalStg0 = Math.ceil(Math.min(Math.max(maxStg0Thrust, srbPlusCore), Math.max(origStg0Thrust, reqLiftoff, srbPlusCore)));
+						boosters.coreThrustKN = newCore;
+						stages[0].thrustKN = newTotalStg0;
+					} else {
+						const reqLiftoff = newLiftoffMass * PHYSICS.G0 * 1.25;
+						if (reqLiftoff > origStg0Thrust) {
+							stages[0].thrustKN = Math.ceil(Math.min(maxStg0Thrust, reqLiftoff));
+						}
+					}
+
+					const stg0FuelDef = this.getFuel(stages[0].fuelType || 'liquid') || { ispVac: 300 };
+					const stg0Isp = stages[0].ispVac || stages[0].isp || stg0FuelDef.ispVac || stg0FuelDef.isp || 300;
+					const effTh0 = (hasSrbBoosters && boosters?.coreThrustKN) ? boosters.coreThrustKN : stages[0].thrustKN;
+					if (effTh0 > 0 && stg0Prop > 0) {
+						stages[0].burnTime = Math.round(((stg0Prop * 1000 * stg0Isp * PHYSICS.G0) / (effTh0 * 1000)) * 10) / 10;
+					}
+				}
+			}
+		}
+
 		const adaptedFlightProfile = (mission && Array.isArray(mission.flightProfile))
-			? this._adaptFlightProfileForVehicle(mission.flightProfile, vehicle, stages)
+			? this._adaptFlightProfileForVehicle(mission.flightProfile, vehicle, stages, isDeepSpaceMission)
 			: null;
 
 		return {
@@ -707,16 +888,18 @@ export class PresetManager {
 			disableOrbitalCutoff: !!mission?.disableOrbitalCutoff,
 			targetApogeeKm: mission?.targetApogeeKm || 0,
 			targetPerigeeKm: mission?.targetPerigeeKm || 0,
+			targetVInfKmS: mission?.targetVInfKmS || 0,
 			predictionDurationMonths: mission?.predictionDurationMonths
 		};
 	}
 
-	_adaptFlightProfileForVehicle(profile, vehicle, stages) {
+	_adaptFlightProfileForVehicle(profile, vehicle, stages, isDeepSpace = false) {
 		if (!profile || !Array.isArray(profile)) return profile;
 
 		const isSolid = stages && stages.every(s => s.fuelType === 'solid');
 		const isSSTO = stages && stages.length === 1;
-		const isLowUpperTwr = stages && stages.length > 1 && (stages[1].thrustKN / ((stages[1].dryMassT || 3.5) + (stages[1].fuelMassT || 4) + (stages[1].oxidMassT || 24) + 4) < 6.0);
+		const refUpper = vehicle?.stages?.[1] ?? stages?.[1];
+		const isLowUpperTwr = stages && stages.length > 1 && refUpper && (refUpper.thrustKN / ((refUpper.dryMassT || 3.5) + (refUpper.fuelMassT || 4) + (refUpper.oxidMassT || 24) + 4) < 6.0);
 
 		let altScale = 1.0;
 		if (isSolid) {
@@ -726,19 +909,22 @@ export class PresetManager {
 		} else if (isLowUpperTwr) {
 			altScale = 1.08;
 		} else {
-			altScale = 0.85;
+			altScale = isDeepSpace ? 1.0 : 0.85;
 		}
 
 		return profile.map(step => ({
 			...step,
-			value: step.type === 'alt' ? Math.round(step.value * altScale) : step.value
+			value: step.type === 'alt' ? Math.round(step.value * altScale) : step.value,
+			action: step.action || ''
 		}));
 	}
 
 	/**
 	 * Configure RocketLauncher instance with selected vehicle, payload, and mission
+	 * @param {any} launcher
+	 * @param {{ vehicleId?: string, payloadId?: string, missionId?: string, applyRecommendedMission?: boolean }} [opts]
 	 */
-	applyToLauncher(launcher, { vehicleId, payloadId, missionId } = {}) {
+	applyToLauncher(launcher, { vehicleId, payloadId, missionId, applyRecommendedMission } = {}) {
 		if (!launcher) return;
 
 		const effectiveVehicleId = vehicleId || launcher.currentVehicleId || 'h3_30';
@@ -751,7 +937,8 @@ export class PresetManager {
 		const payload = effectivePayloadId ? this.getPayload(effectivePayloadId) : null;
 
 		let effectiveMissionId = missionId;
-		if (!effectiveMissionId && payload?.recommendedMissionId) {
+		const shouldApplyRecommended = (payloadId !== undefined && payloadId !== null) || applyRecommendedMission === true;
+		if (!effectiveMissionId && shouldApplyRecommended && payload?.recommendedMissionId) {
 			effectiveMissionId = payload.recommendedMissionId;
 		}
 		if (!effectiveMissionId) {
@@ -782,6 +969,7 @@ export class PresetManager {
 			launcher.boosters = plan.boosters || null;
 			launcher.targetApogeeKm = plan.targetApogeeKm || null;
 			launcher.targetPerigeeKm = plan.targetPerigeeKm || null;
+			launcher.targetVInfKmS = plan.targetVInfKmS || 0;
 			if (plan.payload) {
 				launcher.payload = plan.payload;
 			}
@@ -794,10 +982,9 @@ export class PresetManager {
 			if (plan.disableOrbitalCutoff !== undefined) {
 				launcher.disableOrbitalCutoff = plan.disableOrbitalCutoff;
 			}
-			if (plan.predictionDurationMonths) {
-				launcher.predictionDurationMonths = plan.predictionDurationMonths;
-				launcher.maxSimTimeSec = plan.predictionDurationMonths * (365.25 / 12) * 86400;
-			}
+			// The mission period, validated and clamped as a loaded one (a mission without a valid one keeps the period in
+			// use, design §4.13-17)
+			applyPredictionDurationMonths(launcher, plan.predictionDurationMonths);
 
 			// Sync Stage 0 to Launcher base properties
 			if (launcher.stages && launcher.stages[0]) {
@@ -1064,6 +1251,7 @@ export const MULTISTAGE_PRESETS = new Proxy({}, {
 	}
 });
 
+/** @type {Record<string, any>} */
 export const ROCKET_FUELS = new Proxy({}, {
 	get(target, prop) {
 		if (typeof prop === 'symbol' || prop === 'inspect' || prop === 'prototype') {
@@ -1089,6 +1277,7 @@ export const ROCKET_FUELS = new Proxy({}, {
 	}
 });
 
+/** @type {any} */
 export const ROCKET_VISUAL = new Proxy({}, {
 	get(target, prop) {
 		if (typeof prop === 'symbol' || prop === 'inspect' || prop === 'prototype') {

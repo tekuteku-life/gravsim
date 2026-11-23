@@ -27,10 +27,31 @@ export class SaveManager {
 		}
 	}
 
+	/**
+	 * Save the simulation. When the universe can supply the Worker runtime snapshot the file is
+	 * written after it arrives (or after its timeout); otherwise it is written synchronously.
+	 * @returns {Promise<void>}
+	 */
 	save() {
+		const capture = (typeof this.universe.captureRuntimeSnapshot === 'function')
+			? this.universe.captureRuntimeSnapshot()
+			: null;
+		if (capture && typeof capture.then === 'function') {
+			return capture
+				.then((snapshot) => this._writeSaveFile(snapshot), (err) => {
+					console.error("Failed to capture runtime state:", err);
+					this._writeSaveFile(null);
+				});
+		}
+		this._writeSaveFile(null);
+		return Promise.resolve();
+	}
+
+	/** @param {Map<number, any> | null} runtimeSnapshot */
+	_writeSaveFile(runtimeSnapshot) {
 		const state = {
 			version: 2,
-			universe: this.universe.getState()
+			universe: this.universe.getState(runtimeSnapshot)
 		};
 
 		const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -54,18 +75,30 @@ export class SaveManager {
 		const reader = new FileReader();
 		reader.onload = (event) => {
 			try {
-				const state = JSON.parse(event.target.result);
-
-				if (state.universe) {
-					this.universe.loadState(state.universe);
+				const raw = event?.target?.result;
+				if (typeof raw !== 'string') {
+					if (typeof alert === 'function') {
+						alert("Invalid save file.");
+					}
+					return;
 				}
+				const state = JSON.parse(raw);
+
+				if (!state || typeof state !== 'object' || Array.isArray(state) || !state.universe || typeof state.universe !== 'object' || Array.isArray(state.universe)) {
+					if (typeof alert === 'function') {
+						alert("Invalid save file.");
+					}
+					return;
+				}
+				this.universe.loadState(state.universe);
 			} catch (err) {
 				console.error("Failed to load state:", err);
 				if (typeof alert === 'function') {
 					alert("Invalid save file.");
 				}
+			} finally {
+				if (e?.target) e.target.value = '';
 			}
-			e.target.value = '';
 		};
 		reader.readAsText(file);
 	}

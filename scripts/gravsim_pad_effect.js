@@ -214,6 +214,8 @@ export class PadEffectRenderer {
 		this.startRelPadX = 0;
 		this.startRelPadY = 0;
 		this.startLaunchAngle = 0;
+		/** Host rotationAngle at the last pad-frame update (null until first observed). */
+		this.padRefRotationAngle = null;
 		this.rocketRadius = 0;
 		this.bottomOffsetM = 0;
 		this.lastContext = null;
@@ -237,6 +239,7 @@ export class PadEffectRenderer {
 		this.umbilicalAngle = 0;
 		this.umbilicalCable.reset();
 		this.bottomOffsetM = 0;
+		this.padRefRotationAngle = null;
 		this.lastContext = null;
 	}
 
@@ -350,29 +353,34 @@ export class PadEffectRenderer {
 		this.lastContext = context;
 
 		// Track relative origin to avoid drift from fast-moving planets
+		const hostRotAngle = (host && Number.isFinite(host.rotationAngle)) ? host.rotationAngle : null;
 		if (rocket && rocket.isHoldDown && host) {
 			this.startRelPadX = rocket.x - host.x;
 			this.startRelPadY = rocket.y - host.y;
 			this.startLaunchAngle = rocket.thrustAngle;
+			this.padRefRotationAngle = hostRotAngle;
 			this.rocketRadius = rocket.baseRadiusM || rocket.radius;
 			if (rocket.bottomOffsetM !== undefined) {
 				this.bottomOffsetM = rocket.bottomOffsetM;
 			}
-		} else if (host && rocket && !rocket.isHoldDown) {
-			// Update pad position by rotation even after liftoff
-			const hostParam = host.param || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam(host.name) : null);
-			if (hostParam && hostParam.ROTATION_PERIOD) {
-				const omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
-				const angleDelta = omega * dt;
-				
+		} else if (host && rocket && !rocket.isHoldDown && hostRotAngle !== null) {
+			// After liftoff the pad co-rotates with the host surface. The host rotation angle is
+			// integrated solely by the physics Worker (SSOT), so rotate by its delta instead of
+			// integrating omega * dt on the main thread.
+			if (!Number.isFinite(this.padRefRotationAngle)) {
+				this.padRefRotationAngle = hostRotAngle;
+			}
+			const angleDelta = hostRotAngle - this.padRefRotationAngle;
+			if (angleDelta !== 0) {
 				const cosA = Math.cos(angleDelta);
 				const sinA = Math.sin(angleDelta);
 				const newX = this.startRelPadX * cosA - this.startRelPadY * sinA;
 				const newY = this.startRelPadX * sinA + this.startRelPadY * cosA;
-				
+
 				this.startRelPadX = newX;
 				this.startRelPadY = newY;
 				this.startLaunchAngle += angleDelta;
+				this.padRefRotationAngle = hostRotAngle;
 			}
 		}
 
