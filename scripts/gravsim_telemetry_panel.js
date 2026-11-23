@@ -2,14 +2,14 @@
 
 import { UI, OBJECT_TYPES, TELEMETRY, EVENT_PRIORITY, TANK_PRESSURE_SIM } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
-import { DOMUtils, UnitConvertUtils, FormatUtils } from './gravsim_utils.js';
+import { DOMUtils, UnitConvertUtils, FormatUtils, normalizeMissionStatus, isLiveObject } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 import {
-	TelemetryCard,
 	FlightDynamicsCard,
 	AeroGuidanceCard,
 	PropulsionCard,
-	NavigationCameraCard
+	NavigationCameraCard,
+	isPayloadPhase
 } from './gravsim_telemetry_card.js';
 
 /*******************************************************************
@@ -25,6 +25,7 @@ export class TelemetryPanel {
 		this.lampTestTimer = 0;
 		this.lastUpdateTime = performance.now();
 
+		/** @type {Record<string, any>} */
 		this.ui = {
 			toggleBtn: document.getElementById('telemetry-toggle-btn'),
 			panel: document.getElementById('telemetry-panel'),
@@ -92,7 +93,7 @@ export class TelemetryPanel {
 			new FlightDynamicsCard('dynamics', 'Flight & Dynamics', document.getElementById('tm-card-dynamics')),
 			new AeroGuidanceCard('aero', 'Aero & Guidance', document.getElementById('tm-card-aero')),
 			new PropulsionCard('propulsion', 'Propulsion & Tanks', document.getElementById('tm-card-propulsion')),
-			new NavigationCameraCard('navigation', 'Navigation & Camera', document.getElementById('tm-card-navigation'), this.subRenderer),
+			new NavigationCameraCard('navigation', 'Navigation & Camera', document.getElementById('tm-card-navigation'), this.subRenderer, universe),
 		];
 
 		for (const card of this.cards) {
@@ -167,15 +168,15 @@ export class TelemetryPanel {
 			else { this.close(); }
 		});
 
-		this.ui.targetSelect.addEventListener('change', (e) => {
+		this.ui.targetSelect.addEventListener('change', (/** @type {any} */ e) => {
 			this.targetId = parseInt(e.target.value, 10);
 		});
 
 		// Quick toggles for predicted trajectory and actual flight path
-		this.ui.tmShowPredChk.addEventListener('change', (e) => {
+		this.ui.tmShowPredChk.addEventListener('change', (/** @type {any} */ e) => {
 			EventBus.emit('render:set-show-predicted-path', e.target.checked);
 		});
-		this.ui.tmShowActualChk.addEventListener('change', (e) => {
+		this.ui.tmShowActualChk.addEventListener('change', (/** @type {any} */ e) => {
 			EventBus.emit('render:set-show-actual-path', e.target.checked);
 		});
 
@@ -372,8 +373,11 @@ export class TelemetryPanel {
 
 	_updateTargetOptions() {
 		this.ui.targetSelect.innerHTML = '';
+		// Rockets and debris in the simulation, and the shown target even destroyed: the panel keeps showing the rocket it
+		// follows (design §4.13-30), but offers no other removed object still fading out (§4.13-31)
 		for (const obj of this.universe.objects) {
 			if (obj.type === OBJECT_TYPES.CELESTIAL) { continue; }
+			if (!isLiveObject(obj) && obj.id !== this.targetId) { continue; }
 
 			const option = document.createElement('option');
 			option.value = obj.id;
@@ -472,15 +476,16 @@ export class TelemetryPanel {
 
 	_updatePinnedHeader(target) {
 		const tm = target.telemetry;
+		const status = TelemetryPanel.normalizeMissionStatus(tm.status);
 
-		let mStat = TELEMETRY.STATUS_MAP[tm.status] || TELEMETRY.STATUS_MAP[0];
-		if (tm.status === TELEMETRY.STATUS.PRE_LAUNCH && this.universe.LaunchSequencer.isAutoSequence) {
+		let mStat = TelemetryPanel.formatMissionStatus(status);
+		if (status === TELEMETRY.STATUS.PRE_LAUNCH && this.universe.LaunchSequencer.isAutoSequence) {
 			mStat = "AUTO-SEQUENCE";
 		}
 
 		DOMUtils.setText(this.ui.missionStatus, mStat);
 
-		if (tm.status === TELEMETRY.STATUS.MAX_Q) {
+		if (status === TELEMETRY.STATUS.MAX_Q) {
 			DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.MAX_Q_COLOR);
 		} else {
 			DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.NORMAL_COLOR);
@@ -494,27 +499,77 @@ export class TelemetryPanel {
 		DOMUtils.setText(this.ui.missionTime, FormatUtils.timeMission(displayTimeSec));
 
 		// Update Multi-Stage Indicator
+		DOMUtils.setText(this.ui.stageInfo, TelemetryPanel.formatStageInfo(target, tm));
+	}
+
+	/**
+	 * The mission status (a TELEMETRY.STATUS value) a telemetry value stands for. A value that is not one of the status
+	 * numbers (none the FlightComputer reports: undefined, NaN, a fraction, out of range, a string such as "1") is
+	 * PRE_LAUNCH, the FlightComputer's initial status. Every reader of the status in this panel goes through it (the
+	 * pinned header, the minimal HUD and the annunciator, design §4.13-13 / -21), so they agree on such a value: it reads
+	 * PRE-LAUNCH (AUTO-SEQUENCE during an auto sequence) and lights no lamp of a launched rocket. The rule is the shared
+	 * normalizeMissionStatus of gravsim_utils.js, which the other readers of the status outside this panel use as well
+	 * (design §4.13-25).
+	 * @param {any} status
+	 * @returns {number}
+	 */
+	static normalizeMissionStatus(status) {
+		return normalizeMissionStatus(status);
+	}
+
+	/**
+	 * Text of a mission status (TELEMETRY.STATUS) for the pinned header and the minimal HUD: the text of
+	 * normalizeMissionStatus(status). (git 82f8860 wrote the fallback as STATUS_MAP[0], which was PRE-LAUNCH until git
+	 * bd61960 renumbered the statuses to -1..5; it had read LIFTOFF since then. Design §4.13-13.)
+	 * @param {any} status
+	 * @returns {string}
+	 */
+	static formatMissionStatus(status) {
+		return TELEMETRY.STATUS_MAP[TelemetryPanel.normalizeMissionStatus(status)];
+	}
+
+	/**
+	 * Text of the STAGE line: "N / M (stage name)" with the SRB tag on the first stage. After the payload separation no
+	 * stage is left (the Worker sets the stage index to the stage count, one past the last stage), so the "N / M" counter
+	 * is replaced by the payload's role, with its name in parentheses as a stage shows its own: "PAYLOAD (name)".
+	 * @param {any} target rocket
+	 * @param {any} tm its telemetry
+	 * @returns {string}
+	 */
+	static formatStageInfo(target, tm) {
 		const totalStg = tm.totalStages || target.stages?.length || 1;
 		const curStg = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
+		if (isPayloadPhase(target, tm, curStg, totalStg)) {
+			const payloadName = target.payload?.name;
+			return payloadName ? `PAYLOAD (${payloadName})` : 'PAYLOAD';
+		}
 		const stageNum = curStg + 1;
 		const curStageObj = target.stages && target.stages[curStg];
 		const stageName = curStageObj?.name ? curStageObj.name : (totalStg > 1 ? (stageNum === 1 ? 'BOOSTER' : 'UPPER') : 'CORE');
 		const hasBoosters = Boolean(target.boosters && (target.boosters.count > 0 || target.boosters.burnTimeSec > 0));
 		let srbTag = '';
 		if (hasBoosters && curStg === 0) {
-			if (tm.isBoosterSeparated) {
+			// The separation state the rocket holds (and saves) first, the telemetry flag as the fallback (as the
+			// renderer): before the first Worker frame, e.g. right after a load, the telemetry is a placeholder without them
+			if (target.isBoosterSeparated || tm.isBoosterSeparated) {
 				srbTag = ' [SRB SEP]';
-			} else if (tm.isBoosterBurnout) {
+			} else if (target.isBoosterBurnout || tm.isBoosterBurnout) {
 				srbTag = ' [SRB BURNOUT]';
 			} else {
 				srbTag = ' [+SRB]';
 			}
 		}
-		DOMUtils.setText(this.ui.stageInfo, `${stageNum} / ${totalStg} (${stageName})${srbTag}`);
+		return `${stageNum} / ${totalStg} (${stageName})${srbTag}`;
 	}
 
+	/**
+	 * Header while no rocket telemetry is shown (no rocket target, or a target without telemetry): the status reads
+	 * TRACKING. (git 82f8860 wrote it as STATUS_MAP[6], which was TRACKING until git bd61960 renumbered the statuses to
+	 * -1..5; the index 6 has been undefined since then.)
+	 * @param {any} target
+	 */
 	_resetPinnedHeader(target) {
-		DOMUtils.setText(this.ui.missionStatus, TELEMETRY.STATUS_MAP[6]);
+		DOMUtils.setText(this.ui.missionStatus, TELEMETRY.STATUS_MAP[TELEMETRY.STATUS.TRACKING]);
 		DOMUtils.setStyle(this.ui.missionStatus, 'color', TELEMETRY.STYLE.MISSION_STATUS.NORMAL_COLOR);
 		DOMUtils.setText(this.ui.missionTime, "T+ ---y ---d --:--:--");
 		DOMUtils.setText(this.ui.stageInfo, "---");
@@ -528,10 +583,11 @@ export class TelemetryPanel {
 		}
 
 		const tm = target.telemetry;
+		const status = TelemetryPanel.normalizeMissionStatus(tm.status);
 		this.ui.minimalHud.style.display = 'flex';
 
-		let mStat = TELEMETRY.STATUS_MAP[tm.status] || TELEMETRY.STATUS_MAP[0];
-		if (tm.status === TELEMETRY.STATUS.PRE_LAUNCH && this.universe.LaunchSequencer.isAutoSequence) {
+		let mStat = TelemetryPanel.formatMissionStatus(status);
+		if (status === TELEMETRY.STATUS.PRE_LAUNCH && this.universe.LaunchSequencer.isAutoSequence) {
 			mStat = "AUTO-SEQ";
 		}
 
@@ -550,7 +606,7 @@ export class TelemetryPanel {
 		// Minimal HUD Alert badge
 		if (this.ui.mHudAlert) {
 			const maxG = target.maxGLimit || 0;
-			const isQLimit = Boolean(tm.isQLimitNear || (tm.structRatio >= (TELEMETRY.ANNUNCIATOR?.Q_LIM_TH || 75)) || (tm.status === TELEMETRY.STATUS.MAX_Q));
+			const isQLimit = Boolean(tm.isQLimitNear || (tm.structRatio >= (TELEMETRY.ANNUNCIATOR?.Q_LIM_TH || 75)) || (status === TELEMETRY.STATUS.MAX_Q));
 			const isGLimit = Boolean(tm.isGLimitNear || (maxG > 0 && tm.currentG >= maxG * (TELEMETRY.ANNUNCIATOR?.G_LIM_RATIO || 0.85)));
 			const isStall = Boolean(tm.isAntiStallActive);
 
@@ -586,7 +642,10 @@ export class TelemetryPanel {
 		}
 
 		tm = tm || target?.telemetry || {};
+		// The status as the pinned header reads it (a value that is not a status is PRE_LAUNCH: not launched)
+		const status = TelemetryPanel.normalizeMissionStatus(tm.status);
 
+		/** @type {any} */
 		const conf = TELEMETRY.ANNUNCIATOR || {};
 		const qLimitTh = conf.Q_LIM_TH || 75;
 		const gRatioTh = conf.G_LIM_RATIO || 0.85;
@@ -600,7 +659,7 @@ export class TelemetryPanel {
 		const totalVelKmS = Math.sqrt(vV * vV + vH * vH) / 1000;
 
 		// 1. Q-LIM (Dynamic Pressure Limit approaching)
-		const isQLimit = Boolean(tm.isQLimitNear || tm.structRatio >= qLimitTh || tm.status === TELEMETRY.STATUS.MAX_Q);
+		const isQLimit = Boolean(tm.isQLimitNear || tm.structRatio >= qLimitTh || status === TELEMETRY.STATUS.MAX_Q);
 		this._setLamp('qlim', isQLimit, isQLimit);
 
 		// 2. G-LIM (G-Force Limit approaching)
@@ -611,9 +670,9 @@ export class TelemetryPanel {
 		const isStall = Boolean(tm.isAntiStallActive);
 		this._setLamp('stall', isStall, false);
 
-		// 4. WARN (Master Caution / Warning)
-		const isLowPropellant = target.isIgnited && target.fuelMass > 0 && target.fuelMass <= 0.05 * (target.maxFuel || target.fuelMass);
-		const isMasterWarn = isQLimit || isGLimit || isStall || isLowPropellant;
+		// 4. WARN (Master Caution / Warning). (git c98ddf9 also ORed a low-propellant term against target.maxFuel, which
+		// nothing sets on the main thread, so it was never true; removed with the other dead inputs, design §4.13-14)
+		const isMasterWarn = isQLimit || isGLimit || isStall;
 		this._setLamp('warn', isMasterWarn, isMasterWarn);
 
 		// 5. AUTO (Automatic Flight Guidance active)
@@ -621,28 +680,28 @@ export class TelemetryPanel {
 		this._setLamp('auto', isAuto, false);
 
 		// 6. TWR-C (Tower Cleared)
-		const isLaunched = tm.status !== TELEMETRY.STATUS.PRE_LAUNCH;
+		const isLaunched = status !== TELEMETRY.STATUS.PRE_LAUNCH;
 		const isTowerCleared = isLaunched && (tm.altM >= twrAltTh || tm.flightTime >= twrTimeTh);
 		this._setLamp('twr', isTowerCleared, false);
 
 		// 7. PITCH (Pitch / Gravity turn program)
-		const isPitching = isTowerCleared && (tm.status === TELEMETRY.STATUS.ASCENT || tm.status === TELEMETRY.STATUS.MAX_Q);
+		const isPitching = isTowerCleared && (status === TELEMETRY.STATUS.ASCENT || status === TELEMETRY.STATUS.MAX_Q);
 		this._setLamp('pitch', isPitching, false);
 
 		// 8. ORBIT (Orbital velocity acquired / Insertion)
 		const isOrbit = isLaunched && (totalVelKmS >= orbitVelKmS && tm.altM >= 80000);
 		this._setLamp('orbit', isOrbit, false);
 
-		// 9. PRESS (Tank pressure nominal)
+		// 9. PRESS (Tank pressure nominal): both tank pressures of the telemetry. (The tank-pressure state presState
+		// exists only in the Worker; the term git c98ddf9 read from the main-thread rocket was never true, design §4.13-14)
 		const threshold = TANK_PRESSURE_SIM.PRESS_LAMP_THRESHOLD_KPA;
-		const isPress = target.presState === 'NOMINAL' || (tm.tankPresFuel >= threshold && tm.tankPresOxid >= threshold);
+		const isPress = tm.tankPresFuel >= threshold && tm.tankPresOxid >= threshold;
 		this._setLamp('press', isPress, false);
 
 		// Multi-stage context
 		const curStage = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
 		const totalStages = (tm.totalStages !== undefined ? tm.totalStages : target.totalStages) || 1;
 		const isEngThrusting = Boolean(target.thrustRatio > 0.01 && target.fuelMass > 0.001 && (target.burnTime > 0 || target.isIgnited));
-		const isSeparating = Boolean(tm.isStgSepActive);
 
 		// 10. 1-ENG (Stage 1 Engine Burning)
 		const is1EngOn = isLaunched && curStage === 0 && isEngThrusting;
@@ -651,13 +710,15 @@ export class TelemetryPanel {
 		// 11. MECO (Main Engine Cutoff)
 		const isMeco = isLaunched && (
 			(curStage > 0) ||
-			(curStage === 0 && (!isEngThrusting && (tm.status === TELEMETRY.STATUS.MECO || tm.status === TELEMETRY.STATUS.COASTING || target.fuelMass <= 0.01 || target.burnTime <= 0)))
+			(curStage === 0 && (!isEngThrusting && (status === TELEMETRY.STATUS.MECO || status === TELEMETRY.STATUS.COASTING || target.fuelMass <= 0.01 || target.burnTime <= 0)))
 		);
 		this._setLamp('meco', isMeco, false);
 
-		// 12. 1-SEP (Stage 1 Separation)
-		const is1Sep = totalStages > 1 && (curStage >= 1 || (isSeparating && curStage === 0));
-		this._setLamp('1sep', is1Sep, isSeparating && curStage <= 1);
+		// 12. 1-SEP (Stage 1 Separation). The SEP lamps are steady: git 5f0628d blinked them for a while after each
+		// separation from a Worker lamp timer sent in its own buffer slot, and git e49d500 removed the timer and the slot
+		// (the reader of the flag it fed was left behind and is gone too, design §4.13-14)
+		const is1Sep = totalStages > 1 && curStage >= 1;
+		this._setLamp('1sep', is1Sep, false);
 
 		// 13. 2-ENG (Stage 2 Engine Burning)
 		const is2EngOn = isLaunched && totalStages > 1 && curStage === 1 && isEngThrusting;
@@ -671,15 +732,12 @@ export class TelemetryPanel {
 		this._setLamp('seco', isSeco, false);
 
 		// 15. 2-SEP (Stage 2 Separation)
-		const is2Sep = totalStages > 1 && (curStage >= 2 || target.isPayloadSeparated || tm.isPayloadSeparated || (isSeparating && curStage >= 1));
-		this._setLamp('2sep', is2Sep, isSeparating && curStage >= 1 && !target.isPayloadSeparated);
+		// (a boolean: classList.toggle with an undefined force flips the class instead of clearing it)
+		const is2Sep = totalStages > 1 && Boolean(curStage >= 2 || target.isStage2Separated || target.isPayloadSeparated || tm.isPayloadSeparated);
+		this._setLamp('2sep', is2Sep, false);
 
 		// 16. P-SEP (Payload Separation)
-		const isPsep = Boolean(
-			target.isPayloadSeparated || tm.isPayloadSeparated ||
-			(curStage >= totalStages && target.stageState === 'ORBITAL_COAST') ||
-			(isOrbit && curStage >= totalStages - 1 && !isEngThrusting && (tm.status === TELEMETRY.STATUS.COASTING || target.burnTime <= 0))
-		);
+		const isPsep = Boolean(target.isPayloadSeparated || tm.isPayloadSeparated);
 		this._setLamp('psep', isPsep, false);
 	}
 

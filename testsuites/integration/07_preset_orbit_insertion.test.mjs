@@ -24,7 +24,7 @@ import { RocketLauncher } from '../../scripts/gravsim_rocket_launcher.js';
 import { ControlPanel } from '../../scripts/gravsim_control_panel.js';
 import { RocketTab } from '../../scripts/gravsim_tab_rocket.js';
 import { PhysicsEngine } from '../../scripts/gravsim_calc.js';
-import { OBJECT_TYPES, PHYSICS, MULTISTAGE_ROCKET } from '../../scripts/gravsim_const.js';
+import { OBJECT_TYPES, OBJECT_STATE, PHYSICS, MULTISTAGE_ROCKET } from '../../scripts/gravsim_const.js';
 import { setupMockDOM, createMockUniverse, logDebug } from '../test_helpers.mjs';
 
 describe('Integration 07: Comprehensive Preset Orbit Insertion & Dynamic Sizing', () => {
@@ -651,8 +651,8 @@ describe('Integration 07: Comprehensive Preset Orbit Insertion & Dynamic Sizing'
 
 	describe('8. Abort Target Host & Second-Launch Trajectory Preview Regressions', () => {
 		it('should NOT change target host to Sun when aborting after rollout', () => {
-			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: 'ACTIVE' };
-			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: 'ACTIVE', x: 0, y: 0 };
+			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: OBJECT_STATE.ACTIVE };
+			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: OBJECT_STATE.ACTIVE, x: 0, y: 0 };
 			universe.objects = [sun, earth];
 			universe.camera = new Camera(universe);
 
@@ -685,15 +685,15 @@ describe('Integration 07: Comprehensive Preset Orbit Insertion & Dynamic Sizing'
 		});
 
 		it('should display predicted trajectory line on second launch before rollout is clicked', () => {
-			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: 'ACTIVE' };
-			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: 'ACTIVE', x: 0, y: 0 };
+			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: OBJECT_STATE.ACTIVE };
+			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: OBJECT_STATE.ACTIVE, x: 0, y: 0 };
 			
 			// Simulate a rocket that was previously launched and is now actively flying in orbit with predicted trajectory
 			const flyingRocket = {
 				id: 99,
 				name: 'Rocket 1 In Orbit',
 				type: OBJECT_TYPES.ROCKET,
-				state: 'ACTIVE',
+				state: OBJECT_STATE.ACTIVE,
 				isHoldDown: false,
 				predictedTrajectory: { points: [{ x: 0, y: 0 }, { x: 100, y: 100 }] },
 				x: 1000,
@@ -734,8 +734,8 @@ describe('Integration 07: Comprehensive Preset Orbit Insertion & Dynamic Sizing'
 		});
 
 		it('should lock menu tabs on rollout for second and subsequent launches', () => {
-			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: 'ACTIVE' };
-			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: 'ACTIVE', x: 0, y: 0 };
+			const sun = { id: 0, name: 'Sun', type: OBJECT_TYPES.CELESTIAL, mass: 1.989e30, radius: 696340000, state: OBJECT_STATE.ACTIVE };
+			const earth = { id: 1, name: 'Earth', type: OBJECT_TYPES.CELESTIAL, mass: 5.972e24, radius: 6371000, state: OBJECT_STATE.ACTIVE, x: 0, y: 0 };
 			universe.objects = [sun, earth];
 			universe.camera = new Camera(universe);
 

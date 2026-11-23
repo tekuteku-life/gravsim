@@ -2,12 +2,12 @@
 // gravsim_object_placer.js
 
 import {
-	PHYSICS, SIMULATION,
+	PHYSICS, SIMULATION, OBJECT_TYPES,
 	DEPLOY_PROFILES, RENDER, EVENT_PRIORITY, MULTISTAGE_ROCKET
 } from './gravsim_const.js';
 import { presetManager } from './gravsim_preset_manager.js';
 import { CelestialBody, Rocket } from './gravsim_object.js';
-import { UnitConvertUtils, MathUtils } from './gravsim_utils.js';
+import { UnitConvertUtils, MathUtils, isLiveObject } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 export const SOLAR_PLANETS = new Set([
@@ -74,6 +74,71 @@ export class ObjectPlacer {
 		EventBus.off('input:drag-cancel', this._onDragCancel);
 	}
 
+	/** The world center while it is in the simulation (ObjectManager.getWorldCenter), else null. */
+	_getWorldCenter() {
+		const om = this.universe?.ObjectManager;
+		if (om && typeof om.getWorldCenter === 'function') { return om.getWorldCenter(); }
+		return null;
+	}
+
+	/**
+	 * A world reduced to a center of another kind than `template` gets the center a fresh page has (design §4.13-27,
+	 * the reverse of §4.13-32). The kind of a body is the preset its param names (param.NAME): Sagittarius A* of
+	 * Galactic Center is not of the kind of "Sun". A placement built on that body (the first star of the binary and
+	 * three-body generators, the Sun that Solar System, Stress Test and the Deploy buttons go around) took the center
+	 * as it was: "Sun A" kept the radius, border and param of Sgr A* (also in the Worker), and Solar System threw "Sun
+	 * object not found" with the simulation paused. When the center is the only celestial body in the simulation (the
+	 * clear of a profile, or System › Clear Selected, left it), it is removed, and the template is placed where Reset
+	 * places the Sun (the canvas center, at rest) as the new center; the placement then continues as on a fresh page.
+	 * Which centers (design §4.14-14): a placement that adds to the world (the Deploy buttons, Solar System) replaces
+	 * only the world center a profile placed (CelestialBody.isProfileWorldCenter: the static object marked worldCenter,
+	 * Sgr A* of Galactic Center, §4.13-32), not a body the user placed into the empty world, which is its center too
+	 * (§4.14-13 (a)): earlier the Earth, Sun or Sirius button or Solar System removed a Jupiter placed so, and a Sgr A*
+	 * the user placed by hand (Deploy › Object Mass lists every preset), whose kind is that of Galactic Center's center.
+	 * The role is the saved flag, not the kind, so a save and a load keep it (a save without the flag has no profile
+	 * center). After the clear of the profile itself (`cleared`: Binary, Three-Body, Stress Test) a center of any other
+	 * kind is replaced: that clear removed every other body and kept the center only as the Sun of its world (on main it
+	 * removed the user's body as well), and a generator would make a "Sun A" of Jupiter's radius and param. The new
+	 * center is a body of the template placed by the placement, not by a profile as its world center (no flag).
+	 * A center of the kind (the Sun of the page or of Reset, or the star a generator made of it), a center without a
+	 * param (a save written before the param was saved, whose center is the page's Sun), and a world with other bodies
+	 * (they would lose the body they go around) are left as they are.
+	 * @param {string} template preset key or name of the body the placement is built on
+	 * @param {boolean} [cleared] the placement is that of a profile whose own clear has just run
+	 * @returns {any} the new world center, or null when nothing was replaced
+	 */
+	_replaceCenterOfOtherKind(template, cleared = false) {
+		const center = this._getWorldCenter();
+		const param = this._getObjectParam(template);
+		const kind = center?.param?.NAME;
+		if (!center || !param || !kind || kind === param.NAME) { return null; }
+		if (!cleared && center.isProfileWorldCenter !== true) { return null; }
+		const others = this.universe.objects.some(o => o !== center && o.type === OBJECT_TYPES.CELESTIAL && isLiveObject(o));
+		if (others || typeof this.universe.removeObject !== 'function') { return null; }
+		const tracked = this.universe.camera?.trackingTarget === center;
+		this.universe.removeObject(center);
+		const canvas = this.universe.canvas;
+		const body = this.placeObject(template, canvas ? canvas.width / 2 : 0, canvas ? canvas.height / 2 : 0, 0, 0);
+		// The center even when rockets or debris are left (they do not make a world center)
+		body.isWorldCenter = true;
+		if (tracked) { EventBus.emit('camera:set-tracking-target', body); }
+		return body;
+	}
+
+	/**
+	 * Names of the bodies a profile places objects around without placing them itself (Solar System and Stress Test:
+	 * the Sun). Galactic Center places its host, Sagittarius A*, itself; the binary and three-body generators have none.
+	 * @param {any} profile
+	 * @returns {string[]}
+	 */
+	_externalHosts(profile) {
+		const statics = Array.isArray(profile.staticObjects) ? profile.staticObjects : [];
+		const generators = Array.isArray(profile.generators) ? profile.generators : [];
+		const placed = new Set(statics.map(d => d && this._getObjectParam(d.template)?.NAME).filter(Boolean));
+		const hosts = [...statics, ...generators].map(d => d && d.host).filter(h => typeof h === 'string' && !placed.has(h));
+		return [...new Set(hosts)];
+	}
+
 	_getObjectParam(name) {
 		return (typeof this.universe?.getObjectParams === 'function' ? this.universe.getObjectParams(name) : null)
 			|| presetManager.getObjectParam(name);
@@ -118,8 +183,11 @@ export class ObjectPlacer {
 				obj.thrustAngle = options.angle;
 			}
 
+			// Rocket-owned deep copies: the launched vehicle must never share mutable config with RocketLauncher
+			const cloneConfig = (v) => ((v === null || v === undefined) ? v : JSON.parse(JSON.stringify(v)));
+
 			if (options.flightProfile !== undefined) {
-				obj.flightProfile = options.flightProfile;
+				obj.flightProfile = cloneConfig(options.flightProfile);
 			}
 
 			// Apply active rocket engine parameters if specified
@@ -140,11 +208,15 @@ export class ObjectPlacer {
 			if (options.baseRadiusM !== undefined) { obj.baseRadiusM = options.baseRadiusM; }
 			if (options.isHoldDown !== undefined) { obj.isHoldDown = options.isHoldDown; }
 			if (options.isIgnited !== undefined) { obj.isIgnited = options.isIgnited; }
-			if (options.stages !== undefined) { obj.stages = options.stages; }
-			if (options.payload !== undefined) { obj.payload = options.payload; }
-			if (options.fairing !== undefined) { obj.fairing = options.fairing; }
-			if (options.boosters !== undefined) { obj.boosters = options.boosters; }
-			if (options.rendering !== undefined) { obj.rendering = options.rendering; }
+			if (options.stages !== undefined) { obj.stages = cloneConfig(options.stages); }
+			if (options.payload !== undefined) { obj.payload = cloneConfig(options.payload); }
+			if (options.fairing !== undefined) { obj.fairing = cloneConfig(options.fairing); }
+			if (options.boosters !== undefined) { obj.boosters = cloneConfig(options.boosters); }
+			if (options.rendering !== undefined) { obj.rendering = cloneConfig(options.rendering); }
+			if (options.disableOrbitalCutoff !== undefined) { obj.disableOrbitalCutoff = Boolean(options.disableOrbitalCutoff); }
+			if (options.targetApogeeKm !== undefined) { obj.targetApogeeKm = Number(options.targetApogeeKm) || 0; }
+			if (options.targetPerigeeKm !== undefined) { obj.targetPerigeeKm = Number(options.targetPerigeeKm) || 0; }
+			if (options.targetVInfKmS !== undefined) { obj.targetVInfKmS = Number(options.targetVInfKmS) || 0; }
 
 			if (options.disableStaging !== undefined) {
 				obj.disableStaging = options.disableStaging;
@@ -191,6 +263,13 @@ export class ObjectPlacer {
 				param.BORDER_COLOR || null,
 				param.BORDER_WIDTH || 0
 			);
+			// The first body of an empty world is its center (the Sun of Universe.reset(), which empties the list first:
+			// at startup and after Reset alike). Earlier code took "the object with id 0" for it, which only the Sun of
+			// the first world of a page gets (design §4.13-27). Empty: no object in the simulation (isLiveObject, as
+			// ObjectManager.countLive). The length of the list also counted removed objects that stay listed until their
+			// trails have faded, so a star placed right after the center was removed became the center or not depending
+			// on the fade (§4.13-31)
+			obj.isWorldCenter = !(this.universe.objects || []).some(o => isLiveObject(o));
 		}
 
 		obj.param = param;
@@ -251,7 +330,11 @@ export class ObjectPlacer {
 
 	placeAtOrbitAroundSun(objName) {
 		if (objName === "Sun") {
-			let sunObj = this.universe.objects.find(obj => obj.name === "Sun" && (obj.state === undefined || obj.state === 0));
+			// Without a Sun, a world reduced to the world center a profile placed (Sgr A* of Galactic Center) gets the Sun
+			// of a fresh page (§4.13-27); a body the user placed into the empty world stays (also a Sgr A*), and the Sun is
+			// added beside it (§4.14-14)
+			let sunObj = this.universe.objects.find(obj => obj.name === "Sun" && (obj.state === undefined || obj.state === 0))
+				|| this._replaceCenterOfOtherKind("Sun");
 			if (!sunObj) {
 				const centerX = this.universe?.canvas ? this.universe.canvas.width / 2 : 0;
 				const centerY = this.universe?.canvas ? this.universe.canvas.height / 2 : 0;
@@ -267,7 +350,15 @@ export class ObjectPlacer {
 		}
 
 		// Ensure Sun exists in the universe
-		let sunObj = this.universe.objects.find(obj => obj.name === "Sun" && (obj.state === undefined || obj.state === 0)) || this.universe.camera?.trackingTarget;
+		// Without a Sun: a world reduced to the world center of a profile (Sgr A* after Galactic Center and Clear
+		// Selected) gets the Sun of a fresh page, which the planet goes around as there (§4.13-27, the reverse of
+		// §4.13-32; earlier it went around Sgr A*, the camera's target). A body the user placed into the empty world is
+		// not replaced, whatever its kind (§4.14-14). Else the camera's target if it is in the simulation (a removed one
+		// fades out at its last place)
+		const cameraTarget = this.universe.camera?.trackingTarget;
+		let sunObj = this.universe.objects.find(obj => obj.name === "Sun" && (obj.state === undefined || obj.state === 0))
+			|| this._replaceCenterOfOtherKind("Sun")
+			|| (isLiveObject(cameraTarget) ? cameraTarget : null);
 		if (!sunObj) {
 			if (SOLAR_PLANETS.has(objName)) {
 				const centerX = this.universe?.canvas ? this.universe.canvas.width / 2 : 0;
@@ -303,8 +394,28 @@ export class ObjectPlacer {
 		EventBus.emit('simulation:pause');
 
 		if (profile.clearPrevious) {
-			// Clear debris, rockets, and celestials (excluding Sun)
+			// Clear debris, rockets, and celestials (excluding the world center)
 			EventBus.emit('simulation:clear-objects', true, true, true);
+		}
+
+		// A profile whose static objects name their own world center (Galactic Center: Sagittarius A*) replaces the
+		// current one: the world is built around that body, and the old center (the Sun of the page or of Reset) has no
+		// place in it. Earlier the clear kept it, so a second Sun sat at rest beside Sgr A* (design §4.13-32)
+		const centerDef = Array.isArray(profile.staticObjects) ? profile.staticObjects.find(d => d && d.worldCenter === true) : null;
+		if (centerDef) {
+			const oldCenter = this._getWorldCenter();
+			if (oldCenter && typeof this.universe.removeObject === 'function') { this.universe.removeObject(oldCenter); }
+		}
+
+		// The reverse: a profile that goes around a body it does not place (Solar System and Stress Test: the Sun) in a
+		// world reduced to a center of another kind (Galactic Center, then its clear or System › Clear Selected) builds on
+		// the Sun of a fresh page. Earlier Solar System threw "Sun object not found" after the pause, and the swarms of
+		// Stress Test placed nothing (design §4.13-27). Solar System adds to the world: only the world center a profile
+		// placed (isProfileWorldCenter) is replaced, not a body the user placed; after a profile's own clear any other kind
+		// is (§4.14-14)
+		const cleared = profile.clearPrevious === true;
+		for (const host of this._externalHosts(profile)) {
+			if (!this.universe.objects.some(o => o.name === host && isLiveObject(o))) { this._replaceCenterOfOtherKind(host, cleared); }
 		}
 
 		// Process Center Object if defined in profile
@@ -321,10 +432,18 @@ export class ObjectPlacer {
 		// 1. Process Static Objects
 		if (profile.staticObjects) {
 			profile.staticObjects.forEach(objDef => {
+				let obj;
 				if (objDef.host) {
-					this.placeAtOrbitAroundHost(objDef.host, objDef.template);
+					obj = this.placeAtOrbitAroundHost(objDef.host, objDef.template);
 				} else {
-					this.placeObject(objDef.template, objDef.x || 0, objDef.y || 0, objDef.vx || 0, objDef.vy || 0, objDef.options || {});
+					obj = this.placeObject(objDef.template, objDef.x || 0, objDef.y || 0, objDef.vx || 0, objDef.vy || 0, objDef.options || {});
+				}
+				if (objDef === centerDef && obj) {
+					// The world center of the profile, marked as such (saved): the placements that add to the world replace
+					// it when they need a body of another kind, not a body of its kind the user placed (§4.14-14)
+					obj.isWorldCenter = true;
+					obj.isProfileWorldCenter = true;
+					EventBus.emit('camera:set-tracking-target', obj);
 				}
 			});
 		}
@@ -333,14 +452,15 @@ export class ObjectPlacer {
 		if (profile.generators) {
 			profile.generators.forEach(gen => {
 				if (gen.type === 'binary_system') {
-					this._deployBinarySystem(gen);
+					this._deployBinarySystem(gen, cleared);
 					return;
 				} else if (gen.type === 'three_body') {
-					this._deployThreeBody(gen);
+					this._deployThreeBody(gen, cleared);
 					return;
 				}
 
-				const hostObj = this.universe.objects.find(obj => obj.name === gen.host);
+				// A host in the simulation: a removed body of the same name may still be listed (design §4.13-31)
+				const hostObj = this.universe.objects.find(obj => obj.name === gen.host && isLiveObject(obj));
 				if (!hostObj) return;
 
 				if (gen.type === 'elliptical_swarm') {
@@ -413,18 +533,29 @@ export class ObjectPlacer {
 		}
 	}
 
-	_deployBinarySystem(genConfig) {
+	/**
+	 * @param {any} genConfig
+	 * @param {boolean} [cleared] the profile's own clear has just run (design §4.14-14)
+	 */
+	_deployBinarySystem(genConfig, cleared = false) {
 		const canvas = this.universe.canvas;
 		let cx = canvas.width / 2;
 		let cy = canvas.height / 2;
 
-		const existingObj = this.universe.objects[0];
+		const pConf = genConfig.primary || { template: 'Sun', name: 'Sun A' };
+
+		// The world center the clear of the profile kept becomes the primary star; without one (it was destroyed) a new
+		// primary is placed. Not the first object of the list: a body the clear removed stays listed until its trail has
+		// faded, and turning it into the primary sent updates for a body the Worker no longer has. Only a center of the
+		// primary's kind: the generator rewrites its name, colour, mass and motion, not its radius, border or param, so
+		// a center of another kind (Sagittarius A*; after the profile's clear also a body the user placed, which that
+		// clear would remove if it were not the center) is first replaced by the body of a fresh page (design §4.13-27,
+		// §4.14-14)
+		const existingObj = this._replaceCenterOfOtherKind(pConf.template || 'Sun', cleared) || this._getWorldCenter();
 		if (existingObj) {
 			cx = existingObj.x;
 			cy = existingObj.y;
 		}
-
-		const pConf = genConfig.primary || { template: 'Sun', name: 'Sun A' };
 		const sConf = genConfig.secondary || { template: 'Sun', name: 'Sun B' };
 
 		const pParam = this._getObjectParam(pConf.template) || this._getObjectParam('Sun');
@@ -523,22 +654,28 @@ export class ObjectPlacer {
 		EventBus.emit('camera:set-tracking-target', primaryObj);
 	}
 
-	_deployThreeBody(genConfig) {
+	/**
+	 * @param {any} genConfig
+	 * @param {boolean} [cleared] the profile's own clear has just run (design §4.14-14)
+	 */
+	_deployThreeBody(genConfig, cleared = false) {
 		const canvas = this.universe.canvas;
 		let cx = canvas.width / 2;
 		let cy = canvas.height / 2;
-
-		const existingObj = this.universe.objects[0];
-		if (existingObj) {
-			cx = existingObj.x;
-			cy = existingObj.y;
-		}
 
 		const stars = genConfig.stars || [
 			{ template: "Sun", name: "Sun A (Trisolaris 1)", color: "#FF4500" },
 			{ template: "Sun", name: "Sun B (Trisolaris 2)", color: "#00E5FF" },
 			{ template: "Sun", name: "Sun C (Trisolaris 3)", color: "#FFD700" }
 		];
+
+		// The world center the clear kept becomes the first star (as the binary system's primary), a center of another
+		// kind replaced first as there (design §4.13-27, §4.14-14)
+		const existingObj = this._replaceCenterOfOtherKind(stars[0]?.template || "Sun", cleared) || this._getWorldCenter();
+		if (existingObj) {
+			cx = existingObj.x;
+			cy = existingObj.y;
+		}
 
 		const sunParam = this._getObjectParam('Sun');
 		const massTon = sunParam?.MASS || 1.9891e27;
@@ -657,7 +794,7 @@ export class ObjectPlacer {
 	}
 
 	getLaunchObjectName() {
-		const massSelect = document.getElementById('mass-select');
+		const massSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('mass-select'));
 		if (massSelect && this._getObjectParam(massSelect.value)) {
 			return massSelect.value;
 		}

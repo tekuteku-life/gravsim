@@ -295,6 +295,9 @@ describe('Integration Suite 09 - Non-Sun Center and Solar Planet Deployment', ()
 			const sun = new CelestialBody(0, 'Sun', 0, 0, 0, 0, 1.989e30, '#ffcc00', 10, 6.9634e8, 0, null, 0);
 			const earth = new CelestialBody(1, 'Earth', 180, 0, 0, 0.03, 5.972e24, '#3366cc', 5, 6371000, 0, null, 0);
 			const mars = new CelestialBody(2, 'Mars', 270, 0, 0, 0.024, 6.417e23, '#cc4422', 4, 3389000, 0, null, 0);
+			// The Sun is the world center (as the Sun of Universe.reset(); design §4.13-27: the clear keeps the world
+			// center, earlier the object with id 0)
+			sun.isWorldCenter = true;
 			universe.addObject(sun);
 			universe.addObject(earth);
 			universe.addObject(mars);
@@ -303,13 +306,13 @@ describe('Integration Suite 09 - Non-Sun Center and Solar Planet Deployment', ()
 			universe.camera.setTrackingTarget(earth);
 			assert.equal(universe.camera.trackingTarget, earth);
 
-			// Clear celestials (clears Earth and Mars, preserves Sun id:0)
+			// Clear celestials (clears Earth and Mars, preserves the world center)
 			universe.clearObjects(false, false, true);
 			universe.ObjectManager.cleanupObjects();
 
 			// Tracking target should safely switch away from deleted Earth to Sun
 			assert.ok(!universe.objects.includes(earth), 'Earth was cleared');
-			assert.ok(universe.objects.includes(sun), 'Sun id:0 preserved');
+			assert.ok(universe.objects.includes(sun), 'the world center (Sun) preserved');
 			assert.equal(universe.camera.trackingTarget, sun, 'Tracking target safely switched to Sun');
 
 			// Clear remaining Sun (e.g. by removing directly)

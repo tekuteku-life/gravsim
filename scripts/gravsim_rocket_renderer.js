@@ -2,9 +2,77 @@
 // gravsim_rocket_renderer.js
 
 import { PAD_EFFECT } from './gravsim_const.js';
+import { AeroUtils } from './gravsim_utils.js';
 import { ROCKET_VISUAL } from './gravsim_preset_manager.js';
 
 export class RocketRenderer {
+	static _resolveAmbientPresRatio(rocket) {
+		if (rocket.ambientPresRatio !== undefined) {
+			return rocket.ambientPresRatio;
+		}
+		if (rocket.telemetry?.ambientPresRatio !== undefined) {
+			return rocket.telemetry.ambientPresRatio;
+		}
+		if (rocket.telemetry?.altM !== undefined) {
+			return rocket.telemetry.altM > 100000 ? 0.0 : Math.exp(-rocket.telemetry.altM / 8500);
+		}
+		return rocket.inAtmosphere ? 1.0 : 0.0;
+	}
+
+	/**
+	 * Whether the SRBs fire: attached, ignited and not burnt out. The SRBs ignite at the release of the hold-down
+	 * (CalcRocket: isBoosterIgnited = !isHoldDown && isIgnited on the first stage). The Worker's isBoosterIgnited never
+	 * reaches the main thread, so it is derived here from the synchronised flags (design §4.13-23). Both levels of detail
+	 * use this one rule: the low detail widened the plume for the SRBs whenever they were not burnt out, so on the pad
+	 * after MAIN ENGINE START (only the core fires) it showed them firing (design §4.13-29). The callers draw SRBs on
+	 * the first stage only.
+	 * @param {any} rocket
+	 * @returns {boolean}
+	 */
+	static isBoosterFiring(rocket) {
+		const isBoosterSeparated = Boolean(rocket.isBoosterSeparated || rocket.telemetry?.isBoosterSeparated);
+		const isBoosterBurnout = Boolean(rocket.isBoosterBurnout || rocket.telemetry?.isBoosterBurnout);
+		const isBoosterIgnited = !rocket.isHoldDown && rocket.isIgnited;
+		return Boolean(isBoosterIgnited && !isBoosterBurnout && !isBoosterSeparated);
+	}
+
+	/**
+	 * Whether the engine of the current stage (or of the separated payload) fires: ignited, with burn time left and a
+	 * throttle above the plume threshold. Every stage, the self-propelled payload and both levels of detail use this one
+	 * rule (design §4.13-29, §4.14-2).
+	 * @param {any} rocket
+	 * @returns {boolean}
+	 */
+	static isEngineFiring(rocket) {
+		const threshold = ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD;
+		return Boolean(rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > threshold || (rocket.telemetry?.twr > threshold)));
+	}
+
+	/**
+	 * Whether the separated payload fires its own engine: self-propelled (hasPayloadPropulsion, else
+	 * payload.propulsion.enabled, as Rocket.mass reads it) and firing by isEngineFiring. After the separation the Worker
+	 * runs the payload's propulsion on the same flags (isIgnited, burnTime, thrustRatio), which the telemetry reports as
+	 * PES; a passive payload is never ignited. The payload-only drawing returned before any plume, so such a burn was
+	 * never shown (design §4.14-2).
+	 * @param {any} rocket
+	 * @returns {boolean}
+	 */
+	static isPayloadEngineFiring(rocket) {
+		const isSelfPropelled = Boolean(rocket.hasPayloadPropulsion || rocket.payload?.propulsion?.enabled);
+		return isSelfPropelled && this.isEngineFiring(rocket);
+	}
+
+	/**
+	 * The fuel type of the payload's engine (its plume): payload.propulsion.fuelType, else liquid. The rocket's own
+	 * fuelType is the first stage's on the main thread.
+	 * @param {any} rocket
+	 * @returns {string}
+	 */
+	static payloadFuelType(rocket) {
+		const fuelType = rocket.payload?.propulsion?.fuelType;
+		return (typeof fuelType === 'string' && fuelType) ? fuelType : 'liquid';
+	}
+
 	static draw(ctx, rocket, x, y, screenRadius, zoomScale) {
 		ctx.save();
 		ctx.translate(x, y);
@@ -16,21 +84,200 @@ export class RocketRenderer {
 		}
 
 		const theme = ROCKET_VISUAL.THEMES[rocket.colorTheme] || ROCKET_VISUAL.THEMES.orange;
-		const ambientPresRatio = rocket.ambientPresRatio !== undefined
-			? rocket.ambientPresRatio
-			: (rocket.telemetry?.ambientPresRatio !== undefined
-				? rocket.telemetry.ambientPresRatio
-				: (rocket.telemetry?.altM !== undefined
-					? (rocket.telemetry.altM > 100000 ? 0.0 : Math.exp(-rocket.telemetry.altM / 8500))
-					: (rocket.inAtmosphere ? 1.0 : 0.0)));
+		const ambientPresRatio = this._resolveAmbientPresRatio(rocket);
 
 		if (screenRadius < ROCKET_VISUAL.LOD_RADIUS_THRESHOLD) {
 			this._drawLowDetail(ctx, rocket, screenRadius, theme, ambientPresRatio);
 		} else {
 			this._drawHighDetail(ctx, rocket, screenRadius, zoomScale, theme, ambientPresRatio);
+			const layout = this._computeVisualLayout(rocket, screenRadius, ROCKET_VISUAL);
+			this.drawVaporCone(ctx, rocket, layout, ROCKET_VISUAL);
+			this.drawColdGasRcs(ctx, rocket, layout, ROCKET_VISUAL);
 		}
 
 		ctx.restore();
+	}
+
+	static _computeVisualLayout(rocket, R, visualCfg = ROCKET_VISUAL) {
+		const curStgIdx = rocket.telemetry?.stageIndex !== undefined ? rocket.telemetry.stageIndex : (rocket.currentStageIndex || 0);
+		const totalStg = rocket.telemetry?.totalStages || rocket.stages?.length || 1;
+		const isPayloadOnly = !rocket.disableStaging && Boolean(
+			rocket.isPayloadSeparated ||
+			rocket.telemetry?.isPayloadSeparated ||
+			(rocket.stages && curStgIdx >= totalStg)
+		);
+
+		const m = visualCfg.MODULES;
+		const align = visualCfg.ALIGNMENT;
+		const r1 = R * m.STAGE1_RADIUS_RATIO;
+		const l1 = R * m.STAGE1_LENGTH_RATIO;
+		const r2 = R * m.STAGE2_RADIUS_RATIO;
+		const l2 = R * m.STAGE2_LENGTH_RATIO;
+		const r3 = R * (m.STAGE3_RADIUS_RATIO || 0.55);
+		const l3 = R * (m.STAGE3_LENGTH_RATIO || 0.9);
+		const lInter = R * m.INTERSTAGE_LENGTH_RATIO;
+		const lInter2 = R * (m.INTERSTAGE2_LENGTH_RATIO || 0.25);
+		const lFairing = R * m.FAIRING_LENGTH_RATIO;
+
+		if (isPayloadOnly) {
+			const payloadR = (totalStg === 1) ? r1 : ((totalStg >= 3) ? r3 : r2);
+			const halfBusW = 0.5 * payloadR * m.SATELLITE_BUS_W_RATIO;
+			const halfBusH = 0.5 * payloadR * m.SATELLITE_BUS_H_RATIO;
+			return {
+				xMin: -halfBusW,
+				xMax: halfBusW,
+				halfWidth: halfBusH,
+				screenRadius: R
+			};
+		}
+
+		const hasFairing = Boolean(
+			rocket.disableStaging ||
+			(rocket.fairing?.enabled &&
+			!rocket.telemetry?.isFairingSeparated &&
+			!rocket.fairing?.isSeparated)
+		);
+		const getNoseEnd = (fairingX, bodyR) => {
+			if (hasFairing) return fairingX + lFairing;
+			return fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO + bodyR * m.SATELLITE_BUS_W_RATIO * 0.5;
+		};
+
+		if (totalStg === 1) {
+			const stg1X = R * (align.BASE_X_SINGLE_STAGE_RATIO ?? -1.5);
+			const xMax = getNoseEnd(stg1X + l1, r1);
+			return { xMin: stg1X, xMax, halfWidth: r1, screenRadius: R };
+		}
+
+		if (totalStg >= 3) {
+			if (curStgIdx === 0) {
+				const stg1X = R * (align.BASE_X_3STG_STAGE1_RATIO ?? -3.1);
+				const xMax = getNoseEnd(stg1X + l1 + lInter + l2 + lInter2 + l3, r3);
+				return { xMin: stg1X, xMax, halfWidth: r1, screenRadius: R };
+			}
+			if (curStgIdx === 1) {
+				const stg2X = R * (align.BASE_X_3STG_STAGE2_RATIO ?? -1.6);
+				const xMax = getNoseEnd(stg2X + l2 + lInter2 + l3, r3);
+				return { xMin: stg2X, xMax, halfWidth: r2, screenRadius: R };
+			}
+			const stg3X = R * (align.BASE_X_3STG_STAGE3_RATIO ?? -0.9);
+			const xMax = getNoseEnd(stg3X + l3, r3);
+			return { xMin: stg3X, xMax, halfWidth: hasFairing ? r2 : r3, screenRadius: R };
+		}
+
+		const hasStage1 = (curStgIdx === 0);
+		const stg2X = hasStage1 ? R * align.BASE_X_STAGE1_RATIO : R * align.BASE_X_UPPER_RATIO;
+		const xMin = hasStage1 ? (stg2X - lInter - l1) : stg2X;
+		const xMax = getNoseEnd(stg2X + l2, r2);
+		return {
+			xMin,
+			xMax,
+			halfWidth: hasStage1 ? r1 : r2,
+			screenRadius: R
+		};
+	}
+
+	static _drawRcsPlume(ctx, x, y, ux, uy, plumeLen, cfg) {
+		const spread = cfg.PLUME_SPREAD_RAD ?? 0.34;
+		const baseAngle = Math.atan2(uy, ux);
+		const drawCone = (len, angSpread, color) => {
+			const a1 = baseAngle - angSpread;
+			const a2 = baseAngle + angSpread;
+			ctx.fillStyle = color;
+			ctx.beginPath();
+			ctx.moveTo(x, y);
+			ctx.lineTo(x + Math.cos(a1) * len, y + Math.sin(a1) * len);
+			ctx.lineTo(x + Math.cos(a2) * len, y + Math.sin(a2) * len);
+			ctx.closePath();
+			ctx.fill();
+		};
+		drawCone(plumeLen, spread, cfg.MIST_COLOR);
+		drawCone(plumeLen * 0.65, spread * 0.45, cfg.CORE_COLOR);
+	}
+
+	static drawColdGasRcs(ctx, rocket, layout, visualCfg = ROCKET_VISUAL) {
+		if (!rocket || !layout || !visualCfg?.COLD_GAS_RCS) return;
+		if (Number.isFinite(layout.screenRadius) && layout.screenRadius < (visualCfg.LOD_RADIUS_THRESHOLD ?? 10)) return;
+		const rcsCw = Boolean(rocket.rcsCw || rocket.telemetry?.rcsCw);
+		const rcsCcw = Boolean(rocket.rcsCcw || rocket.telemetry?.rcsCcw);
+		const rcsUllage = Boolean(rocket.rcsUllage || rocket.telemetry?.rcsUllage);
+		if (!rcsCw && !rcsCcw && !rcsUllage) return;
+
+		const cfg = visualCfg.COLD_GAS_RCS;
+		const L = Math.max(1, layout.xMax - layout.xMin);
+		const xFwd = layout.xMin + L * cfg.FWD_STATION_FRACTION;
+		const xAft = layout.xMin + L * cfg.AFT_STATION_FRACTION;
+		const yWall = layout.halfWidth;
+		const plumeLen = Math.max(cfg.MIN_PLUME_PX, layout.halfWidth * cfg.PLUME_LEN_WIDTH_RATIO);
+
+		if (rcsCw) {
+			this._drawRcsPlume(ctx, xFwd, -yWall, 0, -1, plumeLen, cfg);
+			this._drawRcsPlume(ctx, xAft, yWall, 0, 1, plumeLen, cfg);
+		}
+		if (rcsCcw) {
+			this._drawRcsPlume(ctx, xFwd, yWall, 0, 1, plumeLen, cfg);
+			this._drawRcsPlume(ctx, xAft, -yWall, 0, -1, plumeLen, cfg);
+		}
+		if (rcsUllage) {
+			const cant = cfg.ULLAGE_CANT_RAD ?? 0.28;
+			const cosC = Math.cos(cant);
+			const sinC = Math.sin(cant);
+			this._drawRcsPlume(ctx, xAft, yWall, -cosC, sinC, plumeLen, cfg);
+			this._drawRcsPlume(ctx, xAft, -yWall, -cosC, -sinC, plumeLen, cfg);
+		}
+	}
+
+	static drawVaporCone(ctx, rocket, layout, visualCfg = ROCKET_VISUAL) {
+		if (!rocket || !layout || !visualCfg?.VAPOR_CONE) return;
+		if (Number.isFinite(layout.screenRadius) && layout.screenRadius < (visualCfg.LOD_RADIUS_THRESHOLD ?? 10)) return;
+		const mach = Number.isFinite(rocket.mach) ? rocket.mach : (rocket.telemetry?.mach ?? 0);
+		const ambientPresRatio = this._resolveAmbientPresRatio(rocket);
+		const vapor = AeroUtils.computeVaporConeParams(mach, ambientPresRatio);
+		if (!vapor.active || vapor.intensity <= 0.01) return;
+
+		const cfg = visualCfg.VAPOR_CONE;
+		const L = Math.max(1, layout.xMax - layout.xMin);
+		const drawConeAt = (xVertex, scale) => {
+			const coneLen = layout.halfWidth * cfg.CONE_LENGTH_RATIO * (0.75 + 0.5 * vapor.intensity) * scale;
+			const coneHalfW = Math.min(
+				layout.halfWidth * cfg.MAX_WIDTH_MULTIPLIER,
+				layout.halfWidth * (1.1 + 1.35 * vapor.intensity * Math.sin(vapor.machAngleRad))
+			) * scale;
+			const xBack = xVertex - coneLen;
+			const noseRimX = xVertex - layout.halfWidth * 0.25 * scale;
+			const grad = ctx.createRadialGradient(
+				xVertex, 0, layout.halfWidth * 0.15 * scale,
+				xBack + coneLen * 0.35, 0, Math.max(coneLen, coneHalfW)
+			);
+			grad.addColorStop(0, cfg.CORE_COLOR);
+			grad.addColorStop(0.55, cfg.CORE_COLOR);
+			grad.addColorStop(1, cfg.EDGE_COLOR);
+
+			ctx.fillStyle = grad;
+			ctx.beginPath();
+			ctx.moveTo(xVertex, 0);
+			ctx.quadraticCurveTo(xVertex - coneLen * 0.22, -coneHalfW * 0.72, xBack, -coneHalfW);
+			ctx.quadraticCurveTo(xBack + coneLen * 0.22, 0, xBack, coneHalfW);
+			ctx.quadraticCurveTo(xVertex - coneLen * 0.22, coneHalfW * 0.72, xVertex, 0);
+			ctx.closePath();
+			ctx.fill();
+
+			ctx.save();
+			ctx.globalAlpha = Math.min(1, 0.4 + 0.6 * vapor.intensity);
+			ctx.strokeStyle = cfg.RIM_COLOR;
+			ctx.lineWidth = Math.max(1, layout.halfWidth * 0.12);
+			ctx.beginPath();
+			ctx.moveTo(xBack, -coneHalfW);
+			ctx.quadraticCurveTo(noseRimX, 0, xBack, coneHalfW);
+			ctx.stroke();
+			ctx.restore();
+		};
+
+		const xPrimary = layout.xMin + L * cfg.PRIMARY_STATION_FRACTION;
+		drawConeAt(xPrimary, 1.0);
+		if (vapor.intensity >= cfg.SECONDARY_INTENSITY_MIN) {
+			const xSecondary = layout.xMin + L * cfg.SECONDARY_STATION_FRACTION;
+			drawConeAt(xSecondary, 0.78);
+		}
 	}
 
 	static _drawLowDetail(ctx, rocket, R, theme, ambientPresRatio = 1.0) {
@@ -54,6 +301,22 @@ export class RocketRenderer {
 			ctx.fillStyle = lod.SOLAR_PADDLE_COLOR;
 			ctx.fillRect(-iconW * lod.PADDLE_OFFSET_X_RATIO, -iconH * 0.5 - R * lod.PADDLE_OFFSET_Y_RATIO, iconW * lod.PADDLE_W_RATIO, R * lod.PADDLE_H_RATIO);
 			ctx.fillRect(-iconW * lod.PADDLE_OFFSET_X_RATIO, iconH * 0.5 + R * lod.PADDLE_GAP_RATIO, iconW * lod.PADDLE_W_RATIO, R * lod.PADDLE_H_RATIO);
+
+			// The payload's own burn: the plume of the stages (below), scaled to the payload, behind the bus
+			if (this.isPayloadEngineFiring(rocket)) {
+				const p = Math.max(0, Math.min(1.0, ambientPresRatio !== undefined ? ambientPresRatio : 1.0));
+				const e_vac = 1.0 - p;
+				const payloadScale = ROCKET_VISUAL.ALIGNMENT.PAYLOAD_PLUME_SCALE ?? 0.35;
+				const plumeLen = R * lod.PLUME_LEN_RATIO * payloadScale * (rocket.thrustRatio || 1.0) * (1.0 + e_vac * 0.15);
+				const halfW = iconH * lod.PLUME_WIDTH_RATIO * (1.0 + e_vac * 1.3);
+				ctx.fillStyle = lod.PLUME_COLOR;
+				ctx.beginPath();
+				ctx.moveTo(-iconW * 0.5, -halfW);
+				ctx.lineTo(-iconW * 0.5 - plumeLen, 0);
+				ctx.lineTo(-iconW * 0.5, halfW);
+				ctx.closePath();
+				ctx.fill();
+			}
 			return;
 		}
 
@@ -63,10 +326,6 @@ export class RocketRenderer {
 		const isBoosterSeparated = Boolean(
 			rocket.isBoosterSeparated ||
 			rocket.telemetry?.isBoosterSeparated
-		);
-		const isBoosterBurnout = Boolean(
-			rocket.isBoosterBurnout ||
-			rocket.telemetry?.isBoosterBurnout
 		);
 		const boosterCount = (hasStage1 && !isBoosterSeparated) ? (rocket.boosters?.count || rocket.rendering?.boosters?.count || 0) : 0;
 		if (boosterCount === 2) {
@@ -80,12 +339,13 @@ export class RocketRenderer {
 		ctx.ellipse(0, 0, len * 0.5, width * 0.5, 0, 0, Math.PI * 2);
 		ctx.fill();
 
-		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
+		const isFiring = this.isEngineFiring(rocket);
 		if (isFiring) {
 			const p = Math.max(0, Math.min(1.0, ambientPresRatio !== undefined ? ambientPresRatio : 1.0));
 			const e_vac = 1.0 - p;
 			const plumeLen = R * lod.PLUME_LEN_RATIO * (rocket.thrustRatio || 1.0) * (1.0 + e_vac * 0.15);
-			const isBoosterFiring = !isBoosterBurnout;
+			// The SRBs widen the plume only while they fire (the rule of the high detail, isBoosterFiring)
+			const isBoosterFiring = this.isBoosterFiring(rocket);
 			const boosterMult = (isBoosterFiring && boosterCount >= 4) ? 1.5 : ((isBoosterFiring && boosterCount === 2) ? 1.25 : 1.0);
 			const plumeWidthMult = boosterMult * (1.0 + e_vac * 1.3);
 			ctx.fillStyle = lod.PLUME_COLOR;
@@ -126,6 +386,11 @@ export class RocketRenderer {
 		if (isPayloadOnly) {
 			const payloadR = (totalStg === 1) ? r1 : ((totalStg >= 3) ? r3 : r2);
 			this._drawPayloadSatellite(ctx, 0, 0, payloadR, true);
+			// The payload's own burn, behind the bus (its aft face, -x), with the plume of its propulsion's fuel type
+			if (this.isPayloadEngineFiring(rocket)) {
+				const busW = payloadR * m.SATELLITE_BUS_W_RATIO;
+				this._drawPlume(ctx, -busW * 0.5, 0, align.PAYLOAD_PLUME_SCALE ?? 0.35, rocket.thrustRatio || 1.0, this.payloadFuelType(rocket), R, ambientPresRatio);
+			}
 			return;
 		}
 
@@ -136,7 +401,7 @@ export class RocketRenderer {
 			!rocket.fairing?.isSeparated)
 		);
 
-		const isFiring = rocket.isIgnited && (rocket.burnTime > 0) && (rocket.thrustRatio > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD || (rocket.telemetry?.twr > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD));
+		const isFiring = this.isEngineFiring(rocket);
 		const curFuel = (rocket.stages && rocket.stages[curStgIdx]?.fuelType) || rocket.fuelType || 'liquid';
 		const throttle = rocket.thrustRatio || 1.0;
 
@@ -634,11 +899,6 @@ export class RocketRenderer {
 			return;
 		}
 
-		const isBoosterBurnout = Boolean(
-			rocket.isBoosterBurnout ||
-			rocket.telemetry?.isBoosterBurnout
-		);
-
 		const boosters = rocket.boosters ||
 			rocket.rendering?.boosters ||
 			(rocket.stages && rocket.stages[0]?.boosters);
@@ -733,11 +993,9 @@ export class RocketRenderer {
 			ctx.closePath();
 			ctx.fill();
 
-			// 5. Solid Booster Exhaust Plume (when firing, booster ignited, and not burnt out)
-			const isBoosterIgnited = (rocket.isBoosterIgnited !== undefined)
-				? rocket.isBoosterIgnited
-				: (!rocket.isHoldDown && rocket.isIgnited);
-			if (isFiring && isBoosterIgnited && !isBoosterBurnout && throttle > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD) {
+			// 5. Solid Booster Exhaust Plume (when firing, booster ignited, and not burnt out: isBoosterFiring; the read of
+			// rocket.isBoosterIgnited was always undefined and fell back to that rule, design §4.13-23)
+			if (isFiring && this.isBoosterFiring(rocket) && throttle > ROCKET_VISUAL.PLUMES.THRUST_THRESHOLD) {
 				this._drawPlume(ctx, xBase - lNozzleB, yPos, plumeScale, throttle, plumeFuel, R, ambientPresRatio);
 			}
 		}

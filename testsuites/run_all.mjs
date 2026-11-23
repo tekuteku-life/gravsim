@@ -72,7 +72,11 @@ console.log(`Suites:    ${testFiles.length} files targeted`);
 console.log(`Directory: ${projectRoot}`);
 console.log('---------------------------------------------------------------\n');
 
-const nodeArgs = ['--test'];
+// Per-test timeout so a stuck promise fails the run instead of hanging it. It applies to each test() / it()
+// (a test() with subtests counts them in its own time); the slowest single test takes about 61 s under the parallel
+// full run, so 300 s leaves more than 3x headroom (including coverage mode). Override with GRAVSIM_TEST_TIMEOUT_MS.
+const testTimeoutMs = Number(process.env.GRAVSIM_TEST_TIMEOUT_MS) > 0 ? Number(process.env.GRAVSIM_TEST_TIMEOUT_MS) : 300000;
+const nodeArgs = ['--test', `--test-timeout=${testTimeoutMs}`];
 
 if (isCoverage) {
 	nodeArgs.push('--experimental-test-coverage');

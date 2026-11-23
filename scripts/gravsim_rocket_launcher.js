@@ -6,16 +6,29 @@ import {
 	LAUNCH_SEQUENCES, EVENT_PRIORITY,
 	TRAJECTORY_PREDICTION, OBJECT_TYPES
 } from './gravsim_const.js';
-import { UnitConvertUtils } from './gravsim_utils.js';
+import { UnitConvertUtils, isLiveObject } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 import { TrajectoryPredictor } from './gravsim_trajectory_predictor.js';
-import { presetManager, ROCKET_VISUAL, ROCKET_FUELS } from './gravsim_preset_manager.js';
+import {
+	presetManager, ROCKET_VISUAL, ROCKET_FUELS, normalizePredictionDurationMonths, applyPredictionDurationMonths
+} from './gravsim_preset_manager.js';
 
 /*******************************************************************
  * RocketLauncher Class
  * Manages the preview state and rendering for continuous-thrust rocket launches.
  *******************************************************************/
 export class RocketLauncher {
+	/**
+	 * Validate a saved prediction period: a finite positive number, clamped to TRAJECTORY_PREDICTION.MIN_DURATION_MONTHS..
+	 * MAX_DURATION_MONTHS; anything else (missing in saves written before it was saved, null, a string, 0, a negative
+	 * value) is null. The rule shared with the mission presets (normalizePredictionDurationMonths of the preset manager).
+	 * @param {any} months
+	 * @returns {number | null}
+	 */
+	static normalizePredictionDurationMonths(months) {
+		return normalizePredictionDurationMonths(months);
+	}
+
 	constructor(universe, options = {}) {
 		this.universe = universe;
 		this.isActive = false;
@@ -23,6 +36,9 @@ export class RocketLauncher {
 		// Setup parameters
 		this.mode = 'host'; // 'free' or 'host'
 		this.hostId = null;
+		// True while hostId is the Rocket tab's automatic choice (RocketTab._assignDefaultHost), false once the user
+		// picks a host: an automatic world center is replaced when another body appears (design §4.13-27)
+		this.hostAutoSelected = false;
 		
 		// Free mode coords
 		this.freeX = 0;
@@ -34,11 +50,14 @@ export class RocketLauncher {
 
 		// Multi-stage setup (Load default baseline from PresetManager)
 		const pm = options.presetManager || universe?.presetManager || (typeof presetManager !== 'undefined' ? presetManager : null);
+		this.presetManager = pm;
 		const defaultVehicle = pm?.getVehicle('h3_30') || pm?.getVehicle('h3_22');
 		const defaultPayload = pm?.getPayload('htv_x');
 		const defaultMission = pm?.getMission('iss_rendezvous');
 
 		this.currentVehicleId = defaultVehicle?.id || 'h3_30';
+		this.currentPayloadId = defaultPayload?.id || 'htv_x';
+		this.currentMissionId = defaultMission?.id || 'iss_rendezvous';
 		this.currentPresetId = (defaultVehicle?.id || 'H3_30').toUpperCase();
 		this.colorTheme = defaultVehicle?.colorTheme || 'orange';
 		this.stages = defaultVehicle?.stages ? JSON.parse(JSON.stringify(defaultVehicle.stages)) : [];
@@ -59,6 +78,7 @@ export class RocketLauncher {
 		this.flightProfile = defaultMission?.flightProfile ? JSON.parse(JSON.stringify(defaultMission.flightProfile)) : [];
 		this.targetApogeeKm = defaultMission?.targetApogeeKm || null;
 		this.targetPerigeeKm = defaultMission?.targetPerigeeKm || null;
+		this.targetVInfKmS = defaultMission?.targetVInfKmS || 0;
 		this.disableOrbitalCutoff = defaultMission?.disableOrbitalCutoff || false;
 
 		this.thrustKN = this.stages[0]?.thrustKN ?? 4410;
@@ -72,22 +92,21 @@ export class RocketLauncher {
 
 		EventBus.on('sequencer-event', (eventName) => {
 			if (eventName.includes('INTERNAL POWER') && this.rolloutedRocketId !== null) {
-				const rocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
+				const rocket = this._getRolloutedRocket();
 				if (rocket) { rocket.isInternalPower = true; }
 			}
 		});
 
 		EventBus.on('liftoff', () => {
 			if (this.rolloutedRocketId !== null) {
-				const rocketId = this.rolloutedRocketId;
-				const rocket = this.universe.objects.find(o => o.id === rocketId);
+				const rocket = this._getRolloutedRocket();
 				if (rocket) {
 					rocket.isInternalPower = false;
 					rocket.flightTime = 0;
 					if (rocket.telemetry) {
 						rocket.telemetry.flightTime = 0;
 					}
-					const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.camera.trackingTarget;
+					const host = this._getHost();
 					if (this.currentPrediction && host) {
 						const hasPhiSurf = this.currentPrediction.points?.[0]?.phiSurf !== undefined;
 						if (hasPhiSurf) {
@@ -119,6 +138,9 @@ export class RocketLauncher {
 			EventBus.emit('ui:set-controls-locked', true);
 		});
 		
+		// The rocket on the pad removed or destroyed (ObjectManager announces it once, design §4.13-28)
+		EventBus.on('rocket:destroyed', (rocket) => this._onRocketDestroyed(rocket));
+
 		const unlockUI = () => {
 			if (this.rolloutedRocketId === null) {
 				EventBus.emit('ui:set-tabs-locked', false);
@@ -137,6 +159,58 @@ export class RocketLauncher {
 				this.drawPreview(ctx, rc.basis, rc.zoomScale, rc);
 			}
 		}, EVENT_PRIORITY.DRAW_WORLD_FX);
+	}
+
+	/**
+	 * The launch host while it is in the simulation, else the camera's target if that is: a removed or destroyed body
+	 * stays listed until its trail has faded, and a rocket must not be placed on it nor a prediction computed around it
+	 * (design §4.13-31).
+	 * @param {boolean} [withCameraFallback] fall back to the camera's target (the preview and the prediction do; the
+	 *   rollout and the target marker need the host itself)
+	 */
+	_getHost(withCameraFallback = true) {
+		return RocketLauncher.resolveHost(this.universe, this.hostId, withCameraFallback);
+	}
+
+	/**
+	 * The rule of _getHost for a given host id (the Rocket tab's statistics use it too).
+	 * @param {any} universe
+	 * @param {any} hostId
+	 * @param {boolean} [withCameraFallback]
+	 */
+	static resolveHost(universe, hostId, withCameraFallback = true) {
+		const objects = universe?.objects || [];
+		const host = (hostId !== null && hostId !== undefined) ? objects.find(o => o.id === hostId && isLiveObject(o)) : null;
+		if (host) { return host; }
+		const target = withCameraFallback ? universe?.camera?.trackingTarget : null;
+		return isLiveObject(target) ? target : null;
+	}
+
+	/** The rolled-out rocket while it is in the simulation, else null. */
+	_getRolloutedRocket() {
+		if (this.rolloutedRocketId === null) { return null; }
+		return (this.universe?.objects || []).find(o => o.id === this.rolloutedRocketId && isLiveObject(o)) || null;
+	}
+
+	/**
+	 * The rocket on the pad is gone (System › Clear Selected, Reset, or a collision on the pad): the pad is released as
+	 * an abort does, without removing anything. Earlier the launcher kept its id: the Rocket tab stayed locked on the
+	 * rollout with Ignite enabled for a rocket that no longer existed, and the preview kept drawing its prediction
+	 * (design §4.13-31). Its launch sequence aborts itself (LaunchSequencer), the pad effect and the camera's tracking
+	 * stop by their own rules.
+	 * @param {any} rocket the destroyed rocket
+	 */
+	_onRocketDestroyed(rocket) {
+		if (!rocket || this.rolloutedRocketId === null || rocket.id !== this.rolloutedRocketId) { return; }
+		this.rolloutedRocketId = null;
+		this._lastPredictKey = null;
+		EventBus.emit('effect:pad-stop');
+		const rocketTab = this.universe?.ControlPanel?.rocketTab;
+		if (rocketTab) {
+			rocketTab.setRolloutState(false);
+		} else if (!this.universe?.LaunchSequencer?.isActive) {
+			EventBus.emit('ui:set-tabs-locked', false);
+		}
 	}
 
 	_getObjectParam(name) {
@@ -187,6 +261,9 @@ export class RocketLauncher {
 		}
 		if (preset.targetPerigeeKm !== undefined) {
 			this.targetPerigeeKm = preset.targetPerigeeKm;
+		}
+		if (preset.targetVInfKmS !== undefined) {
+			this.targetVInfKmS = Number(preset.targetVInfKmS) || 0;
 		}
 		if (typeof this.requestPreviewUpdate === 'function') {
 			this.requestPreviewUpdate();
@@ -261,8 +338,6 @@ export class RocketLauncher {
 		let baseVy = 0;
 		let deltaVM = 0;
 
-		const massName = 'Rocket';
-		const param = this._getObjectParam(massName) || this._getObjectParam('Rocket');
 		const fuel = ROCKET_FUELS[this.fuelType] || ROCKET_FUELS['liquid'];
 		const ve = fuel.isp * PHYSICS.G0; // Exhaust velocity
 		const m0 = UnitConvertUtils.ton2kg(this.dryMassT + this.fuelMassT + this.oxidMassT); // Initial mass in kg
@@ -282,7 +357,7 @@ export class RocketLauncher {
 		}
 
 		if (this.mode === 'host') {
-			const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.camera.trackingTarget;
+			const host = this._getHost();
 			if (host) {
 				// Canvas 0 deg is right, -90 deg is up. Convert user zenith(0) to canvas(-90).
 				const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
@@ -319,7 +394,7 @@ export class RocketLauncher {
 		if (this.mode !== 'host' || this.hostId === null) { return; }
 		if (this.rolloutedRocketId !== null) { return; }
 
-		const host = this.universe.objects.find(o => o.id === this.hostId);
+		const host = this._getHost(false);
 		if (!host) { return; }
 
 		const t = this._calculateTransform();
@@ -379,7 +454,7 @@ export class RocketLauncher {
 	_getPredictionContext() {
 		if (this.mode !== 'host') { return null; }
 
-		const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.camera.trackingTarget;
+		const host = this._getHost();
 		if (!host) { return null; }
 
 		const t = this._calculateTransform();
@@ -398,9 +473,7 @@ export class RocketLauncher {
 		let hostAngleRad = UnitConvertUtils.deg2rad(hAngleCanvas);
 		let currentThrustAngle = hostAngleRad;
 
-		const rolloutedRocket = this.rolloutedRocketId !== null
-			? this.universe.objects.find(o => o.id === this.rolloutedRocketId)
-			: null;
+		const rolloutedRocket = this._getRolloutedRocket();
 
 		// If rocket is placed on the pad, use its actual rotating position and velocity on host surface
 		if (rolloutedRocket) {
@@ -440,6 +513,10 @@ export class RocketLauncher {
 			payload: this.payload,
 			fairing: this.fairing,
 			boosters: this.boosters,
+			disableOrbitalCutoff: Boolean(this.disableOrbitalCutoff),
+			targetApogeeKm: this.targetApogeeKm || 0,
+			targetPerigeeKm: this.targetPerigeeKm || 0,
+			targetVInfKmS: this.targetVInfKmS || 0,
 			baseRadiusM: this.getBaseRadiusM(),
 			bottomOffsetM: this.getBottomOffsetM()
 		};
@@ -471,8 +548,9 @@ export class RocketLauncher {
 		}
 
 		const now = Date.now();
-		const profileKey = this.flightProfile.map(s => `${s.type}:${s.value}:${s.thrust}:${s.angle}`).join('|');
-		const currentKey = `${this.hostId}_${this.hostAngleDeg}_${this.hostAltitudeM}_${this.dryMassT}_${this.fuelMassT}_${this.oxidMassT}_${this.thrustKN}_${this.fuelType}_${this.maxGLimit}_${this.maxSimTimeSec}_${profileKey}`;
+		const profileKey = this.flightProfile.map(s => `${s.type}:${s.value}:${s.thrust}:${s.angle}:${s.action || ''}`).join('|');
+		const stagesKey = (this.stages || []).map(s => `${s.fuelMassT || 0}:${s.oxidMassT || 0}:${s.thrustKN || 0}`).join(';');
+		const currentKey = `${this.hostId}_${this.hostAngleDeg}_${this.hostAltitudeM}_${this.dryMassT}_${this.fuelMassT}_${this.oxidMassT}_${this.thrustKN}_${this.fuelType}_${this.maxGLimit}_${this.maxSimTimeSec}_${Boolean(this.disableOrbitalCutoff)}_${this.targetApogeeKm || 0}_${this.targetPerigeeKm || 0}_${this.targetVInfKmS || 0}_${stagesKey}_${profileKey}`;
 
 		if (!force && this.currentPrediction && currentKey === this._lastPredictKey && (now - (this._lastPredictTime || 0)) < TRAJECTORY_PREDICTION.UPDATE_THROTTLE_MS) {
 			if (onComplete) onComplete(this.currentPrediction);
@@ -529,8 +607,8 @@ export class RocketLauncher {
 
 			// Render predicted trajectory: zero simulation overhead on draw loop!
 			if (isRollouted) {
-				const rolloutedRocket = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
-				const host = this.universe.objects.find(o => o.id === this.hostId) || this.universe.camera.trackingTarget;
+				const rolloutedRocket = this._getRolloutedRocket();
+				const host = this._getHost();
 				if (rolloutedRocket && rolloutedRocket.isHoldDown && this.currentPrediction && renderContext && host) {
 					const hasPhiSurf = this.currentPrediction.points?.[0]?.phiSurf !== undefined;
 					const currentAngle = Math.atan2(rolloutedRocket.y - host.y, rolloutedRocket.x - host.x);
@@ -576,7 +654,8 @@ export class RocketLauncher {
 	rollout() {
 		if (this.mode !== 'host' || this.hostId === null) { return; }
 
-		const host = this.universe.objects.find(o => o.id === this.hostId);
+		// A host in the simulation: never a removed or destroyed body that is still listed (design §4.13-31)
+		const host = this._getHost(false);
 		if (!host) { return; }
 
 		const hAngleCanvas = (Number(this.hostAngleDeg) || 0) - 90;
@@ -611,9 +690,10 @@ export class RocketLauncher {
 			ofRatio: fuelDef.ofRatio,
 			angle: initialAngleRad, // Initially set to zenith direction
 			flightProfile: this.flightProfile, // Profile is handled dynamically by FlightComputer
-			disableOrbitalCutoff: this.disableOrbitalCutoff,
-			targetApogeeKm: this.targetApogeeKm,
-			targetPerigeeKm: this.targetPerigeeKm,
+			disableOrbitalCutoff: Boolean(this.disableOrbitalCutoff),
+			targetApogeeKm: this.targetApogeeKm || 0,
+			targetPerigeeKm: this.targetPerigeeKm || 0,
+			targetVInfKmS: this.targetVInfKmS || 0,
 			time: this.calculatedBurnTime,
 			lossRate: massLossRateTon,
 			maxGLimit: this.maxGLimit,
@@ -657,8 +737,8 @@ export class RocketLauncher {
 		if (this.rolloutedRocketId !== null) {
 			this.universe.LaunchSequencer.abort();
 
-			const host = this.universe.objects.find(o => o.id === this.hostId)
-				|| this.universe.objects.find(o => o.name === 'Earth' || o.type === OBJECT_TYPES.CELESTIAL);
+			const host = this._getHost(false)
+				|| this.universe.objects.find(o => (o.name === 'Earth' || o.type === OBJECT_TYPES.CELESTIAL) && isLiveObject(o));
 
 			if (host) {
 				EventBus.emit('camera:stop-auto-tracking', host);
@@ -671,11 +751,12 @@ export class RocketLauncher {
 				EventBus.emit('camera:stop-auto-tracking');
 			}
 
-			const obj = this.universe.objects.find(o => o.id === this.rolloutedRocketId);
+			const obj = this._getRolloutedRocket();
+			// Released before the removal: the rocket:destroyed of the removal finds no rocket on the pad
+			this.rolloutedRocketId = null;
 			if (obj) {
 				this.universe.ObjectManager.removeObject(obj);
 			}
-			this.rolloutedRocketId = null;
 			this._lastPredictKey = null;
 
 			// Emit event to stop pad effect
@@ -701,6 +782,7 @@ export class RocketLauncher {
 		return {
 			mode: this.mode,
 			hostId: this.hostId,
+			hostAutoSelected: this.hostAutoSelected === true,
 			hostAngleDeg: Number(this.hostAngleDeg) || 0,
 			hostAltitudeM: this.hostAltitudeM,
 			flightProfile: JSON.parse(JSON.stringify(this.flightProfile)),
@@ -712,6 +794,9 @@ export class RocketLauncher {
 			maxGLimit: this.maxGLimit,
 			autoControl: this.autoControl,
 			currentPresetId: this.currentPresetId,
+			currentVehicleId: this.currentVehicleId,
+			currentPayloadId: this.currentPayloadId,
+			currentMissionId: this.currentMissionId,
 			colorTheme: this.colorTheme,
 			boosters: this.boosters ? JSON.parse(JSON.stringify(this.boosters)) : null,
 			rendering: this.rendering ? JSON.parse(JSON.stringify(this.rendering)) : null,
@@ -720,17 +805,39 @@ export class RocketLauncher {
 			fairing: JSON.parse(JSON.stringify(this.fairing || {})),
 			disableOrbitalCutoff: this.disableOrbitalCutoff || false,
 			targetApogeeKm: this.targetApogeeKm || null,
-			targetPerigeeKm: this.targetPerigeeKm || null
+			targetPerigeeKm: this.targetPerigeeKm || null,
+			targetVInfKmS: this.targetVInfKmS || 0,
+			// maxSimTimeSec is derived from it on load
+			predictionDurationMonths: this.predictionDurationMonths
 		};
 	}
 
 	loadState(state) {
 		if (!state) return;
 		if (state.mode !== undefined) this.mode = state.mode;
-		if (state.hostId !== undefined) this.hostId = state.hostId;
+		if (state.hostId !== undefined) {
+			this.hostId = state.hostId;
+			// Whether the saved host was the automatic choice. A save written before it was saved: those versions
+			// replaced a host with id 0 (the world center of those files, ObjectManager.loadState), so a host that is the
+			// world center is automatic and any other is kept (design §4.13-27)
+			if (typeof state.hostAutoSelected === 'boolean') {
+				this.hostAutoSelected = state.hostAutoSelected;
+			} else {
+				// The loaded objects are all in the simulation (ObjectManager.loadState runs first); the rule of a live
+				// object as everywhere else (design §4.13-31)
+				const host = this.universe?.objects?.find?.(o => o.id === this.hostId && o.type === OBJECT_TYPES.CELESTIAL && isLiveObject(o));
+				this.hostAutoSelected = Boolean(host && host.isWorldCenter);
+			}
+		}
 		if (state.hostAngleDeg !== undefined) this.hostAngleDeg = Number(state.hostAngleDeg) || 0;
 		if (state.hostAltitudeM !== undefined) this.hostAltitudeM = state.hostAltitudeM;
-		if (state.flightProfile !== undefined) { this.flightProfile = JSON.parse(JSON.stringify(state.flightProfile)); }
+		if (state.flightProfile !== undefined) {
+			// Keep only object rows with finite value/thrust/angle (same rule as the FlightComputer constructor):
+			// a corrupted save must not leave null rows that later code dereferences, nor rows that command NaN
+			this.flightProfile = Array.isArray(state.flightProfile)
+				? JSON.parse(JSON.stringify(state.flightProfile)).filter(step => step !== null && typeof step === 'object' && Number.isFinite(step.value) && Number.isFinite(step.thrust) && Number.isFinite(step.angle))
+				: [];
+		}
 		if (state.initialMassT !== undefined) this.dryMassT = state.initialMassT;
 		if (state.fuelMassT !== undefined) this.fuelMassT = state.fuelMassT;
 		if (state.oxidMassT !== undefined) this.oxidMassT = state.oxidMassT;
@@ -739,6 +846,9 @@ export class RocketLauncher {
 		if (state.maxGLimit !== undefined) this.maxGLimit = state.maxGLimit;
 		if (state.autoControl !== undefined) this.autoControl = state.autoControl;
 		if (state.currentPresetId !== undefined) this.currentPresetId = state.currentPresetId;
+		if (state.currentVehicleId !== undefined) this.currentVehicleId = state.currentVehicleId;
+		if (state.currentPayloadId !== undefined) this.currentPayloadId = state.currentPayloadId;
+		if (state.currentMissionId !== undefined) this.currentMissionId = state.currentMissionId;
 		if (state.colorTheme !== undefined) this.colorTheme = state.colorTheme;
 		if (state.boosters !== undefined) this.boosters = state.boosters;
 		if (state.rendering !== undefined) this.rendering = state.rendering;
@@ -748,5 +858,12 @@ export class RocketLauncher {
 		if (state.disableOrbitalCutoff !== undefined) this.disableOrbitalCutoff = state.disableOrbitalCutoff;
 		if (state.targetApogeeKm !== undefined) this.targetApogeeKm = state.targetApogeeKm;
 		if (state.targetPerigeeKm !== undefined) this.targetPerigeeKm = state.targetPerigeeKm;
+		if (state.targetVInfKmS !== undefined) this.targetVInfKmS = Number(state.targetVInfKmS) || 0;
+		// Prediction period: a valid saved value replaces the one in use (and the System-tab slider and label show it);
+		// a save without one (written before it was saved) or with an invalid one keeps the period in use
+		const months = applyPredictionDurationMonths(this, state.predictionDurationMonths);
+		if (months !== null) {
+			EventBus.emit('ui:sync-prediction-duration', months);
+		}
 	}
 }

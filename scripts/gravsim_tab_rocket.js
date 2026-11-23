@@ -1,10 +1,18 @@
 
 // gravsim_tab_rocket.js
 
-import { PHYSICS, OBJECT_TYPES, MULTISTAGE_ROCKET } from './gravsim_const.js';
-import { DOMUtils, UnitConvertUtils } from './gravsim_utils.js';
+import { PHYSICS, OBJECT_TYPES, OBJECT_STATE, MULTISTAGE_ROCKET } from './gravsim_const.js';
+import { DOMUtils, UnitConvertUtils, isLiveObject } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 import { presetManager, ROCKET_FUELS } from './gravsim_preset_manager.js';
+import { RocketLauncher } from './gravsim_rocket_launcher.js';
+
+// Base upper bound of the launch-thrust slider (index.html static max); raised dynamically for heavier vehicles
+const THRUST_SLIDER_BASE_MAX_KN = 10000;
+/** The step of the stage mass sliders (#rl-fuel-mass, #rl-oxid-mass, #rl-launch-mass): the sizing's 0.1 t */
+const STAGE_MASS_STEP_T = 0.1;
+/** Flight-plan cell value: a finite number, otherwise 0 (rows with non-finite fields are dropped at rollout, §3.4-1). */
+const finiteOr0 = (/** @type {any} */ raw) => { const v = parseFloat(raw); return Number.isFinite(v) ? v : 0; };
 
 export class RocketTab {
 	constructor(universe) {
@@ -14,6 +22,7 @@ export class RocketTab {
 		this.previousZoomScaleVal = null;
 		this.previousCameraTarget = null;
 		this.previousCameraOffset = null;
+		/** @type {number | string} */
 		this.currentTab = 0;
 		this._initElements();
 		this._bindEvents();
@@ -26,6 +35,7 @@ export class RocketTab {
 	}
 
 	_initElements() {
+		/** @type {Record<string, any>} */
 		this.ui = {
 			rlModeSelect: document.getElementById('rl-mode-select'),
 			rlHostOptions: document.getElementById('rl-host-options'),
@@ -101,13 +111,13 @@ export class RocketTab {
 
 	_bindEvents() {
 		this.ui.rlAddProfileBtn.addEventListener('click', () => {
-			this.universe.RocketLauncher.flightProfile.push({ type: 'alt', value: 0, thrust: 100, angle: 0 });
+			this.universe.RocketLauncher.flightProfile.push({ type: 'alt', value: 0, thrust: 100, angle: 0, action: '' });
 			this._renderProfileTable();
 			this._updateRocketStats();
 		});
 		this._renderProfileTable();
 
-		this.ui.rlModeSelect.addEventListener('change', (e) => {
+		this.ui.rlModeSelect.addEventListener('change', (/** @type {any} */ e) => {
 			this.universe.RocketLauncher.mode = e.target.value;
 			this.ui.rlHostOptions.style.display = e.target.value === 'host' ? 'block' : 'none';
 			this._updateRocketStats();
@@ -117,7 +127,7 @@ export class RocketTab {
 		this._initPresetSelectors();
 
 		if (this.ui.rlPayloadSelect) {
-			this.ui.rlPayloadSelect.addEventListener('change', (e) => {
+			this.ui.rlPayloadSelect.addEventListener('change', (/** @type {any} */ e) => {
 				const pId = e.target.value;
 				const recMission = this.presetManager.getRecommendedMissionForPayload(pId);
 				if (this.ui.rlMissionSelect && recMission) {
@@ -128,13 +138,13 @@ export class RocketTab {
 		}
 
 		if (this.ui.rlMissionSelect) {
-			this.ui.rlMissionSelect.addEventListener('change', (e) => {
+			this.ui.rlMissionSelect.addEventListener('change', (/** @type {any} */ e) => {
 				this.applyOrthogonalConfig({ missionId: e.target.value });
 			});
 		}
 
 		if (this.ui.rlVehicleSelect) {
-			this.ui.rlVehicleSelect.addEventListener('change', (e) => {
+			this.ui.rlVehicleSelect.addEventListener('change', (/** @type {any} */ e) => {
 				this.applyOrthogonalConfig({ vehicleId: e.target.value });
 			});
 		}
@@ -155,14 +165,14 @@ export class RocketTab {
 			});
 		}
 		if (this.ui.rlPresetSelect) {
-			this.ui.rlPresetSelect.addEventListener('change', (e) => {
+			this.ui.rlPresetSelect.addEventListener('change', (/** @type {any} */ e) => {
 				this.loadPreset(e.target.value);
 			});
 		}
 
 		// Theme Color
 		this.ui.rlColorTheme.value = this.universe.RocketLauncher.colorTheme;
-		this.ui.rlColorTheme.addEventListener('change', (e) => {
+		this.ui.rlColorTheme.addEventListener('change', (/** @type {any} */ e) => {
 			this.universe.RocketLauncher.colorTheme = e.target.value;
 			this._updateRocketStats();
 		});
@@ -171,7 +181,7 @@ export class RocketTab {
 		this._renderStageTabs();
 		this.selectTab(0);
 
-		this.ui.rlFuelType.addEventListener('change', (e) => {
+		this.ui.rlFuelType.addEventListener('change', (/** @type {any} */ e) => {
 			const stg = this._getCurrentStage();
 			if (!stg) { return; }
 			const oldFuelType = stg.fuelType || 'liquid';
@@ -218,10 +228,11 @@ export class RocketTab {
 				const targetTwr = (newFuelType === 'ion') ? 0.05 : 1.35;
 				const minThrustKN = Math.round((totalLiftoffMassT * PHYSICS.G0 * targetTwr) / 50) * 50;
 				if (newFuelType !== 'ion' && stg.thrustKN < minThrustKN) {
-					stg.thrustKN = Math.min(Math.max(stg.thrustKN, minThrustKN), 10000);
-					this.ui.rlLaunchThrust.value = stg.thrustKN;
-					if (this.ui.rlLaunchThrustVal) this.ui.rlLaunchThrustVal.textContent = stg.thrustKN;
+					// Raise toward the TWR floor, but never lower a vehicle already above the slider's base range
+					const thrustCapKN = Math.max(THRUST_SLIDER_BASE_MAX_KN, Math.ceil(stg.thrustKN));
+					stg.thrustKN = Math.min(Math.max(stg.thrustKN, minThrustKN), thrustCapKN);
 				}
+				this._syncThrustSlider(stg.thrustKN);
 			}
 
 			// 4. Recalculate burn time
@@ -231,8 +242,11 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		this.ui.rlFuelMass.addEventListener('input', (e) => {
-			const val = parseInt(e.target.value, 10);
+		// The stage sliders step by the resolution of the preset and mission sizing (0.1 t, 1 kN; index.html), so they
+		// show the sized values exactly (design §4.14-4): the values are read as decimals, and the propellant that follows
+		// the O/F ratio is rounded to the same 0.1 t
+		this.ui.rlFuelMass.addEventListener('input', (/** @type {any} */ e) => {
+			const val = parseFloat(e.target.value);
 			const stg = this._getCurrentStage();
 			if (!stg) { return; }
 			stg.fuelMassT = val;
@@ -240,7 +254,7 @@ export class RocketTab {
 
 			const fuelDef = ROCKET_FUELS[stg.fuelType || 'liquid'];
 			if (fuelDef && fuelDef.ofRatio > 0) {
-				const newOxid = Math.round(val * fuelDef.ofRatio);
+				const newOxid = RocketTab.roundToSliderStep(val * fuelDef.ofRatio, STAGE_MASS_STEP_T);
 				stg.oxidMassT = newOxid;
 				this.ui.rlOxidMass.value = newOxid;
 				this.ui.rlOxidMassVal.textContent = newOxid;
@@ -250,8 +264,8 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		this.ui.rlOxidMass.addEventListener('input', (e) => {
-			const val = parseInt(e.target.value, 10);
+		this.ui.rlOxidMass.addEventListener('input', (/** @type {any} */ e) => {
+			const val = parseFloat(e.target.value);
 			const stg = this._getCurrentStage();
 			if (!stg) { return; }
 			stg.oxidMassT = val;
@@ -259,7 +273,7 @@ export class RocketTab {
 
 			const fuelDef = ROCKET_FUELS[stg.fuelType || 'liquid'];
 			if (fuelDef && fuelDef.ofRatio > 0) {
-				const newFuel = Math.round(val / fuelDef.ofRatio);
+				const newFuel = RocketTab.roundToSliderStep(val / fuelDef.ofRatio, STAGE_MASS_STEP_T);
 				stg.fuelMassT = newFuel;
 				this.ui.rlFuelMass.value = newFuel;
 				this.ui.rlFuelMassVal.textContent = newFuel;
@@ -269,8 +283,8 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		this.ui.rlLaunchMass.addEventListener('input', (e) => {
-			const val = parseInt(e.target.value, 10);
+		this.ui.rlLaunchMass.addEventListener('input', (/** @type {any} */ e) => {
+			const val = parseFloat(e.target.value);
 			const stg = this._getCurrentStage();
 			if (!stg) { return; }
 			stg.dryMassT = val;
@@ -279,8 +293,8 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		this.ui.rlLaunchThrust.addEventListener('input', (e) => {
-			const val = parseInt(e.target.value, 10);
+		this.ui.rlLaunchThrust.addEventListener('input', (/** @type {any} */ e) => {
+			const val = parseFloat(e.target.value);
 			const stg = this._getCurrentStage();
 			if (!stg) { return; }
 			stg.thrustKN = val;
@@ -290,7 +304,7 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		this.ui.rlSepDelay.addEventListener('input', (e) => {
+		this.ui.rlSepDelay.addEventListener('input', (/** @type {any} */ e) => {
 			const val = parseFloat(e.target.value);
 			const stg = this._getCurrentStage();
 			if (!stg) { return; }
@@ -299,7 +313,7 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		this.ui.rlIgnDelay.addEventListener('input', (e) => {
+		this.ui.rlIgnDelay.addEventListener('input', (/** @type {any} */ e) => {
 			const val = parseFloat(e.target.value);
 			const stg = this._getCurrentStage();
 			if (!stg) { return; }
@@ -309,16 +323,17 @@ export class RocketTab {
 		});
 
 		// Payload & Fairing Inputs
-		this.ui.rlPayloadMass.addEventListener('input', (e) => {
+		this.ui.rlPayloadMass.addEventListener('input', (/** @type {any} */ e) => {
 			const val = parseFloat(e.target.value);
 			const rl = this.universe.RocketLauncher;
 			if (!rl.payload) rl.payload = {};
 			rl.payload.massT = val;
-			if (this.ui.rlPayloadMassVal) this.ui.rlPayloadMassVal.textContent = val.toFixed(1);
+			// 0.01 t, the resolution of the payload sizing (as the slider steps)
+			if (this.ui.rlPayloadMassVal) this.ui.rlPayloadMassVal.textContent = val.toFixed(2);
 			this._updateRocketStats();
 		});
 
-		this.ui.rlFairingEnabled.addEventListener('change', (e) => {
+		this.ui.rlFairingEnabled.addEventListener('change', (/** @type {any} */ e) => {
 			const rl = this.universe.RocketLauncher;
 			if (!rl.fairing) rl.fairing = {};
 			rl.fairing.enabled = e.target.checked;
@@ -328,7 +343,7 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		this.ui.rlFairingMass.addEventListener('input', (e) => {
+		this.ui.rlFairingMass.addEventListener('input', (/** @type {any} */ e) => {
 			const val = parseFloat(e.target.value);
 			const rl = this.universe.RocketLauncher;
 			if (!rl.fairing) rl.fairing = {};
@@ -337,7 +352,7 @@ export class RocketTab {
 			this._updateRocketStats();
 		});
 
-		this.ui.rlFairingAlt.addEventListener('input', (e) => {
+		this.ui.rlFairingAlt.addEventListener('input', (/** @type {any} */ e) => {
 			const val = parseInt(e.target.value, 10);
 			const rl = this.universe.RocketLauncher;
 			if (!rl.fairing) rl.fairing = {};
@@ -347,7 +362,7 @@ export class RocketTab {
 		});
 
 		if (this.ui.rlPayloadFuel) {
-			this.ui.rlPayloadFuel.addEventListener('input', (e) => {
+			this.ui.rlPayloadFuel.addEventListener('input', (/** @type {any} */ e) => {
 				const val = Number(e.target.value);
 				if (this.ui.rlPayloadFuelVal) this.ui.rlPayloadFuelVal.textContent = val.toFixed(2);
 				const rl = this.universe.RocketLauncher;
@@ -359,7 +374,7 @@ export class RocketTab {
 		}
 
 		if (this.ui.rlPayloadOxid) {
-			this.ui.rlPayloadOxid.addEventListener('input', (e) => {
+			this.ui.rlPayloadOxid.addEventListener('input', (/** @type {any} */ e) => {
 				const val = Number(e.target.value);
 				if (this.ui.rlPayloadOxidVal) this.ui.rlPayloadOxidVal.textContent = val.toFixed(2);
 				const rl = this.universe.RocketLauncher;
@@ -370,16 +385,18 @@ export class RocketTab {
 			});
 		}
 
-		this.ui.rlHostSelect.addEventListener('change', (e) => {
+		this.ui.rlHostSelect.addEventListener('change', (/** @type {any} */ e) => {
 			const newHostId = parseInt(e.target.value, 10);
 			this.universe.RocketLauncher.hostId = newHostId;
+			// The user's choice: kept when bodies are added, even the world center (design §4.13-27)
+			this.universe.RocketLauncher.hostAutoSelected = false;
 			this._setupLaunchEnvironment(newHostId);
 			this._updateRocketStats();
 		});
 		this.ui.rlHostSelect.addEventListener('focus', () => {
 			this._updateRocketStats();
 		});
-		this.ui.rlAutoControl.addEventListener('change', (e) => {
+		this.ui.rlAutoControl.addEventListener('change', (/** @type {any} */ e) => {
 			this.universe.RocketLauncher.autoControl = e.target.checked;
 		});
 		this.ui.rlRolloutBtn.addEventListener('click', () => this.universe.RocketLauncher.rollout());
@@ -388,15 +405,8 @@ export class RocketTab {
 			// Resume simulation to ensure physics worker runs during sequence
 			EventBus.emit('simulation:resume');
 
-			// Change system setting
-			this.previousCameraTarget = null;
-			this.previousTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
-			this.previousZoomScaleVal = null;
-
-			// Restore time & zoom scale & camera target
-			this.restoreTimeScale();
-			this.restoreZoomScale();
-			this.restoreCameraTarget();
+			// Real time for the launch; the camera and zoom stay on the pad
+			this.applyLaunchView();
 
 			this.universe.RocketLauncher.ignite(sequenceType);
 		};
@@ -406,9 +416,8 @@ export class RocketTab {
 		this.ui.rlAbortBtn.addEventListener('click', () => {
 			this.universe.RocketLauncher.abortRollout();
 			let hostId = this.universe.RocketLauncher.hostId;
-			if (hostId === null || hostId === 0) {
-				hostId = this._getDefaultHostId();
-				this.universe.RocketLauncher.hostId = hostId;
+			if (this._isReplaceableHost(hostId)) {
+				hostId = this._assignDefaultHost();
 			}
 			this._setupLaunchEnvironment(hostId);
 			this._updateRocketHostOptions();
@@ -427,7 +436,7 @@ export class RocketTab {
 		// Helper to bind range inputs to RocketLauncher properties
 		const bindSlider = (sliderId, valId, propName, isFloat = false) => {
 			if (this.ui[sliderId]) {
-				this.ui[sliderId].addEventListener('input', (e) => {
+				this.ui[sliderId].addEventListener('input', (/** @type {any} */ e) => {
 					const val = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value, 10);
 					this.universe.RocketLauncher[propName] = val;
 					if (this.ui[valId]) {
@@ -450,6 +459,29 @@ export class RocketTab {
 		});
 	}
 
+	/**
+	 * Round a value to a decimal slider step (0.1, 0.01 ...) as the sizing rounds (Math.round(v * 10) / 10 for 0.1), so
+	 * the result is the decimal the slider holds and not v / step * step with its binary error.
+	 * @param {number} value
+	 * @param {number} step a power of ten at most 1
+	 * @returns {number}
+	 */
+	static roundToSliderStep(value, step) {
+		const perUnit = Math.round(1 / step);
+		return Math.round(value * perUnit) / perUnit;
+	}
+
+	_syncThrustSlider(thrustKN) {
+		const val = Number(thrustKN) || 0;
+		if (this.ui.rlLaunchThrust) {
+			this.ui.rlLaunchThrust.max = String(Math.max(THRUST_SLIDER_BASE_MAX_KN, Math.ceil(val)));
+			this.ui.rlLaunchThrust.value = val;
+		}
+		if (this.ui.rlLaunchThrustVal) {
+			this.ui.rlLaunchThrustVal.textContent = val;
+		}
+	}
+
 	_renderProfileTable() {
 		if (!this.ui.rlFlightProfileBody) { return; }
 		this.ui.rlFlightProfileBody.innerHTML = '';
@@ -460,31 +492,40 @@ export class RocketTab {
 			
 			const tdType = document.createElement('td');
 			const selType = document.createElement('select');
-			selType.innerHTML = `<option value="alt" ${step.type==='alt'?'selected':''}>Alt(m)</option><option value="time" ${step.type==='time'?'selected':''}>Time(s)</option><option value="apogee" ${step.type==='apogee'?'selected':''}>Apogee(±s)</option>`;
-			selType.onchange = (e) => { step.type = e.target.value; this._updateRocketStats(); };
+			selType.className = 'fp-trigger';
+			selType.innerHTML = `<option value="alt" ${step.type==='alt'?'selected':''}>Alt(m)</option><option value="time" ${step.type==='time'?'selected':''}>Time(s)</option><option value="vel" ${step.type==='vel'?'selected':''}>Vel(m/s)</option><option value="apogee" ${step.type==='apogee'?'selected':''}>Apogee(s)</option>`;
+			selType.onchange = (/** @type {any} */ e) => { step.type = e.target.value; this._updateRocketStats(); };
 			tdType.appendChild(selType);
 			
 			const tdVal = document.createElement('td');
 			const inpVal = document.createElement('input');
-			inpVal.type = 'number'; inpVal.value = step.value; inpVal.min = 0;
-			inpVal.onchange = (e) => { step.value = parseFloat(e.target.value) || 0; this._updateRocketStats(); };
+			inpVal.type = 'number'; inpVal.className = 'fp-val'; inpVal.value = step.value; inpVal.min = '0';
+			inpVal.onchange = (/** @type {any} */ e) => { step.value = finiteOr0(e.target.value); this._updateRocketStats(); };
 			tdVal.appendChild(inpVal);
 			
 			const tdThrust = document.createElement('td');
 			const inpThrust = document.createElement('input');
-			inpThrust.type = 'number'; inpThrust.value = step.thrust; inpThrust.min = 0; inpThrust.max = 100;
-			inpThrust.onchange = (e) => { step.thrust = parseFloat(e.target.value) || 0; this._updateRocketStats(); };
+			inpThrust.type = 'number'; inpThrust.className = 'fp-thrust'; inpThrust.value = step.thrust; inpThrust.min = '0'; inpThrust.max = '100';
+			inpThrust.onchange = (/** @type {any} */ e) => { step.thrust = finiteOr0(e.target.value); this._updateRocketStats(); };
 			tdThrust.appendChild(inpThrust);
 			
 			const tdAngle = document.createElement('td');
 			const inpAngle = document.createElement('input');
-			inpAngle.type = 'number'; inpAngle.value = step.angle; inpAngle.min = -90; inpAngle.max = 90;
-			inpAngle.onchange = (e) => { step.angle = parseFloat(e.target.value) || 0; this._updateRocketStats(); };
+			inpAngle.type = 'number'; inpAngle.className = 'fp-angle'; inpAngle.value = step.angle; inpAngle.min = '-90'; inpAngle.max = '90';
+			inpAngle.onchange = (/** @type {any} */ e) => { step.angle = finiteOr0(e.target.value); this._updateRocketStats(); };
 			tdAngle.appendChild(inpAngle);
+
+			const tdAction = document.createElement('td');
+			const selAction = document.createElement('select');
+			selAction.className = 'fp-action';
+			const curAction = step.action || '';
+			selAction.innerHTML = `<option value="" ${curAction===''?'selected':''}>-</option><option value="sep_stage1" ${curAction==='sep_stage1'?'selected':''}>Stg1</option><option value="sep_stage2" ${curAction==='sep_stage2'?'selected':''}>Stg2</option><option value="sep_payload" ${curAction==='sep_payload'?'selected':''}>Pay</option>`;
+			selAction.onchange = (/** @type {any} */ e) => { step.action = e.target.value; this._updateRocketStats(); };
+			tdAction.appendChild(selAction);
 			
 			const tdAct = document.createElement('td');
 			const btnDel = document.createElement('button');
-			btnDel.type = 'button'; btnDel.className = 'remove-step-btn'; btnDel.textContent = 'X';
+			btnDel.type = 'button'; btnDel.className = 'remove-step-btn fp-del'; btnDel.textContent = '✕';
 			btnDel.onclick = () => { 
 				this.universe.RocketLauncher.flightProfile.splice(index, 1);
 				this._renderProfileTable();
@@ -496,6 +537,7 @@ export class RocketTab {
 			tr.appendChild(tdVal);
 			tr.appendChild(tdThrust);
 			tr.appendChild(tdAngle);
+			tr.appendChild(tdAction);
 			tr.appendChild(tdAct);
 			
 			this.ui.rlFlightProfileBody.appendChild(tr);
@@ -656,8 +698,7 @@ export class RocketTab {
 			if (this.ui.rlOxidMassVal) this.ui.rlOxidMassVal.textContent = stg.oxidMassT;
 			if (this.ui.rlLaunchMass) this.ui.rlLaunchMass.value = stg.dryMassT;
 			if (this.ui.rlLaunchMassVal) this.ui.rlLaunchMassVal.textContent = stg.dryMassT;
-			if (this.ui.rlLaunchThrust) this.ui.rlLaunchThrust.value = stg.thrustKN;
-			if (this.ui.rlLaunchThrustVal) this.ui.rlLaunchThrustVal.textContent = stg.thrustKN;
+			this._syncThrustSlider(stg.thrustKN);
 			if (this.ui.rlSepDelay) {
 				this.ui.rlSepDelay.value = stg.separationDelaySec !== undefined ? stg.separationDelaySec : 2.0;
 				if (this.ui.rlSepDelayVal) this.ui.rlSepDelayVal.textContent = Number(this.ui.rlSepDelay.value).toFixed(1);
@@ -676,6 +717,13 @@ export class RocketTab {
 	}
 
 	_initPresetSelectors() {
+		const rl = this.universe?.RocketLauncher;
+		const selectPreferred = (selectEl, items, preferredId) => {
+			if (!selectEl || items.length === 0) return;
+			const hasPreferred = preferredId && items.some(item => item.id === preferredId);
+			selectEl.value = hasPreferred ? preferredId : items[0].id;
+		};
+
 		if (this.ui.rlVehicleSelect) {
 			const vehicles = this.presetManager.getVehicles();
 			this.ui.rlVehicleSelect.innerHTML = '';
@@ -685,9 +733,7 @@ export class RocketTab {
 				opt.textContent = v.name;
 				this.ui.rlVehicleSelect.appendChild(opt);
 			});
-			if (vehicles.length > 0) {
-				this.ui.rlVehicleSelect.value = vehicles[0].id;
-			}
+			selectPreferred(this.ui.rlVehicleSelect, vehicles, rl?.currentVehicleId);
 		}
 
 		if (this.ui.rlPayloadSelect) {
@@ -699,9 +745,7 @@ export class RocketTab {
 				opt.textContent = p.name;
 				this.ui.rlPayloadSelect.appendChild(opt);
 			});
-			if (payloads.length > 0) {
-				this.ui.rlPayloadSelect.value = payloads[0].id;
-			}
+			selectPreferred(this.ui.rlPayloadSelect, payloads, rl?.currentPayloadId);
 		}
 
 		if (this.ui.rlMissionSelect) {
@@ -713,12 +757,11 @@ export class RocketTab {
 				opt.textContent = `${m.name} [${m.targetOrbit || ''}]`;
 				this.ui.rlMissionSelect.appendChild(opt);
 			});
-			if (missions.length > 0) {
-				this.ui.rlMissionSelect.value = missions[0].id;
-			}
+			selectPreferred(this.ui.rlMissionSelect, missions, rl?.currentMissionId);
 		}
 	}
 
+	/** @param {{ vehicleId?: string, payloadId?: string, missionId?: string }} [opts] */
 	applyOrthogonalConfig({ vehicleId, payloadId, missionId } = {}) {
 		const rl = this.universe.RocketLauncher;
 		this.presetManager.applyToLauncher(rl, { vehicleId, payloadId, missionId });
@@ -737,6 +780,8 @@ export class RocketTab {
 		this.selectTab(this.currentTab || 0);
 		this._renderProfileTable();
 		this._updateRocketStats();
+		// The mission sets the prediction period (applyToLauncher); the System-tab slider shows it
+		EventBus.emit('ui:sync-prediction-duration', rl.predictionDurationMonths);
 	}
 
 	loadPreset(presetKey) {
@@ -777,31 +822,61 @@ export class RocketTab {
 	}
 
 	_getDefaultHostId() {
-		const celestials = this.universe.objects.filter(o => o.type === OBJECT_TYPES.CELESTIAL);
+		// Bodies still in the simulation: a removed one stays listed until its trail has faded (design §4.13-30)
+		const celestials = this.universe.objects.filter(o => o.type === OBJECT_TYPES.CELESTIAL && o.state === OBJECT_STATE.ACTIVE);
 		const earth = celestials.find(o => o.name === 'Earth' || o.name?.toLowerCase() === 'earth');
 		if (earth) {
 			return earth.id;
 		}
-		const nonSunCelestials = celestials.filter(o => o.id !== 0);
-		if (nonSunCelestials.length > 0) {
-			return nonSunCelestials[nonSunCelestials.length - 1].id;
+		// Any body but the world center (earlier "id !== 0", which after a Reset no longer named it, design §4.13-27)
+		const nonCenterCelestials = celestials.filter(o => !o.isWorldCenter);
+		if (nonCenterCelestials.length > 0) {
+			return nonCenterCelestials[nonCenterCelestials.length - 1].id;
 		}
 		if (celestials.length > 0) {
 			return celestials[celestials.length - 1].id;
 		}
-		return 0;
+		// No celestial body: no host (null), not the id 0 of an object that may exist (design §4.13-24)
+		return null;
+	}
+
+	/**
+	 * Set the launcher host to the default host (_getDefaultHostId) as an automatic choice.
+	 * @returns {number | null} the new host id
+	 */
+	_assignDefaultHost() {
+		const rl = this.universe.RocketLauncher;
+		rl.hostId = this._getDefaultHostId();
+		rl.hostAutoSelected = true;
+		return rl.hostId;
+	}
+
+	/**
+	 * Whether the launcher host is to be replaced by the default host: no host, or the world center chosen
+	 * automatically because no other body existed (then a body added later becomes the host, as at startup). A host the
+	 * user chose (the world center too) is kept. Earlier "hostId === 0", which took the user's choice of the Sun of the
+	 * first world for an automatic one and missed the Sun of a Reset (design §4.13-27).
+	 * @param {any} hostId
+	 */
+	_isReplaceableHost(hostId) {
+		if (hostId === null || hostId === undefined) { return true; }
+		if (this.universe.RocketLauncher.hostAutoSelected !== true) { return false; }
+		const host = this.universe.objects.find(o => o.id === hostId && o.type === OBJECT_TYPES.CELESTIAL);
+		return Boolean(host && host.isWorldCenter);
 	}
 
 	_updateRocketHostOptions() {
 		let currentHostId = this.universe.RocketLauncher.hostId;
-		if (currentHostId === null || currentHostId === 0) {
-			currentHostId = this._getDefaultHostId();
-			this.universe.RocketLauncher.hostId = currentHostId;
+		if (this._isReplaceableHost(currentHostId)) {
+			currentHostId = this._assignDefaultHost();
 		}
 		this.ui.rlHostSelect.innerHTML = '';
 
+		// Launch hosts: the celestial bodies in the simulation. Earlier every object but rockets, so debris and removed
+		// bodies still fading out were offered too (design §4.13-31; a host is a celestial body, as _getDefaultHostId and
+		// open() already required)
 		for (const obj of this.universe.objects) {
-			if (obj.type === OBJECT_TYPES.ROCKET) { continue; }
+			if (obj.type !== OBJECT_TYPES.CELESTIAL || !isLiveObject(obj)) { continue; }
 
 			const option = document.createElement('option');
 			option.value = obj.id;
@@ -873,7 +948,8 @@ export class RocketTab {
 		let rMeters = 0;
 
 		if (rl.mode === 'host') {
-			host = this.universe.objects.find(o => o.id === rl.hostId) || this.universe.camera.trackingTarget;
+			// The launcher's rule: the host in the simulation, else the camera's target (design §4.13-31)
+			host = RocketLauncher.resolveHost(this.universe, rl.hostId);
 			if (host) {
 				rMeters = host.radius + (param.RADIUS || 1) + rl.hostAltitudeM;
 			}
@@ -932,7 +1008,7 @@ export class RocketTab {
 	}
 
 	_setupLaunchEnvironment(hostId) {
-		const host = this.universe.objects.find(o => o.id === hostId);
+		const host = this.universe.objects.find(o => o.id === hostId && isLiveObject(o));
 		if (!host) { return; }
 
 		EventBus.emit('camera:set-tracking-target', host);
@@ -942,18 +1018,28 @@ export class RocketTab {
 	}
 
 	open() {
+		const wasOpened = this.isOpened;
 		this.isOpened = true;
+
+		// Save the time scale, zoom and camera target from before the tab opened, which close() restores. This must come
+		// before the launch setup below (it sets the minimum time scale, fits the zoom to the host and tracks the host),
+		// and only when the tab was closed: a click on the already open tab must not replace them with the tab's own view.
+		if (!wasOpened) {
+			this.saveTimeScale();
+			this.saveZoomScale();
+			this.saveCameraTarget();
+		}
 
 		// Pause simulation while setting up rocket
 		EventBus.emit('simulation:pause');
 
 		// Resolve and setup target host FIRST
 		let targetHostId = this.universe.RocketLauncher.hostId;
-		const hostStillExists = this.universe.objects.some(o => o.id === targetHostId && o.type === OBJECT_TYPES.CELESTIAL);
+		// A body still in the simulation (a removed one stays listed until its trail has faded, design §4.13-30)
+		const hostStillExists = this.universe.objects.some(o => o.id === targetHostId && o.type === OBJECT_TYPES.CELESTIAL && o.state === OBJECT_STATE.ACTIVE);
 
-		if (targetHostId === null || targetHostId === 0 || !hostStillExists) {
-			targetHostId = this._getDefaultHostId();
-			this.universe.RocketLauncher.hostId = targetHostId;
+		if (!hostStillExists || this._isReplaceableHost(targetHostId)) {
+			targetHostId = this._assignDefaultHost();
 		}
 		this._setupLaunchEnvironment(targetHostId);
 		this._updateRocketHostOptions(); 
@@ -966,11 +1052,6 @@ export class RocketTab {
 		} else if (typeof this.universe.RocketLauncher.requestPreviewUpdate === 'function') {
 			this.universe.RocketLauncher.requestPreviewUpdate(0);
 		}
-
-		// Save time & zoom scale & camera target
-		this.saveTimeScale();
-		this.saveZoomScale();
-		this.saveCameraTarget();
 	}
 
 	close() {
@@ -983,12 +1064,13 @@ export class RocketTab {
 
 		// Stop auto tracking gracefully
 		if (this.universe.camera.autoTrackHost) {
-			const host = this.universe.objects.find(o => o.id === this.universe.RocketLauncher.hostId);
+			const host = this.universe.objects.find(o => o.id === this.universe.RocketLauncher.hostId && isLiveObject(o));
 			EventBus.emit('camera:stop-auto-tracking', host);
 		} else if (this.universe.RocketLauncher.rolloutedRocketId !== null || this.universe.LaunchSequencer.isActive) {
-			this.previousCameraTarget = null;
-			this.previousTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
-			this.previousZoomScaleVal = null;
+			// A rocket on the pad or a launch sequence running: real time for the launch instead of the view from before
+			// the tab opened, as when igniting (git e02858f / 3734026; git 5998ab1 moved the restore calls of this branch
+			// into the else branch, which left these values assigned but never applied, design §4.13-15)
+			this.applyLaunchView();
 		} else {
 			// Restore time & zoom scale & camera target
 			this.restoreTimeScale();
@@ -1000,8 +1082,12 @@ export class RocketTab {
 	}
 
 	saveTimeScale() {
-		// Read directly from ControlPanel/Universe instead of SystemTab UI DOM
-		this.previousTimeScaleVal = Math.log10(this.universe.timeScale);
+		// The exponent the System tab runs the simulation at, read through the ControlPanel instead of the slider (which
+		// shows real time as -7.5). Not log10 of universe.timeScale: the restore applies the saved exponent exactly, and
+		// log10(10^x) can differ from x in the last bit (log10(10^0.3) = 0.29999999999999993). Design §4.13-20. Without a
+		// ControlPanel (a universe stub) it falls back to log10 of the time scale, as before.
+		const exp = this.universe.ControlPanel?.getTimeScaleExp?.();
+		this.previousTimeScaleVal = (typeof exp === 'number' && Number.isFinite(exp)) ? exp : Math.log10(this.universe.timeScale);
 	}
 
 	saveZoomScale() {
@@ -1009,10 +1095,21 @@ export class RocketTab {
 	}
 
 	saveCameraTarget() {
-		if (this.universe.camera.trackingTarget !== null) {
-			this.previousCameraTarget = this.universe.camera.trackingTarget;
-			this.previousCameraOffset = { ...this.universe.camera.targetOffset };
-		}
+		// No tracked object before the tab opened: nothing to restore (a target kept from an earlier opening must not be)
+		const target = this.universe.camera.trackingTarget ?? null;
+		this.previousCameraTarget = target;
+		this.previousCameraOffset = target ? { ...this.universe.camera.targetOffset } : null;
+	}
+
+	/**
+	 * A save loaded while this tab is open: the tab keeps its minimum time scale and its zoom until it closes, and the
+	 * loaded values replace the ones saved at open(), so closing the tab applies them like any value from before it opened.
+	 * @param {{ timeScaleVal: number | null, zoomScaleVal: number | null }} view validated by SystemTab.normalizeViewState
+	 */
+	deferViewState(view) {
+		if (!view) { return; }
+		if (view.timeScaleVal !== null && view.timeScaleVal !== undefined) { this.previousTimeScaleVal = view.timeScaleVal; }
+		if (view.zoomScaleVal !== null && view.zoomScaleVal !== undefined) { this.previousZoomScaleVal = view.zoomScaleVal; }
 	}
 
 	restoreTimeScale() {
@@ -1024,20 +1121,45 @@ export class RocketTab {
 
 	restoreZoomScale() {
 		if (this.previousZoomScaleVal !== null) {
-			EventBus.emit('camera:set-target-zoom-exp', parseFloat(this.previousZoomScaleVal));
+			const exp = parseFloat(this.previousZoomScaleVal);
+			EventBus.emit('camera:set-target-zoom-exp', exp);
+			// The System-tab slider and indicator follow the camera (the same path as camera.fitToTarget): the tab fitted
+			// the zoom to the host, so without this they would keep showing the fitted zoom
+			EventBus.emit('camera:zoom-changed', exp);
 			this.previousZoomScaleVal = null;
 		}
 	}
 
-	restoreCameraTarget() {
-		if (this.previousCameraTarget !== null) {
-			EventBus.emit('camera:set-tracking-target', this.previousCameraTarget);
-			if (this.previousCameraOffset) {
-				EventBus.emit('camera:set-target-offset', this.previousCameraOffset.x, this.previousCameraOffset.y);
-			}
+	/**
+	 * The view for a launch (igniting, or closing the tab with a rocket on the pad or a launch sequence running): the
+	 * time scale goes to real time (1 s/s), the camera target and the zoom stay as they are (on the pad or the rocket),
+	 * and nothing saved at open() is restored later.
+	 */
+	applyLaunchView() {
+		this.previousCameraTarget = null;
+		this.previousCameraOffset = null;
+		this.previousZoomScaleVal = null;
+		this.previousTimeScaleVal = Math.log10(1 / PHYSICS.YEARS_PER_SECOND);
+		this.restoreTimeScale();
+	}
 
-			this.previousCameraTarget = null;
-			this.previousCameraOffset = null;
+	/**
+	 * Track the object saved at open() again, with its offset, if it is still in the universe. The saved reference is
+	 * compared by identity, not by id: a load while the tab is open (the Load button is on the System tab, but
+	 * deferViewState handles that case) replaces every object with a new one carrying the saved id, and an id of the
+	 * replaced universe may name another object in the loaded one; an object removed meanwhile is gone too. Then the
+	 * camera stays where the load or the tab put it (design §4.13-16).
+	 */
+	restoreCameraTarget() {
+		const target = this.previousCameraTarget;
+		const offset = this.previousCameraOffset;
+		this.previousCameraTarget = null;
+		this.previousCameraOffset = null;
+		// Listed and still in the simulation: a removed object stays listed until its trail has faded (design §4.13-31)
+		if (target === null || !this.universe.objects.includes(target) || !isLiveObject(target)) { return; }
+		EventBus.emit('camera:set-tracking-target', target);
+		if (offset) {
+			EventBus.emit('camera:set-target-offset', offset.x, offset.y);
 		}
 	}
 
@@ -1122,14 +1244,29 @@ export class RocketTab {
 		}
 		updateSlider('rlHostAlt', 'rlHostAltVal', rlState.hostAltitudeM);
 		if (rlState.flightProfile !== undefined) {
-			this.universe.RocketLauncher.flightProfile = JSON.parse(JSON.stringify(rlState.flightProfile));
+			this.universe.RocketLauncher.flightProfile = Array.isArray(rlState.flightProfile)
+				? JSON.parse(JSON.stringify(rlState.flightProfile)).filter(step => step !== null && typeof step === 'object' && Number.isFinite(step.value) && Number.isFinite(step.thrust) && Number.isFinite(step.angle))
+				: [];
 			this._renderProfileTable();
 		}
 		updateSlider('rlLaunchMass', 'rlLaunchMassVal', rlState.dryMassT);
-		updateSlider('rlLaunchThrust', 'rlLaunchThrustVal', rlState.thrustKN);
+		this._syncThrustSlider(rlState.thrustKN ?? this.universe.RocketLauncher.thrustKN);
 		updateSlider('rlFuelMass', 'rlFuelMassVal', rlState.fuelMassT);
 		updateSlider('rlOxidMass', 'rlOxidMassVal', rlState.oxidMassT);
 		if (rlState.fuelType) { this.ui.rlFuelType.value = rlState.fuelType; }
+		if (rlState.currentVehicleId && this.ui.rlVehicleSelect?.querySelector(`option[value="${rlState.currentVehicleId}"]`)) {
+			this.ui.rlVehicleSelect.value = rlState.currentVehicleId;
+		}
+		if (rlState.currentPayloadId && this.ui.rlPayloadSelect?.querySelector(`option[value="${rlState.currentPayloadId}"]`)) {
+			this.ui.rlPayloadSelect.value = rlState.currentPayloadId;
+		}
+		if (rlState.currentMissionId && this.ui.rlMissionSelect?.querySelector(`option[value="${rlState.currentMissionId}"]`)) {
+			this.ui.rlMissionSelect.value = rlState.currentMissionId;
+		}
+		if (Array.isArray(rlState.stages) && rlState.stages.length > 0) {
+			this._renderStageTabs();
+			this.selectTab(0);
+		}
 		updateSlider('rlLaunchMaxG', 'rlLaunchMaxGVal', rlState.maxGLimit);
 
 		if (rlState.autoControl !== undefined) {

@@ -213,7 +213,10 @@ export class EffectRenderer {
 			let absX = pt.x;
 			let absY = pt.y;
 
-			// Restore absolute coordinates using the recorded reference dominant body
+			let screenRelX = (absX - basisPos.x) * zoomScale;
+			let screenRelY = (absY - basisPos.y) * zoomScale;
+
+			// Restore coordinates using host delta prior to adding local offset to prevent float64 precision loss
 			if (pt.refId !== -1 && objectsMap) {
 				const refObj = objectsMap.get(pt.refId);
 				if (refObj) {
@@ -230,13 +233,13 @@ export class EffectRenderer {
 						relY = worldY;
 					}
 
-					absX = relX + refObj.x;
-					absY = relY + refObj.y;
+					screenRelX = ((refObj.x - basisPos.x) + relX) * zoomScale;
+					screenRelY = ((refObj.y - basisPos.y) + relY) * zoomScale;
 				}
 			}
 
-			const relX = (absX - basisPos.x) * zoomScale;
-			const relY = (absY - basisPos.y) * zoomScale;
+			const relX = screenRelX;
+			const relY = screenRelY;
 
 			// Thinning
 			let shouldAdd = false;

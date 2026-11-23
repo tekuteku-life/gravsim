@@ -6,7 +6,7 @@ import { EventBus } from './gravsim_event_bus.js';
 import { presetManager } from './gravsim_preset_manager.js';
 
 window.onload = async function() {
-	const canvas = document.getElementById('gravsim-canvas');
+	const canvas = /** @type {HTMLCanvasElement | null} */ (document.getElementById('gravsim-canvas'));
 	if (!canvas) {
 		throw new Error("Canvas element with id 'gravsim-canvas' not found.");
 	}

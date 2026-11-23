@@ -10,15 +10,15 @@
 	"targetDeltaVM_S": 12300,
 	"payloadDeltaVM_S": 850,
 	"flightProfile": [
-		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0 },
-		{ "type": "alt", "value": 2000, "thrust": 100, "angle": 10 },
-		{ "type": "alt", "value": 15000, "thrust": 100, "angle": 26 },
-		{ "type": "alt", "value": 40000, "thrust": 100, "angle": 48 },
-		{ "type": "alt", "value": 80000, "thrust": 100, "angle": 68 },
-		{ "type": "alt", "value": 150000, "thrust": 100, "angle": 80 },
-		{ "type": "alt", "value": 220000, "thrust": 100, "angle": 86 },
-		{ "type": "alt", "value": 300000, "thrust": 100, "angle": 89 },
-		{ "type": "alt", "value": 380000, "thrust": 100, "angle": 90 }
+		{ "type": "alt", "value": 0, "thrust": 100, "angle": 0, "action": "" },
+		{ "type": "alt", "value": 1800, "thrust": 100, "angle": 11, "action": "" },
+		{ "type": "alt", "value": 14000, "thrust": 100, "angle": 29, "action": "" },
+		{ "type": "alt", "value": 36000, "thrust": 100, "angle": 51, "action": "" },
+		{ "type": "alt", "value": 75000, "thrust": 100, "angle": 71, "action": "" },
+		{ "type": "alt", "value": 140000, "thrust": 100, "angle": 83, "action": "" },
+		{ "type": "alt", "value": 205000, "thrust": 100, "angle": 88, "action": "" },
+		{ "type": "alt", "value": 285000, "thrust": 100, "angle": 89, "action": "" },
+		{ "type": "alt", "value": 360000, "thrust": 100, "angle": 90, "action": "" }
 	],
 	"rendering": {
 		"trajectoryColor": "#e0e0e0",

@@ -24,6 +24,7 @@ import { DestructionManager } from './gravsim_destruction_manager.js';
 import { VisualEffectManager } from './gravsim_visual_effect_manager.js';
 import { presetManager } from './gravsim_preset_manager.js';
 import { EventBus } from './gravsim_event_bus.js';
+import { isLiveObject } from './gravsim_utils.js';
 
 const GRAVSIM_CALC_JS_FILE = `./scripts/gravsim_calc.js?v=${Date.now()}`;
 
@@ -35,6 +36,9 @@ class CalcWorkerManager {
 		this.worker = new Worker(GRAVSIM_CALC_JS_FILE, {type: 'module'});
 		this.onUpdateCallback = onUpdateCallback;
 		this.worker.onmessage = this.handleMessage.bind(this);
+		/** @type {Map<number, { resolve: (rockets: any[] | null) => void, timer: any }>} */
+		this._runtimeRequests = new Map();
+		this._nextRuntimeRequestId = 1;
 	}
 
 	handleMessage(e) {
@@ -45,6 +49,15 @@ class CalcWorkerManager {
 				this.onUpdateCallback(data);
 			}
 			break;
+		case 'runtimeSnapshot': {
+			const pending = this._runtimeRequests.get(data.requestId);
+			if (pending) {
+				this._runtimeRequests.delete(data.requestId);
+				clearTimeout(pending.timer);
+				pending.resolve(Array.isArray(data.rockets) ? data.rockets : []);
+			}
+			break;
+		}
 		default:
 			console.error('Unknown command from worker:', data.cmd);
 		}
@@ -62,7 +75,32 @@ class CalcWorkerManager {
 		this.worker.postMessage({ cmd: 'rocketCommand', id: rocketId, command: command });
 	}
 
+	/**
+	 * Ask the Worker for the runtime state of every live rocket. Because Worker messages are
+	 * delivered in order and 'update' buffers are applied synchronously on receipt, the reply is
+	 * consistent with the kinematic state already applied on the main thread.
+	 * Resolves to null when the Worker does not answer within the timeout.
+	 * @param {number} [timeoutMs]
+	 * @returns {Promise<any[] | null>}
+	 */
+	requestRuntimeSnapshot(timeoutMs = SIMULATION.RUNTIME_SNAPSHOT_TIMEOUT_MS) {
+		const requestId = this._nextRuntimeRequestId++;
+		return new Promise((resolve) => {
+			const timer = setTimeout(() => {
+				this._runtimeRequests.delete(requestId);
+				resolve(null);
+			}, timeoutMs);
+			this._runtimeRequests.set(requestId, { resolve, timer });
+			this.worker.postMessage({ cmd: 'snapshotRuntime', requestId });
+		});
+	}
+
 	destroy() {
+		for (const pending of this._runtimeRequests.values()) {
+			clearTimeout(pending.timer);
+			pending.resolve(null);
+		}
+		this._runtimeRequests.clear();
 		this.worker.terminate();
 	}
 }
@@ -147,7 +185,8 @@ export class Universe {
 					nextCenter = debrisList.reduce((max, obj) => obj.mass > max.mass ? obj : max, debrisList[0]);
 				}
 
-				// If dying object was a rocket with a host, track the host celestial body rather than Sun
+				// If dying object was a rocket with a host, track the host celestial body rather than the world center (the
+				// Sun of Reset; earlier "id !== 0", which after a Reset no longer named it, design §4.13-27)
 				if (!nextCenter && oldCenter.type === OBJECT_TYPES.ROCKET) {
 					const hostId = oldCenter.hostId ?? this.RocketLauncher?.hostId;
 					if (hostId !== null && hostId !== undefined) {
@@ -155,13 +194,16 @@ export class Universe {
 					}
 					if (!nextCenter) {
 						nextCenter = this.objects.find(o => o.name === 'Earth' && o.state === OBJECT_STATE.ACTIVE)
-							|| this.objects.find(o => o.type === OBJECT_TYPES.CELESTIAL && o.id !== 0 && o.state === OBJECT_STATE.ACTIVE);
+							|| this.objects.find(o => o.type === OBJECT_TYPES.CELESTIAL && !o.isWorldCenter && o.state === OBJECT_STATE.ACTIVE);
 					}
 				}
 
-				// Select largest object (as ultimate fallback)
-				if (!nextCenter && this.objects.length > 0) {
-					nextCenter = this.objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, this.objects[0]);
+				// Select the largest object still in the simulation (as ultimate fallback). Earlier any listed object: a removed
+				// one fading out could be chosen, which this fallback left again at the next update, and so on until it was
+				// cleaned up (design §4.13-31)
+				const objects = this.objects.filter(o => isLiveObject(o));
+				if (!nextCenter && objects.length > 0) {
+					nextCenter = objects.reduce((max, obj) => obj.mass > max.mass ? obj : max, objects[0]);
 				}
 
 				if (nextCenter) {
@@ -179,18 +221,8 @@ export class Universe {
 			});
 		}, EVENT_PRIORITY.LOGIC);
 
-		// Hook for celestial body rotation update
-		EventBus.onUpdate((dt, scaledDt) => {
-			this.objects.forEach(obj => {
-				if (obj.type === OBJECT_TYPES.CELESTIAL && obj.state === OBJECT_STATE.ACTIVE) {
-					const param = obj.param || this.getObjectParams(obj.name);
-					if (param && param.ROTATION_PERIOD) {
-						const omega = (2 * Math.PI) / param.ROTATION_PERIOD; // rad/s
-						obj.rotationAngle = (obj.rotationAngle || 0) + omega * scaledDt; // rad
-					}
-				}
-			});
-		}, EVENT_PRIORITY.LOGIC);
+		// Celestial body rotation is integrated deterministically inside PhysicsEngine._moveObjects(dt)
+		// and synchronized via WorkerBridge BUFFER_INDEX.ROTATION_ANGLE.
 
 		// Hook for UI Updates
 		EventBus.onUpdate(() => this.updateUI(Date.now()), EVENT_PRIORITY.UI);
@@ -284,13 +316,16 @@ export class Universe {
 	clearObjects(clearDebris, clearRocket, clearCelestial) {
 		const toRemove = [];
 		for (const obj of this.objects) {
+			// Objects already removed (fading out) were removed then
+			if (!isLiveObject(obj)) { continue; }
 			if (clearDebris && obj.type === OBJECT_TYPES.DEBRIS) {
 				toRemove.push(obj);
 			} else if (clearRocket && obj.type === OBJECT_TYPES.ROCKET) {
 				toRemove.push(obj);
 			} else if (clearCelestial && obj.type === OBJECT_TYPES.CELESTIAL) {
-				// Prevent removing the Sun (id:0)
-				if (obj.id !== 0) {
+				// Keep the world center (the Sun of Reset, or the star a generator made of it). Earlier "id !== 0": after a
+				// Reset the new Sun has another id, so it was removed too (design §4.13-27)
+				if (!obj.isWorldCenter) {
 					toRemove.push(obj);
 				}
 			}
@@ -306,12 +341,17 @@ export class Universe {
 
 	// Execute registered updaters (Call this method in the main simulation loop)
 	updateUI(now) {
-		// Detect changes in object count to trigger list updates safely once per frame
+		// Detect changes in object count to trigger list updates safely once per frame. The count is that of the objects
+		// in the simulation, and the lists are rebuilt when it changes (an object removed or destroyed) and when an object
+		// that was fading out leaves the list; earlier only the second, so removed objects stayed in the lists and the
+		// count until their trails had faded (design §4.13-31)
 		if (this.ObjectManager) {
-			const currentCount = this.ObjectManager.objects.length;
-			if (this._lastObjCount !== currentCount) {
-				EventBus.emit('object-list-changed', currentCount);
-				this._lastObjCount = currentCount;
+			const listedCount = this.ObjectManager.objects.length;
+			const liveCount = this.ObjectManager.countLive();
+			if (this._lastObjCount !== liveCount || this._lastListedCount !== listedCount) {
+				EventBus.emit('object-list-changed', liveCount);
+				this._lastObjCount = liveCount;
+				this._lastListedCount = listedCount;
 			}
 		}
 	}
@@ -345,11 +385,28 @@ export class Universe {
 		EventBus.emit('profile:end', 'Universe.draw');
 	}
 
-	getState() {
+	/**
+	 * Collect Worker-only rocket runtime state for persistence.
+	 * @returns {Promise<Map<number, any> | null>} id -> runtimeState, or null if unavailable
+	 */
+	async captureRuntimeSnapshot() {
+		const rockets = await this.CalcWorkerManager.requestRuntimeSnapshot();
+		if (!rockets) { return null; }
+		const snapshot = new Map();
+		for (const entry of rockets) {
+			if (entry && entry.id !== undefined && entry.runtimeState) {
+				snapshot.set(entry.id, entry.runtimeState);
+			}
+		}
+		return snapshot;
+	}
+
+	/** @param {Map<number, any> | null} [runtimeSnapshot] */
+	getState(runtimeSnapshot = null) {
 		return {
 			centerObjectId: this.centerObject ? this.centerObject.id : null,
 			cameraOffset: this.camera.targetOffset,
-			objectManager: this.ObjectManager.getState(),
+			objectManager: this.ObjectManager.getState(runtimeSnapshot),
 			rocketLauncher: this.RocketLauncher.getState(),
 			controlPanel: this.ControlPanel.getState()
 		};
@@ -360,6 +417,8 @@ export class Universe {
 
 		if (state.objectManager) {
 			this.ObjectManager.loadState(state.objectManager);
+			// The loaded flight continues at its saved MET: the callouts it has passed are not voiced again (design §4.14-6)
+			if (this.SoundSequencer) { this.SoundSequencer.resyncAfterLoad(); }
 		}
 
 		if (state.centerObjectId !== undefined && state.centerObjectId !== null) {

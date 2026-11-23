@@ -3,12 +3,12 @@
 
 import {
 	PHYSICS, RENDER, OBJECT_STATE,
-	OBJECT_TYPES, TRAIL_MODE, MULTISTAGE_ROCKET,
+	OBJECT_TYPES, TRAIL_MODE, MULTISTAGE_ROCKET, TELEMETRY,
 } from './gravsim_const.js';
 import { ROCKET_VISUAL } from './gravsim_preset_manager.js';
 import { Trajectory } from './gravsim_trajectory.js';
 import { EffectTrail } from './gravsim_effect_trail.js';
-import { UnitConvertUtils } from './gravsim_utils.js';
+import { UnitConvertUtils, isLiveObject } from './gravsim_utils.js';
 import { RocketRenderer } from './gravsim_rocket_renderer.js';
 import { TrajectoryPredictor } from './gravsim_trajectory_predictor.js';
 
@@ -36,6 +36,10 @@ export class GravSimObject {
 		this.state = OBJECT_STATE.ACTIVE;
 		this.isEscaping = false;
 		this.inAtmosphere = false;
+		this.dominantBodyId = -1;
+		this.rotationAngle = 0;
+		/** @type {any} */
+		this.param = null;
 
 		const rendering_config = {
 			color: color,
@@ -65,9 +69,12 @@ export class GravSimObject {
 		let refY = 0;
 		let refAngle = 0;
 
-		// Find the dominant body to record the effect position as a relative coordinate
+		// Find the dominant body to record the effect position as a relative coordinate. A body in the simulation only:
+		// a frame made before a removal still names the removed body, which stays listed until its trail has faded; a
+		// point recorded relative to it is drawn at its relative coordinates once it has left the list. Without one the
+		// point is recorded as it is without a dominant body (absolute, refId -1) (design §4.13-31)
 		if (this.dominantBodyId !== undefined && this.dominantBodyId !== -1 && objects) {
-			const refBody = objects.find(o => o.id === this.dominantBodyId);
+			const refBody = objects.find(o => o.id === this.dominantBodyId && isLiveObject(o));
 			if (refBody) {
 				refId = refBody.id;
 				refX = refBody.x;
@@ -212,6 +219,17 @@ export class CelestialBody extends GravSimObject {
 		super(id, name, OBJECT_TYPES.CELESTIAL, x, y, vx, vy, color, size, radius, generation, borderColor, borderWidth);
 		this._mass = mass; // t
 		this.rotationAngle = 0; // rad
+		// The body the world is built around: the first body placed into an empty world (the Sun of Universe.reset() at
+		// startup and after Reset; ObjectPlacer.placeObject), or the one a save names. Clearing celestial bodies keeps it,
+		// the binary / three-body generators turn it into their first star, and the default launch host and the camera
+		// prefer any other body. Not an id: ids keep counting across Reset and a load keeps the file's ids (§4.13-27).
+		this.isWorldCenter = false;
+		// The body a deploy profile placed as its world center (the static object marked worldCenter: Sagittarius A* of
+		// Galactic Center, §4.13-32), saved with it. The placements that add to the world (the Deploy buttons, Solar
+		// System) replace only such a center by the body of another kind they need; a center without it (a body the user
+		// placed into the empty world, the Sun of Reset or of a replacement, the star a generator made) stays (§4.14-14).
+		// Set by the profile together with isWorldCenter (and by a load), and read only on the world center.
+		this.isProfileWorldCenter = false;
 	}
 	get mass() { return this._mass; }
 	set mass(val) { this._mass = val; }
@@ -262,6 +280,7 @@ export class Rocket extends GravSimObject {
 		this.thrustRatio = 0;
 		this.flightTime = 0;
 		this.autoControl = true;
+		this.fuelType = 'liquid';
 		this.colorTheme = colorTheme || 'orange';
 
 		// Launch Sequencer States
@@ -275,8 +294,11 @@ export class Rocket extends GravSimObject {
 		this.isInternalPower = false;
 		this.disableStaging = false;
 
+		// Placeholder until the first Worker frame (the Worker sends none while the simulation is paused, e.g. on the pad
+		// while the Rocket tab is open). The status is the FlightComputer's initial one (PRE_LAUNCH), which it also reports
+		// for the whole hold-down: the FlightComputer never reports LIFTOFF (0).
 		this.telemetry = {
-			status: 0,
+			status: TELEMETRY.STATUS.PRE_LAUNCH,
 			qAxialKpa: 0, qLateralKpa: 0, structRatio: 0,
 			aoaDeg: 0, progradeAngle: 0, gravityAngle: 0,
 			remDv: 0, // m/s
@@ -285,8 +307,25 @@ export class Rocket extends GravSimObject {
 			aV: 0, aH: 0, // m/s^2
 			currentG: 0,
 			flightTime: 0, // s
+			mach: 0,
+			rcsCw: false,
+			rcsCcw: false,
+			rcsUllage: false
 		};
 
+		this.mach = 0;
+		this.rcsCw = false;
+		this.rcsCcw = false;
+		this.rcsUllage = false;
+		this.stageState = 'PRE_LAUNCH';
+		this.stgTimer = 0;
+		this.hasPayloadPropulsion = false;
+		this.isPayloadSeparated = false;
+		this.isStage2Separated = false;
+		/** True only for rockets rebuilt from a saved state (selects the CalcRocket restore branch). */
+		this.restoredRuntimeState = false;
+		/** @type {any} Worker runtime snapshot carried from a save file to the Worker on re-add. */
+		this.runtimeState = null;
 		this.currentStageIndex = 0;
 		this.totalStages = 1;
 		this.stages = [];
@@ -304,14 +343,29 @@ export class Rocket extends GravSimObject {
 		this.actualFlightPath = [];
 	}
 
+	/**
+	 * Total mass [t], the same sum as the Worker's CalcRocket.updateTotalMass() over the separation state this object
+	 * holds (and saves): fairing.isSeparated, isPayloadSeparated / hasPayloadPropulsion and currentStageIndex. dryMass is
+	 * the Worker's current dry mass (it already excludes jettisoned SRBs). It must not read the per-frame telemetry, which
+	 * is only a placeholder until the first Worker frame (e.g. right after loading a save).
+	 */
 	get mass() {
+		if (this.isPayloadSeparated) {
+			// CalcRocket restore rule: self-propelled when flagged or when the payload has an enabled propulsion system
+			if (this.hasPayloadPropulsion || this.payload?.propulsion?.enabled) {
+				return (this.dryMass || 0) + (this.fuelMass || 0) + (this.oxidMass || 0);
+			}
+			return (this.payload?.massT || 0);
+		}
 		if (this.stages && this.stages.length > 0) {
 			let total = (this.payload?.massT || 0);
-			if (this.fairing?.enabled && !this.telemetry?.isFairingSeparated) {
+			if (this.fairing?.enabled && !this.fairing.isSeparated) {
 				total += (this.fairing.massT || 0);
 			}
 			total += (this.dryMass + this.fuelMass + this.oxidMass);
-			for (let i = this.currentStageIndex + 1; i < this.stages.length; i++) {
+			// Same normalization as the CalcRocket restore (non-numbers -> 0, clamped to [0, stage count])
+			const cur = Math.max(0, Math.min(Number(this.currentStageIndex) || 0, this.stages.length));
+			for (let i = cur + 1; i < this.stages.length; i++) {
 				const stg = this.stages[i];
 				total += (stg.dryMassT + stg.fuelMassT + stg.oxidMassT);
 			}
@@ -379,8 +433,9 @@ export class Rocket extends GravSimObject {
 			let refY = 0;
 			let refAngle = 0;
 
+			// The reference body in the simulation only, as GravSimObject.updateHistory (design §4.13-31)
 			if (this.dominantBodyId !== undefined && this.dominantBodyId !== -1 && objects) {
-				const refBody = objects.find(o => o.id === this.dominantBodyId);
+				const refBody = objects.find(o => o.id === this.dominantBodyId && isLiveObject(o));
 				if (refBody) {
 					refId = refBody.id;
 					refX = refBody.x;
@@ -483,6 +538,11 @@ export class Rocket extends GravSimObject {
 			return;
 		}
 
+		// Any listed host, also one removed while the rocket flies: the path is drawn relative to the same host by
+		// TrajectoryPredictor.renderTrajectory, which draws nothing once the host has left the list. A removed host stays
+		// listed where it was removed (it takes no frames, design §4.13-31), so a point recorded relative to it is the
+		// rocket's own position, and the drawn path follows the rocket until the host has faded. The path is used for
+		// that drawing only: it is neither saved nor sent to the Worker.
 		const host = objects.find(o => o.id === hostId);
 		if (!host) { return; }
 
@@ -492,6 +552,8 @@ export class Rocket extends GravSimObject {
 		const phi_inertial = Math.atan2(relY_px, relX_px);
 		const hostRot = host.rotationAngle || 0;
 		const phi_surf = phi_inertial - hostRot;
+		// Flight time at recording: selects host-fixed vs inertial drawing (prediction frame switch)
+		const recTime = this.telemetry?.flightTime ?? this.flightTime ?? 0;
 
 		if (!this.actualFlightPath) {
 			this.actualFlightPath = [];
@@ -505,20 +567,32 @@ export class Rocket extends GravSimObject {
 				relX: relX_px,
 				relY: relY_px,
 				r: r_px,
-				phiSurf: phi_surf
+				phiSurf: phi_surf,
+				time: recTime
 			});
 		} else {
 			const last = this.actualFlightPath[len - 1];
-			const lastSurfX = (last.r !== undefined && last.phiSurf !== undefined)
-				? last.r * Math.cos(last.phiSurf)
-				: last.relX;
-			const lastSurfY = (last.r !== undefined && last.phiSurf !== undefined)
-				? last.r * Math.sin(last.phiSurf)
-				: last.relY;
-			const curSurfX = r_px * Math.cos(phi_surf);
-			const curSurfY = r_px * Math.sin(phi_surf);
-			const dx_m = UnitConvertUtils.pix2m(curSurfX - lastSurfX);
-			const dy_m = UnitConvertUtils.pix2m(curSurfY - lastSurfY);
+			// Measure the displacement in the frame this point will be drawn in (design §4.10): host-centred
+			// inertial after the prediction's frame switch, host-fixed before it. Otherwise a craft that is
+			// stationary relative to the surface (e.g. near GEO) would stop being recorded while drawn inertially.
+			const switchTime = this.predictedTrajectory?.frameSwitchTime;
+			const drawnInertial = Number.isFinite(switchTime) && recTime > switchTime;
+			let dx_m, dy_m;
+			if (drawnInertial) {
+				dx_m = UnitConvertUtils.pix2m(relX_px - last.relX);
+				dy_m = UnitConvertUtils.pix2m(relY_px - last.relY);
+			} else {
+				const lastSurfX = (last.r !== undefined && last.phiSurf !== undefined)
+					? last.r * Math.cos(last.phiSurf)
+					: last.relX;
+				const lastSurfY = (last.r !== undefined && last.phiSurf !== undefined)
+					? last.r * Math.sin(last.phiSurf)
+					: last.relY;
+				const curSurfX = r_px * Math.cos(phi_surf);
+				const curSurfY = r_px * Math.sin(phi_surf);
+				dx_m = UnitConvertUtils.pix2m(curSurfX - lastSurfX);
+				dy_m = UnitConvertUtils.pix2m(curSurfY - lastSurfY);
+			}
 
 			// Sample points when moved at least configured threshold relative to host
 			const minSampleDistM = RENDER.PREDICTED_TRAJECTORY.ACTUAL_SAMPLE_MIN_DIST_M || 5.0;
@@ -529,14 +603,15 @@ export class Rocket extends GravSimObject {
 					relX: relX_px,
 					relY: relY_px,
 					r: r_px,
-					phiSurf: phi_surf
+					phiSurf: phi_surf,
+					time: recTime
 				});
 			}
 		}
 
 		const maxActualPoints = RENDER.PREDICTED_TRAJECTORY.ACTUAL_MAX_POINTS || 6000;
 		if (this.actualFlightPath.length > maxActualPoints) {
-			this.actualFlightPath = this.actualFlightPath.filter((_, idx) => idx % 2 === 0 || idx === len - 1);
+			this.actualFlightPath = this.actualFlightPath.filter((_, idx, arr) => idx % 2 === 0 || idx === arr.length - 1);
 		}
 	}
 
@@ -546,7 +621,8 @@ export class Rocket extends GravSimObject {
 		// 1. Draw predicted trajectory path & H3-style event markers in flight mode
 		// Only render when rocket is actively flying and NOT destroyed/removed
 		if (!this.isHoldDown && this.predictedTrajectory && !this.isDestroyed && this.state === OBJECT_STATE.ACTIVE) {
-			if (!this.predictedTrajectory.hostId && this.hostId !== null) {
+			// A prediction without a host id takes the rocket's host (id 0 is a host, design §4.13-24)
+			if ((this.predictedTrajectory.hostId === null || this.predictedTrajectory.hostId === undefined) && this.hostId !== null) {
 				this.predictedTrajectory.hostId = this.hostId;
 			}
 

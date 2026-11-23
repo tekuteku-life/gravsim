@@ -3,7 +3,7 @@
 
 import {
 	PHYSICS, SIMULATION, ROCHE_LIMIT,
-	COLLISION_CONFIG, DEBRIS, OBJECT_TYPES
+	COLLISION_CONFIG, DEBRIS, OBJECT_TYPES, AERO_DYNAMIC
 } from './gravsim_const.js';
 import { presetManager } from './gravsim_preset_manager.js';
 import { CalcCelestialBody, CalcRocket, CalcDebris } from './gravsim_calc_object.js';
@@ -26,6 +26,9 @@ export class PhysicsEngine {
 		this.pool = new QuadTreePool();
 		this._searchRange = new Rectangle(0, 0, 0, 0);
 		this._queryResult = [];
+		// Objects loaded from a save whose saved a(t) / aero cache must survive the force evaluations of the following
+		// 'add' messages until the first step (save/load path only; always empty otherwise)
+		this._restoredPending = [];
 	}
 
 	setCelestialParams(params) {
@@ -44,7 +47,14 @@ export class PhysicsEngine {
 
 	addObject(data) {
 		let newObj;
-		const param = data.param || this.getCelestialParam(data.name);
+		// Restore contract (§4.1): a rocket restores only with restoredRuntimeState === true; other objects when the save
+		// carries their runtime state (exact kinematics, Rev 6.11)
+		const runtimeState = (data.runtimeState && typeof data.runtimeState === 'object'
+			&& (data.type !== OBJECT_TYPES.ROCKET || data.restoredRuntimeState === true)) ? data.runtimeState : null;
+		// A restored rocket keeps the parameter name of the original vehicle (it is renamed to the payload at separation)
+		const paramName = (data.type === OBJECT_TYPES.ROCKET && runtimeState && typeof runtimeState.paramName === 'string' && runtimeState.paramName)
+			? runtimeState.paramName : data.name;
+		const param = data.param || this.getCelestialParam(paramName);
 		if (data.type === OBJECT_TYPES.ROCKET) {
 			newObj = new CalcRocket(
 				data.id, data.name,
@@ -52,7 +62,9 @@ export class PhysicsEngine {
 				data.vx || 0, data.vy || 0,
 				data.ax || 0, data.ay || 0,
 				data.bottomOffsetM || data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
-				data.mass || SIMULATION.DEFAULT_OBJECT_MASS, data.fuelMass || 0, data.oxidMass || 0,
+				// Restore branch: the saved dry mass as is (a separated passive payload has exactly 0; its mass is payload.massT)
+				(data.restoredRuntimeState === true && Number.isFinite(data.mass) && data.mass >= 0) ? data.mass : (data.mass || SIMULATION.DEFAULT_OBJECT_MASS),
+				data.fuelMass || 0, data.oxidMass || 0,
 				{
 					ofRatio: data.ofRatio || 0,
 					thrustForce: data.thrustForce,
@@ -77,6 +89,18 @@ export class PhysicsEngine {
 					colorTheme: data.colorTheme,
 					targetApogeeKm: data.targetApogeeKm,
 					targetPerigeeKm: data.targetPerigeeKm,
+					targetVInfKmS: data.targetVInfKmS,
+					currentStageIndex: data.currentStageIndex,
+					isPayloadSeparated: data.isPayloadSeparated,
+					isStage2Separated: data.isStage2Separated,
+					isBoosterBurnout: data.isBoosterBurnout,
+					isBoosterSeparated: data.isBoosterSeparated,
+					hasPayloadPropulsion: data.hasPayloadPropulsion,
+					stageState: data.stageState,
+					stgTimer: data.stgTimer,
+					restoredRuntimeState: data.restoredRuntimeState,
+					runtimeState: data.runtimeState,
+					paramName: paramName,
 					objParam: param
 				}
 			);
@@ -88,7 +112,8 @@ export class PhysicsEngine {
 				data.ax || 0, data.ay || 0,
 				data.radius || SIMULATION.DEFAULT_OBJECT_RADIUS, data.generation || 0,
 				data.mass || SIMULATION.DEFAULT_OBJECT_MASS,
-				data.debrisSubType || 0, data.parentRocketId || null
+				// Ids start at 0: the parent rocket id 0 is kept (design §4.13-24)
+				data.debrisSubType || 0, data.parentRocketId ?? null
 			);
 		} else {
 			newObj = new CalcCelestialBody(
@@ -100,17 +125,53 @@ export class PhysicsEngine {
 				data.mass || SIMULATION.DEFAULT_OBJECT_MASS
 			);
 			newObj.param = param;
+			newObj.rotationAngle = Number.isFinite(data.rotationAngle) ? data.rotationAngle : 0;
+			newObj.rotationPeriod = data.rotationPeriod ?? param?.ROTATION_PERIOD ?? 0;
+		}
+		if (runtimeState && newObj.type !== OBJECT_TYPES.ROCKET && typeof newObj.restoreRuntimeState === 'function') {
+			newObj.restoreRuntimeState(runtimeState); // the CalcRocket constructor restores its own state
 		}
 		newObj._half_vx = newObj.vx;
 		newObj._half_vy = newObj.vy;
 		this.objects.push(newObj);
 		this._categorizeBodies();
 		this._calculateForces();
+		this._reapplyRestoredForces(newObj);
 		return newObj;
+	}
+
+	/**
+	 * Save/load: _calculateForces() evaluates drag (and the aero cache) with the saved v(t + dt), while the saved flight
+	 * evaluated them inside its last step with v(t). Objects loaded with their saved a(t) keep it through the force
+	 * evaluations of the following 'add' messages, until the first step. An object without saved forces changes the force
+	 * field, so the evaluated forces are kept from then on (behaviour before Rev 6.11).
+	 */
+	_reapplyRestoredForces(newObj) {
+		const pending = this._restoredPending || (this._restoredPending = []);
+		if (newObj._restoredForces) {
+			pending.push(newObj);
+		} else if (pending.length !== 0) {
+			this._clearRestoredForces();
+		}
+		for (const obj of pending) { obj.applyRestoredForces(); }
+	}
+
+	_clearRestoredForces() {
+		for (const obj of this._restoredPending) { obj._restoredForces = null; }
+		this._restoredPending.length = 0;
 	}
 
 	removeObject(id) {
 		this.objects = this.objects.filter(obj => obj.id !== id);
+	}
+
+	/**
+	 * Remove every object: the main thread replaces the whole world (System › Reset, load). Objects the main thread
+	 * never listed go too (debris spawned in a frame that was still on its way), so none of them outlives the world.
+	 */
+	clearObjects() {
+		this.objects = [];
+		if (this._restoredPending?.length) { this._clearRestoredForces(); }
 	}
 
 	updateObject(data) {
@@ -124,6 +185,8 @@ export class PhysicsEngine {
 			obj.ay = data.ay || 0;
 			if (data.mass !== undefined) { obj.mass = data.mass; }
 			if (data.radius !== undefined) { obj.radius = data.radius; }
+			if (Number.isFinite(data.rotationAngle)) { obj.rotationAngle = data.rotationAngle; }
+			if (data.rotationPeriod !== undefined) { obj.rotationPeriod = data.rotationPeriod; }
 		}
 	}
 
@@ -158,16 +221,35 @@ export class PhysicsEngine {
 		this.sunBody = this.massiveBodies.find(b => b.name === 'Sun') || (this.massiveBodies.length > 0 ? this.massiveBodies[0] : null);
 	}
 
+	/**
+	 * Spin rate of a body (rad/s). Single source for the rotation-angle integration and the hold-down sync, so a held
+	 * rocket always stays on the rotating surface: period from param, then rotationPeriod, then the preset; only a
+	 * finite period with |P| > 1e-6 s rotates.
+	 */
+	_getRotationOmega(body) {
+		const rotPeriod = body.param?.ROTATION_PERIOD ?? body.rotationPeriod ?? this.getCelestialParam(body.name)?.ROTATION_PERIOD ?? 0;
+		return (Number.isFinite(rotPeriod) && Math.abs(rotPeriod) > 1e-6) ? (2 * Math.PI) / rotPeriod : 0;
+	}
+
+	/**
+	 * The host a rocket in hold-down is pinned to (by _updateHoldDownPositions), or null. A held rocket is not integrated
+	 * while it is pinned (design §3.1.1-2); one whose host is gone (removed, or destroyed and cleaned up) has no pad, so
+	 * it is a free body again and is integrated as every other object (as on main). Earlier every held rocket was
+	 * skipped, so a rocket on the pad of a removed host stood still in space (design §4.14-7).
+	 * @param {any} obj
+	 * @returns {any | null}
+	 */
+	_getHoldDownHost(obj) {
+		if (obj.type !== OBJECT_TYPES.ROCKET || !obj.isHoldDown || obj.hostId === null) { return null; }
+		return this.objects.find(o => o.id === obj.hostId) || null;
+	}
+
 	_updateHoldDownPositions(dt) {
 		for (const obj of this.objects) {
 			if (obj.type === OBJECT_TYPES.ROCKET && obj.isHoldDown && obj.hostId !== null) {
-				const host = this.objects.find(o => o.id === obj.hostId);
+				const host = this._getHoldDownHost(obj);
 				if (host) {
-					const hostParam = host.param || this.getCelestialParam(host.name);
-					let omega = 0; // rad/s
-					if (hostParam && hostParam.ROTATION_PERIOD) {
-						omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
-					}
+					const omega = this._getRotationOmega(host); // rad/s
 
 					obj.hostAngleRad += omega * dt;
 
@@ -229,6 +311,17 @@ export class PhysicsEngine {
 		}
 	}
 
+	/**
+	 * True when `rocket` is held on the pad of `host` (the same condition under which _updateHoldDownPositions pins it).
+	 * The per-frame collision check extrapolates each object over the whole frame with its last a(t). A held rocket's
+	 * a(t) is its host's only after its first hold-down step; after an addObject() force evaluation (placement, a load
+	 * without the Worker runtime state, or any later 'add') it is gravity toward the host, which a long frame
+	 * extrapolates into the host's surface. Resting on the pad is therefore never a collision with that host.
+	 */
+	_isHeldOnHost(rocket, host) {
+		return rocket.type === OBJECT_TYPES.ROCKET && Boolean(rocket.isHoldDown) && rocket.hostId !== null && rocket.hostId === host.id;
+	}
+
 	_checkCollisions(dt) {
 		if (!this.qtree) { return; }
 
@@ -267,10 +360,17 @@ export class PhysicsEngine {
 					continue;
 				}
 
-				// Disable collision between rocket and its newly jettisoned stages / fairings
+				// Disable collision between rocket and its newly jettisoned stages / fairings (and between the pieces of
+				// one rocket). A parent rocket id is null (or undefined) for none; 0 is a rocket (design §4.13-24)
 				if ((obj.type === OBJECT_TYPES.ROCKET && other.parentRocketId === obj.id) ||
 				    (other.type === OBJECT_TYPES.ROCKET && obj.parentRocketId === other.id) ||
-				    (obj.parentRocketId && other.parentRocketId && obj.parentRocketId === other.parentRocketId)) {
+				    (obj.parentRocketId !== null && obj.parentRocketId !== undefined && obj.parentRocketId === other.parentRocketId)) {
+					continue;
+				}
+
+				// A held rocket rests on its host's pad: the hold-down sets its pose every step, so it never collides with
+				// that host (other bodies can still hit it)
+				if (this._isHeldOnHost(obj, other) || this._isHeldOnHost(other, obj)) {
 					continue;
 				}
 
@@ -433,9 +533,31 @@ export class PhysicsEngine {
 		obj.applyAerodynamics(refBody, refParam, altM);
 	}
 
+	/**
+	 * Worker-only runtime state of every live object, keyed by id (answer to 'snapshotRuntime'; the reply keeps the field
+	 * name `rockets`). Rockets: CalcRocket.getRuntimeState(). Since Rev 6.11 also celestial bodies and debris: exact
+	 * kinematics in metres, the Worker mass of celestial bodies and the parent rocket of debris.
+	 * @returns {{ id: number, runtimeState: any }[]}
+	 */
+	getRocketRuntimeSnapshot() {
+		const rockets = [];
+		for (const obj of this.objects) {
+			if (!obj.collided && !obj.shattered && typeof obj.getRuntimeState === 'function') {
+				rockets.push({ id: obj.id, runtimeState: obj.getRuntimeState() });
+			}
+		}
+		return rockets;
+	}
+
 	_moveObjects(dt) {
-		// Update position and half velocity using previous a(t)
+		// Saved forces of a load are a(t) of this first step only
+		if (this._restoredPending?.length) { this._clearRestoredForces(); }
+
+		// Update position and half velocity using previous a(t) (including celestial rotationAngle)
 		this._updatePositionAndHalfVelocity(dt);
+
+		// Keep held-down rockets synchronized immediately after celestial rotation & position advance
+		this._updateHoldDownPositions(dt);
 
 		// Flight control for rockets (updates mass, state, etc. at new position)
 		this._updateFlightControl(dt);
@@ -445,11 +567,26 @@ export class PhysicsEngine {
 
 		// Integrate Step 2: Final velocity
 		this._updateFinalVelocity(dt);
+
+		// Re-sync held-down rocket velocities/positions with updated host velocity at t + dt
+		this._updateHoldDownPositions(0);
 	}
 
 	_updatePositionAndHalfVelocity(dt) {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
+
+			if (obj.type === OBJECT_TYPES.CELESTIAL) {
+				const omega = this._getRotationOmega(obj);
+				if (omega !== 0) {
+					obj.rotationAngle = (obj.rotationAngle || 0) + omega * dt;
+				}
+			}
+
+			// A rocket pinned to its pad moves only with it (_updateHoldDownPositions)
+			if (obj.type === OBJECT_TYPES.ROCKET && obj.isHoldDown && this._getHoldDownHost(obj)) {
+				continue;
+			}
 
 			const half_vx = obj.vx + obj.ax * dt / 2; // m/s
 			const half_vy = obj.vy + obj.ay * dt / 2; // m/s
@@ -482,11 +619,11 @@ export class PhysicsEngine {
 			for (const deb of newDebris) {
 				const nextId = -Math.floor(Math.random() * DEBRIS.ID_RANDOM_RANGE) - 1;
 				this.addObject({
-					id: deb.id || nextId,
+					id: deb.id ?? nextId,
 					name: deb.name,
 					type: OBJECT_TYPES.DEBRIS,
 					debrisSubType: deb.debrisSubType || 0,
-					parentRocketId: deb.parentRocketId || null,
+					parentRocketId: deb.parentRocketId ?? null,
 					x: deb.x,
 					y: deb.y,
 					vx: deb.vx,
@@ -502,6 +639,9 @@ export class PhysicsEngine {
 	_updateFinalVelocity(dt) {
 		for (const obj of this.objects) {
 			if (obj.collided || obj.shattered) { continue; }
+			// Held rockets are pinned to the pad: their velocity comes only from _updateHoldDownPositions (a held rocket
+			// without a host is a free body, _getHoldDownHost)
+			if (obj.type === OBJECT_TYPES.ROCKET && obj.isHoldDown && this._getHoldDownHost(obj)) { continue; }
 
 			obj.vx = obj._half_vx + obj.ax * dt / 2;
 			obj.vy = obj._half_vy + obj.ay * dt / 2;
@@ -650,15 +790,7 @@ export class PhysicsEngine {
 	}
 
 	determineOptimalSubSteps(totalDt, timeScale) {
-		const cfg = SIMULATION.SUB_STEPS || {
-			MIN: 20,
-			MAX: 1200,
-			BASE: 40,
-			ETA_GRAV: 0.12,
-			ETA_SURF: 0.08,
-			ETA_ACC: 0.15,
-			ETA_ATM: 0.10
-		};
+		const cfg = SIMULATION.SUB_STEPS;
 
 		let minAllowedDt = Infinity; // s
 
@@ -779,6 +911,10 @@ export class SimulationController {
 		this.profiler = new WorkerProfiler();
 		this.currentSubSteps = SIMULATION.SUB_STEPS?.BASE || 40;
 		this.timer = null;
+		// Sequence number of the last 'remove' / 'clear' handled. Every frame carries it, so the main thread knows which of
+		// its removals the frame already reflects and drops the data a frame on its way still has of a removed object or
+		// of the world before a Reset / load (ObjectManager, design §4.13-31)
+		this.syncSeq = 0;
 
 		if (typeof self !== 'undefined' && typeof self.postMessage === 'function' && typeof document === 'undefined') {
 			self.onmessage = this.handleMessage.bind(this);
@@ -806,6 +942,11 @@ export class SimulationController {
 				break;
 			case 'remove':
 				this.engine.removeObject(data.id);
+				this._acknowledge(data.seq);
+				break;
+			case 'clear':
+				this.engine.clearObjects();
+				this._acknowledge(data.seq);
 				break;
 			case 'update':
 				this.engine.updateObject(data);
@@ -848,7 +989,19 @@ export class SimulationController {
 			case 'returnBuffer':
 				WorkerBridge.recycleBuffer(data.buffer);
 				break;
+			case 'snapshotRuntime':
+				self.postMessage({
+					cmd: 'runtimeSnapshot',
+					requestId: data.requestId,
+					rockets: this.engine.getRocketRuntimeSnapshot()
+				});
+				break;
 		}
+	}
+
+	/** @param {any} seq the sequence number of a 'remove' / 'clear' message (a message without one leaves it) */
+	_acknowledge(seq) {
+		if (Number.isFinite(seq) && seq > this.syncSeq) { this.syncSeq = seq; }
 	}
 
 	update() {
@@ -895,7 +1048,6 @@ export class SimulationController {
 		// Fast Integration Loop
 		const tInt = this.profiler.start();
 		for (let i = 0; i < SUB_STEPS; i++) {
-			this.engine._updateHoldDownPositions(dt);
 			this.engine._moveObjects(dt);
 		}
 		this.engine._updateEscapeStatus();
@@ -912,7 +1064,8 @@ export class SimulationController {
 			deltaTime: dt,
 			subSteps: SUB_STEPS,
 			objectsData: buffer.buffer,
-			validLength: buffer.length
+			validLength: buffer.length,
+			syncSeq: this.syncSeq
 		}, [buffer.buffer]);
 		this.profiler.end('PostMessage', tPost);
 
@@ -923,7 +1076,34 @@ export class SimulationController {
 	}
 }
 
-// Instantiate only in dedicated Web Worker context
-if (typeof self !== 'undefined' && typeof self.postMessage === 'function' && typeof document === 'undefined') {
-	const calc = new SimulationController();
+/** URL without its fragment, or null when it is not an absolute URL. */
+const scriptUrlKey = (url) => {
+	if (typeof url !== 'string') { return null; }
+	try {
+		const parsed = new URL(url);
+		parsed.hash = '';
+		return parsed.href;
+	} catch (_err) {
+		return null;
+	}
+};
+
+/**
+ * True only when this module is the entry script of the dedicated Worker evaluating it: the physics Worker, which
+ * Universe creates with this file (`./scripts/gravsim_calc.js?v=...`). The trajectory predictor Worker imports this
+ * module for PhysicsEngine, and its script URL is gravsim_calc_predictor.js, so it starts no simulation loop. The main
+ * thread (self.document present) and Node (no worker scope) never start one either.
+ * @param {any} [scope] worker global scope (default: self)
+ * @param {string} [moduleUrl] URL of this module instance (default: import.meta.url)
+ * @returns {boolean}
+ */
+export function isPhysicsWorkerEntry(scope = (typeof self !== 'undefined' ? self : undefined), moduleUrl = import.meta.url) {
+	if (!scope || typeof scope.postMessage !== 'function' || scope.document !== undefined) { return false; }
+	const scopeKey = scriptUrlKey(scope.location?.href);
+	return scopeKey !== null && scopeKey === scriptUrlKey(moduleUrl);
+}
+
+// Instantiate only as the entry script of the physics Worker
+if (isPhysicsWorkerEntry()) {
+	new SimulationController();
 }

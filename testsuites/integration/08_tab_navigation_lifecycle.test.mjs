@@ -350,10 +350,10 @@ describe('Integration 08: Tab Navigation, UI Lifecycle, and System Integration',
 			const sunDefault = rt._getDefaultHostId();
 			assert.strictEqual(sunDefault, 0, 'Should fallback to Sun if no other celestials exist');
 
-			// Test when no celestials present
+			// Test when no celestials present: no host (null; the id 0 may name another object, design §4.13-24)
 			universe.objects = [];
 			const emptyDefault = rt._getDefaultHostId();
-			assert.strictEqual(emptyDefault, 0, 'Should return 0 when no celestials exist');
+			assert.strictEqual(emptyDefault, null, 'Should return null when no celestials exist');
 		});
 	});
 
@@ -811,20 +811,27 @@ describe('Integration 08: Tab Navigation, UI Lifecycle, and System Integration',
 			assert.strictEqual(rl.rolloutedRocketId, null, 'Rollout should be aborted and camera auto tracking stopped');
 		});
 
-		it('should cover RocketTab abort button click when hostId is 0', () => {
+		it('should cover RocketTab abort button click when the host is the automatically chosen world center', () => {
+			// Design §4.13-27: the replaced host is the world center chosen automatically (earlier "hostId === 0");
+			// the ids here are not 0 on purpose
 			const rt = new RocketTab(universe);
-			universe.RocketLauncher.hostId = 0;
-			const earth = createMockCelestialBody({ id: 1, name: 'Earth' });
-			universe.objects = [earth];
+			const sun = createMockCelestialBody({ id: 7, name: 'Sun', isWorldCenter: true });
+			const earth = createMockCelestialBody({ id: 8, name: 'Earth' });
+			universe.objects = [sun, earth];
+			universe.RocketLauncher.hostId = 7;
+			universe.RocketLauncher.hostAutoSelected = true;
 
-			let setupCalled = false;
-			rt._setupLaunchEnvironment = (hostId) => {
-				setupCalled = true;
-				assert.strictEqual(hostId, 1, 'Should resolve Earth as default host when hostId was 0');
-			};
+			const setups = [];
+			rt._setupLaunchEnvironment = (hostId) => { setups.push(hostId); };
 
 			rt.ui.rlAbortBtn.click();
-			assert.strictEqual(setupCalled, true);
+			assert.deepStrictEqual(setups, [8], 'Should resolve Earth as default host when the host was the automatic world center');
+
+			// The same host chosen by the user is kept
+			universe.RocketLauncher.hostId = 7;
+			universe.RocketLauncher.hostAutoSelected = false;
+			rt.ui.rlAbortBtn.click();
+			assert.deepStrictEqual(setups, [8, 7], 'a host the user chose stays');
 		});
 
 		it('should cover SystemTab profiler toggle checkbox (enable then destroy)', async () => {

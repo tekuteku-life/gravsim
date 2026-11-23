@@ -249,21 +249,30 @@ test('TelemetryCard - NavigationCameraCard updates dominant body and syncs subRe
 	mockSubRenderer.canvas.clientWidth = 240;
 	mockSubRenderer.canvas.clientHeight = 180;
 
-	const card = new NavigationCameraCard(4, 'Nav & Camera', cardEl, mockSubRenderer);
+	// The main thread has the id of the dominant body (the Worker sends it in the frame buffer, design §4.13-19), resolved
+	// against the universe objects; the Worker's object reference (dominantBody) never reaches it
+	const earth = createMockCelestialBody({ id: 3, name: 'Earth' });
+	const cardUniverse = createMockUniverse({ objects: [earth] });
+	const card = new NavigationCameraCard(4, 'Nav & Camera', cardEl, mockSubRenderer, cardUniverse);
 	card.initElements();
 	card.isVisible = true;
 
 	const mockRocket = createMockRocket({
 		id: 55,
-		dominantBody: { name: 'Earth' },
+		dominantBodyId: 3,
 		distToDominantM: 6778000
 	});
+	cardUniverse.objects.push(mockRocket);
 	const mockTelemetry = {
 		progradeAngle: Math.PI / 6
 	};
 
 	card.update(mockRocket, mockTelemetry);
 	assert.equal(card.ui.dominantBody.textContent, 'Earth');
+	card.update({ ...mockRocket, dominantBodyId: -1 }, mockTelemetry);
+	assert.equal(card.ui.dominantBody.textContent, '---', 'no dominant body (-1)');
+	card.update({ ...mockRocket, dominantBodyId: 3, dominantBody: undefined }, mockTelemetry);
+	assert.equal(card.ui.dominantBody.textContent, 'Earth', 'the id, not a Worker-only reference');
 	assert.ok(card.ui.distRef.textContent.includes('6,778.0'));
 	assert.ok(rotatedAngle !== null, 'Camera rotation should be synchronized with prograde angle');
 
@@ -899,10 +908,13 @@ test('SystemTab - Clear objects, trail length/duration sliders, and developer de
 	sys.updateZoomScaleIndicator(1.0);
 	sys.updateZoomScaleIndicator(10000.0);
 
-	// State serialization
+	// State serialization (a saved view is loaded by ControlPanel.loadState, which applies the Rocket tab's deferral
+	// rule; SystemTab has no loader of its own, design §4.14-5)
 	const sysState = sys.getState();
 	assert.ok(sysState.timeScaleVal !== undefined);
-	sys.loadState({ timeScaleVal: 2, zoomScaleVal: -1 });
+	sys.applyViewState(sys.normalizeViewState({ timeScaleVal: 1, zoomScaleVal: -1 }));
+	assert.equal(sys.getTimeScaleExp(), 1);
+	assert.equal(sys.ui.zoomScale.value, '-1');
 });
 
 test('ControlPanel - Mobile menu toggle, tab switching, and state serialization', () => {
@@ -934,6 +946,50 @@ test('ControlPanel - Mobile menu toggle, tab switching, and state serialization'
 	ctrl.loadState(state.controlPanel, null);
 });
 
+test('ControlPanel - loadState restores what getState saved (nested shape) and the flat shape of older saves (design §4.13, fixed)', () => {
+	const universe = createMockUniverse();
+	const ctrl = new ControlPanel(universe);
+	const ts = ctrl.systemTab.ui.timeScale;
+	const zs = ctrl.systemTab.ui.zoomScale;
+	// The mock elements are shared by every test: give the sliders their index.html ranges for this test only
+	const bounds = { ts: [ts.min, ts.max], zs: [zs.min, zs.max] };
+	[ts.min, ts.max, zs.min, zs.max] = ['-7.5', '1', '-2', '9'];
+	const emitted = { timeScale: [], zoomExp: [] };
+	const onTime = (v) => emitted.timeScale.push(v);
+	const onZoom = (v) => emitted.zoomExp.push(v);
+	EventBus.on('simulation:set-time-scale', onTime);
+	EventBus.on('camera:set-target-zoom-exp', onZoom);
+	try {
+		ts.value = '-3.2';
+		zs.value = '4.5';
+		// Universe.getState() stores this object as universe.controlPanel and passes it back to loadState unchanged
+		const saved = JSON.parse(JSON.stringify(ctrl.getState()));
+		assert.deepEqual(saved, { controlPanel: { timeScaleVal: -3.2, zoomScaleVal: 4.5 } });
+		ts.value = '-1';
+		zs.value = '0';
+		ctrl.loadState(saved, null);
+		assert.equal(Number(ts.value), -3.2);
+		assert.equal(Number(zs.value), 4.5);
+		assert.deepEqual(emitted, { timeScale: [Math.pow(10, -3.2)], zoomExp: [4.5] });
+
+		// Flat shape (saves written before the tab split, same version 2)
+		ctrl.loadState({ timeScaleVal: -2, zoomScaleVal: 1 }, null);
+		assert.equal(Number(ts.value), -2);
+		assert.equal(Number(zs.value), 1);
+
+		// Neither shape carries a number: nothing is applied
+		ctrl.loadState({ controlPanel: { timeScaleVal: '-5', zoomScaleVal: null } }, null);
+		assert.equal(Number(ts.value), -2);
+		assert.equal(Number(zs.value), 1);
+		assert.equal(emitted.timeScale.length, 2);
+	} finally {
+		EventBus.off('simulation:set-time-scale', onTime);
+		EventBus.off('camera:set-target-zoom-exp', onZoom);
+		[ts.min, ts.max] = bounds.ts;
+		[zs.min, zs.max] = bounds.zs;
+	}
+});
+
 test('InfoPanel - FPS frame interval, physics sub-steps, and elapsed time', () => {
 	const universe = createMockUniverse();
 	const info = new InfoPanel(universe);
@@ -950,7 +1006,7 @@ test('InfoPanel - FPS frame interval, physics sub-steps, and elapsed time', () =
 	assert.ok(info.elapsedTime > 0);
 
 	// FPS update after interval (advance lastTime by 600ms)
-	info.lastTime = new Date(Date.now() - 600);
+	info.lastTime = Date.now() - 600;
 	info.fpsCount = 30;
 	info.physFpsCount = 30;
 	info.updateFPS();
@@ -1269,10 +1325,12 @@ test('TelemetryPanel - Minimal HUD alerts (Q-LIM, G-LIM, STALL), scroll, and ann
 });
 
 test('SoundSequencer - Condition operators (>, <, >=, <=, ==, !=) and once flag handling', () => {
+	// The T+ clock is the Worker MET the HUD shows (telemetry.flightTime, design §4.14-6), not rocket.flightTime
 	const rocket = createMockRocket({
 		id: 999,
-		flightTime: 50,
+		flightTime: 0,
 		telemetry: {
+			flightTime: 50,
 			altM: 45000,
 			vV: 1500,
 			structRatio: 85,
@@ -1638,8 +1696,13 @@ test('RocketTab - Sliders, rollout state transitions, and profile table event ha
 	inpAngle.onchange({ target: { value: '30' } });
 	assert.equal(universe.RocketLauncher.flightProfile[0].angle, 30);
 
+	const selAction = row0.children[4].children[0];
+	selAction.value = 'sep_stage1';
+	selAction.onchange({ target: { value: 'sep_stage1' } });
+	assert.equal(universe.RocketLauncher.flightProfile[0].action, 'sep_stage1');
+
 	// Remove button
-	const btnDel = row0.children[4].children[0];
+	const btnDel = row0.children[5].children[0];
 	btnDel.onclick();
 	assert.equal(universe.RocketLauncher.flightProfile.length, 1);
 
@@ -1680,12 +1743,12 @@ test('RocketTab - Sliders, rollout state transitions, and profile table event ha
 	rTab.restoreZoomScale();
 	assert.equal(rTab.previousZoomScaleVal, null);
 
-	// Open when objects has no non-sun celestial bodies (targetHostId = 0)
+	// Open when there is no celestial body: no host (null; it was the id 0, which may name another object, design §4.13-24)
 	const origObjs = universe.objects;
 	universe.objects = [];
 	universe.RocketLauncher.hostId = null;
 	rTab.open();
-	assert.equal(universe.RocketLauncher.hostId, 0);
+	assert.equal(universe.RocketLauncher.hostId, null);
 
 	// Close with autoTrackHost active
 	universe.camera.autoTrackHost = earth;
@@ -1746,11 +1809,15 @@ test('TelemetryPanel - Column layout, null target, celestial body target, wheel 
 	panel.targetId = 1;
 	panel.update();
 	assert.equal(panel.ui.stageInfo.textContent, '---');
+	// The reset header reads TRACKING (design §4.13-12: it wrote TELEMETRY.STATUS_MAP[6], undefined since the statuses are -1..5)
+	assert.equal(panel.ui.missionStatus.textContent, 'TRACKING');
+	assert.equal(panel.ui.missionTime.textContent, 'T+ ---y ---d --:--:--');
 
 	// 3. Null target (targetId invalid) -> early return, resets header and annunciator
 	panel.targetId = 99999;
 	panel.update();
 	assert.equal(panel.ui.stageInfo.textContent, '---');
+	assert.equal(panel.ui.missionStatus.textContent, 'TRACKING');
 
 	// 4. Draw when closed vs open
 	panel.close();

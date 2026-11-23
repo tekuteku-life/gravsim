@@ -1,7 +1,20 @@
 // gravsim_telemetry_card.js
 
 import { OBJECT_TYPES, TELEMETRY, TANK_PRESSURE_SIM } from './gravsim_const.js';
-import { MathUtils, DOMUtils, UnitConvertUtils, FormatUtils } from './gravsim_utils.js';
+import { MathUtils, DOMUtils, UnitConvertUtils, FormatUtils, isLiveObject } from './gravsim_utils.js';
+
+/**
+ * True once the payload flies alone: separated (Worker flag or telemetry), or no stage is left at the stage index (after
+ * the payload separation the Worker sets the stage index to the stage count, one past the last stage).
+ * @param {any} target rocket
+ * @param {any} tm its telemetry
+ * @param {number} curStg stage index shown
+ * @param {number} totalStg stage count shown
+ * @returns {boolean}
+ */
+export function isPayloadPhase(target, tm, curStg, totalStg) {
+	return Boolean(target?.isPayloadSeparated || tm?.isPayloadSeparated) || curStg >= totalStg;
+}
 
 /*******************************************************************
  * Base Class for Telemetry Cards
@@ -156,10 +169,17 @@ export class PropulsionCard extends TelemetryCard {
 	update(target, tm) {
 		// Stage transition tracking for fuel/oxidizer bar max values
 		const curStgIdx = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
+		const totalStg = tm.totalStages || target.stages?.length || 1;
+		// After the payload separation the stage index is the stage count (no stage left): the tanks shown are the
+		// payload's own propulsion system (none for a passive payload)
+		const payloadPhase = isPayloadPhase(target, tm, curStgIdx, totalStg);
 		if (this._lastStageIndex !== curStgIdx) {
 			this._lastStageIndex = curStgIdx;
 			this._skipBarTransitionOnce = true;
-			const curStg = target.stages && target.stages[curStgIdx];
+			const prop = target.payload?.propulsion;
+			const curStg = payloadPhase
+				? { fuelMassT: prop?.enabled ? (prop.fuelMassT || 0) : 0, oxidMassT: prop?.enabled ? (prop.oxidMassT || 0) : 0 }
+				: (target.stages && target.stages[curStgIdx]);
 			if (curStg) {
 				this.maxFuel[target.id] = curStg.fuelMassT;
 				this.maxOxid[target.id] = curStg.oxidMassT;
@@ -169,7 +189,7 @@ export class PropulsionCard extends TelemetryCard {
 		if (this.ui.header && target.stages && target.stages.length > 1) {
 			const stgNum = curStgIdx + 1;
 			const curStg = target.stages[curStgIdx];
-			const stgTitle = curStg?.name ? curStg.name.toUpperCase() : `STAGE ${stgNum}`;
+			const stgTitle = payloadPhase ? 'PAYLOAD' : (curStg?.name ? curStg.name.toUpperCase() : `STAGE ${stgNum}`);
 			DOMUtils.setText(this.ui.header, `[ PROPULSION: ${stgTitle} ]`);
 		} else if (this.ui.header) {
 			DOMUtils.setText(this.ui.header, `[ PROPULSION & TANKS ]`);
@@ -251,9 +271,34 @@ export class PropulsionCard extends TelemetryCard {
  * Card 4: Navigation & Camera Sub-View
  *******************************************************************/
 export class NavigationCameraCard extends TelemetryCard {
-	constructor(id, title, element, subRenderer) {
+	/**
+	 * @param {any} id
+	 * @param {string} title
+	 * @param {any} element
+	 * @param {any} subRenderer
+	 * @param {any} [universe] whose objects resolve the dominant body (REF BODY)
+	 */
+	constructor(id, title, element, subRenderer, universe = null) {
 		super(id, title, element);
 		this.subRenderer = subRenderer;
+		this.universe = universe;
+	}
+
+	/**
+	 * The dominant body of a main-thread object: the celestial body of `objects` whose id is `target.dominantBodyId`,
+	 * which the Worker sends in the frame buffer (-1 for none). The Worker's own reference (CalcObject.dominantBody)
+	 * never reaches the main thread: git 9efd5e3 read it here, so REF BODY always read "---". Null for a missing, -1 or
+	 * unknown id, and for an id that names no celestial body (the Worker picks the dominant body among them only), or a
+	 * body no longer in the simulation (removed while paused: the frame that names another body has not come yet, and
+	 * the body stays listed until its trail has faded, design §4.13-31).
+	 * @param {any} target
+	 * @param {any} objects
+	 * @returns {any}
+	 */
+	static resolveDominantBody(target, objects) {
+		const id = target?.dominantBodyId;
+		if (typeof id !== 'number' || !Array.isArray(objects)) { return null; }
+		return objects.find((o) => o.id === id && o.type === OBJECT_TYPES.CELESTIAL && isLiveObject(o)) ?? null;
 	}
 
 	initElements() {
@@ -271,8 +316,11 @@ export class NavigationCameraCard extends TelemetryCard {
 	}
 
 	update(target, tm) {
-		const dominantName = target.dominantBody?.name || "---";
-		const distRefKm = target.distToDominantM > 0 ? UnitConvertUtils.m2km(target.distToDominantM) : 0;
+		// DIST REF is the distance from REF BODY: without a resolved body (none, or its id names no body of the universe,
+		// e.g. one removed while paused) both read "---" (design §4.13-26)
+		const dominantBody = NavigationCameraCard.resolveDominantBody(target, this.universe?.objects);
+		const dominantName = dominantBody?.name || "---";
+		const distRefKm = (dominantBody && target.distToDominantM > 0) ? UnitConvertUtils.m2km(target.distToDominantM) : 0;
 
 		DOMUtils.setText(this.ui.dominantBody, dominantName);
 		DOMUtils.setText(this.ui.distRef, distRefKm > 0 ? distRefKm.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1}).padStart(10, ' ') : "---".padStart(10, ' '));

@@ -1,7 +1,10 @@
 
 // gravsim_worker_bridge.js
 
-import { CALC_BUFFER_CONFIG, BUFFER_INDEX, OBJECT_TYPES, OBJECT_FLAG, ROCKET_FLAG } from './gravsim_const.js';
+import {
+	CALC_BUFFER_CONFIG, BUFFER_INDEX, OBJECT_TYPES, OBJECT_FLAG, ROCKET_FLAG,
+	STAGE_STATE_TO_CODE, CODE_TO_STAGE_STATE, TELEMETRY
+} from './gravsim_const.js';
 
 export class WorkerBridge {
 	static _cache = {};
@@ -54,7 +57,10 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = obj._thrustRatio || 0;
 
 				const tm = obj.flightComputer?.getTelemetry?.() || {};
-				buffer[offset + BUFFER_INDEX.TM_STATUS] = tm.status || 0;
+				// Every status the FlightComputer reports is written as is. A missing one (no FlightComputer telemetry, which a
+				// CalcRocket always has) is its initial status PRE_LAUNCH, as on the main thread (design §4.13-22); git
+				// c176196 wrote it as `|| 0`, LIFTOFF (the statuses are -1..5 since git bd61960).
+				buffer[offset + BUFFER_INDEX.TM_STATUS] = Number.isFinite(tm.status) ? tm.status : TELEMETRY.STATUS.PRE_LAUNCH;
 				buffer[offset + BUFFER_INDEX.TM_Q_AXIAL] = tm.qAxialKpa || 0;
 				buffer[offset + BUFFER_INDEX.TM_Q_LATERAL] = tm.qLateralKpa || 0;
 				buffer[offset + BUFFER_INDEX.TM_STRUCT_RATIO] = tm.structRatio || 0;
@@ -78,18 +84,43 @@ export class WorkerBridge {
 				buffer[offset + BUFFER_INDEX.DEBRIS_SUB_TYPE] = 0;
 				buffer[offset + BUFFER_INDEX.TM_AMBIENT_PRES_RATIO] = obj.ambientPresRatio || 0;
 				buffer[offset + BUFFER_INDEX.TM_CURRENT_ISP] = obj.currentIsp || (obj.getEffectiveIsp ? obj.getEffectiveIsp() : 0);
+				buffer[offset + BUFFER_INDEX.ROTATION_ANGLE] = 0;
+				buffer[offset + BUFFER_INDEX.TM_MACH] = obj.mach ?? tm.mach ?? 0;
+				buffer[offset + BUFFER_INDEX.STAGE_STATE_CODE] = STAGE_STATE_TO_CODE[obj.stageState] ?? 0;
+				buffer[offset + BUFFER_INDEX.STG_TIMER] = obj.stgTimer || 0;
 			} else {
 				buffer[offset + BUFFER_INDEX.MASS] = obj.mass;
 				buffer[offset + BUFFER_INDEX.FUEL_MASS] = 0;
 				buffer[offset + BUFFER_INDEX.OXID_MASS] = 0;
 				buffer[offset + BUFFER_INDEX.BURN_TIME] = 0;
 				buffer[offset + BUFFER_INDEX.THRUST_RATIO] = 0;
+				buffer[offset + BUFFER_INDEX.TM_STATUS] = 0;
+				buffer[offset + BUFFER_INDEX.TM_Q_AXIAL] = 0;
+				buffer[offset + BUFFER_INDEX.TM_Q_LATERAL] = 0;
+				buffer[offset + BUFFER_INDEX.TM_STRUCT_RATIO] = 0;
+				buffer[offset + BUFFER_INDEX.TM_AOA_DEG] = 0;
+				buffer[offset + BUFFER_INDEX.TM_PROGRADE_ANGLE] = 0;
+				buffer[offset + BUFFER_INDEX.TM_GRAVITY_ANGLE] = 0;
+				buffer[offset + BUFFER_INDEX.TM_REM_DV] = 0;
+				buffer[offset + BUFFER_INDEX.TM_TWR] = 0;
+				buffer[offset + BUFFER_INDEX.TM_ALT_M] = 0;
+				buffer[offset + BUFFER_INDEX.TM_VV] = 0;
+				buffer[offset + BUFFER_INDEX.TM_VH] = 0;
+				buffer[offset + BUFFER_INDEX.TM_AV] = 0;
+				buffer[offset + BUFFER_INDEX.TM_AH] = 0;
+				buffer[offset + BUFFER_INDEX.TM_CURRENT_G] = 0;
+				buffer[offset + BUFFER_INDEX.TM_FLIGHT_TIME] = 0;
+				buffer[offset + BUFFER_INDEX.THRUST_ANGLE] = 0;
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_FUEL] = 0;
 				buffer[offset + BUFFER_INDEX.TM_TANK_PRES_OXID] = 0;
 				buffer[offset + BUFFER_INDEX.TM_STAGE_INDEX] = 0;
 				buffer[offset + BUFFER_INDEX.TM_TOTAL_STAGES] = 1;
 				buffer[offset + BUFFER_INDEX.TM_AMBIENT_PRES_RATIO] = 0;
 				buffer[offset + BUFFER_INDEX.TM_CURRENT_ISP] = 0;
+				buffer[offset + BUFFER_INDEX.ROTATION_ANGLE] = (obj.type === OBJECT_TYPES.CELESTIAL) ? (obj.rotationAngle || 0) : 0;
+				buffer[offset + BUFFER_INDEX.TM_MACH] = 0;
+				buffer[offset + BUFFER_INDEX.STAGE_STATE_CODE] = 0;
+				buffer[offset + BUFFER_INDEX.STG_TIMER] = 0;
 				if (obj.type === OBJECT_TYPES.DEBRIS) {
 					buffer[offset + BUFFER_INDEX.DEBRIS_SUB_TYPE] = obj.debrisSubType || 0;
 				} else {
@@ -113,7 +144,11 @@ export class WorkerBridge {
 				if (obj.isBoosterSeparated) flags |= ROCKET_FLAG.BOOSTER_SEPARATED;
 				if (obj.isBoosterBurnout) flags |= ROCKET_FLAG.BOOSTER_BURNOUT;
 				if (obj.currentStageIndex >= 1) flags |= ROCKET_FLAG.STAGE1_SEPARATED;
-				if (obj.currentStageIndex >= 2 || obj.isPayloadSeparated) flags |= ROCKET_FLAG.STAGE2_SEPARATED;
+				if (obj.isStage2Separated || obj.currentStageIndex >= 2 || obj.isPayloadSeparated) flags |= ROCKET_FLAG.STAGE2_SEPARATED;
+				if (obj.rcsCw) flags |= ROCKET_FLAG.RCS_CW;
+				if (obj.rcsCcw) flags |= ROCKET_FLAG.RCS_CCW;
+				if (obj.rcsUllage) flags |= ROCKET_FLAG.RCS_ULLAGE;
+				if (obj.hasPayloadPropulsion) flags |= ROCKET_FLAG.HAS_PAYLOAD_PROP;
 
 				if (obj.flightComputer) {
 					const tm = obj.flightComputer.getTelemetry();
@@ -214,8 +249,20 @@ export class WorkerBridge {
 				this._cache.tmFairingSeparated = (flags & ROCKET_FLAG.FAIRING_SEPARATED) !== 0;
 				this._cache.isBoosterSeparated = (flags & ROCKET_FLAG.BOOSTER_SEPARATED) !== 0;
 				this._cache.isBoosterBurnout = (flags & ROCKET_FLAG.BOOSTER_BURNOUT) !== 0;
+				this._cache.rcsCw = (flags & ROCKET_FLAG.RCS_CW) !== 0;
+				this._cache.rcsCcw = (flags & ROCKET_FLAG.RCS_CCW) !== 0;
+				this._cache.rcsUllage = (flags & ROCKET_FLAG.RCS_ULLAGE) !== 0;
+				this._cache.hasPayloadPropulsion = (flags & ROCKET_FLAG.HAS_PAYLOAD_PROP) !== 0;
+				this._cache.mach = buffer[offset + BUFFER_INDEX.TM_MACH] || 0;
+				const stageStateCode = Math.round(buffer[offset + BUFFER_INDEX.STAGE_STATE_CODE] || 0);
+				this._cache.stageState = CODE_TO_STAGE_STATE[stageStateCode] || 'PRE_LAUNCH';
+				this._cache.stgTimer = buffer[offset + BUFFER_INDEX.STG_TIMER] || 0;
+				this._cache.rotationAngle = 0;
+			} else if (this._cache.type === OBJECT_TYPES.CELESTIAL) {
+				this._cache.rotationAngle = buffer[offset + BUFFER_INDEX.ROTATION_ANGLE] || 0;
 			} else if (this._cache.type === OBJECT_TYPES.DEBRIS) {
 				this._cache.debrisSubType = buffer[offset + BUFFER_INDEX.DEBRIS_SUB_TYPE];
+				this._cache.rotationAngle = 0;
 			}
 
 			callback(this._cache);

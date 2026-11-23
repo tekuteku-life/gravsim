@@ -1,7 +1,7 @@
 
 // gravsim_utils.js
 
-import { RENDER, PHYSICS, MULTISTAGE_ROCKET } from './gravsim_const.js';
+import { RENDER, PHYSICS, MULTISTAGE_ROCKET, AERO_DYNAMIC, TELEMETRY, OBJECT_STATE } from './gravsim_const.js';
 
 /*******************************************************************
  * DOM Utility class for Dirty Checking (Differential Update)
@@ -180,6 +180,32 @@ export class FormatUtils {
 }
 
 /**
+ * The mission status (a TELEMETRY.STATUS value) a telemetry value stands for. A value that is not one of the status
+ * numbers (none the FlightComputer reports: undefined, NaN, a fraction, out of range, a string such as "1") is
+ * PRE_LAUNCH, the FlightComputer's initial status; -0 is the LIFTOFF code 0. Every reader of a mission status on the
+ * main thread goes through it (the telemetry panel, the flight events of the prediction, the sound rules and the MECO
+ * detection of the Worker sync, design §4.13-21 / -25), so they agree on such a value. A status code is returned as is.
+ * @param {any} status
+ * @returns {number}
+ */
+export function normalizeMissionStatus(status) {
+	return Object.values(TELEMETRY.STATUS).find((code) => code === status) ?? TELEMETRY.STATUS.PRE_LAUNCH;
+}
+
+/**
+ * Whether a main-thread object is still in the simulation: state ACTIVE and not destroyed (the "flying" rule of design
+ * §4.13-23(a); only a rocket has isDestroyed). An object that is removed (System › Clear Selected, abort, escape,
+ * Reset, load) or destroyed (a collision, a shatter) stays in universe.objects as REMOVED until its trail has faded:
+ * it is drawn while it fades, but nothing may select, save, count, host, forward or revive it (design §4.13-31).
+ * A plain record without a state (not a GravSimObject) counts as in the simulation, as ObjectPlacer's lookups take it.
+ * @param {any} obj
+ * @returns {boolean}
+ */
+export function isLiveObject(obj) {
+	return Boolean(obj) && (obj.state === OBJECT_STATE.ACTIVE || obj.state === undefined) && !obj.isDestroyed;
+}
+
+/**
  * Normalizes any rocket config (legacy single-stage or new multi-stage)
  * into a valid multi-stage configuration structure.
  */
@@ -250,4 +276,64 @@ export function normalizeRocketConfig(config) {
 		payload: config.payload || { name: 'Payload', massT: 0, radius: 1.0 },
 		fairing: config.fairing || { enabled: false, massT: 0, separationAltKm: MULTISTAGE_ROCKET.FAIRING_DEFAULT_ALT_KM }
 	};
+}
+
+/**
+ * Shared Aerodynamics & Transonic Flow Utilities (Speed of Sound, Mach, Vapor Cone)
+ */
+export class AeroUtils {
+	static getAtmosphericTemperatureK(altM, atmParam) {
+		if (!Number.isFinite(altM) || !atmParam) return 0;
+		const density0 = Number(atmParam.ATM_DENSITY_0 ?? atmParam.atmDensity0 ?? 0);
+		const scaleH = Number(atmParam.ATM_SCALE_HEIGHT ?? atmParam.atmScaleHeight ?? 0);
+		const limitAlt = Number(atmParam.ATM_LIMIT_ALT ?? atmParam.atmLimitAlt ?? 0);
+		if (!(density0 > 0 && scaleH > 0) || (limitAlt > 0 && altM > limitAlt)) return 0;
+
+		const clAlt = Math.max(0, altM);
+		const scaleRatio = scaleH / 8500;
+		const tropopauseM = 11000 * scaleRatio;
+		const rawT = (clAlt <= tropopauseM)
+			? (288.15 - (0.0065 / scaleRatio) * clAlt)
+			: (216.65 + 0.001 * ((clAlt - tropopauseM) / scaleRatio));
+		return Math.max(180, Math.min(350, rawT));
+	}
+
+	static getSpeedOfSound(altM, atmParam) {
+		const tempK = AeroUtils.getAtmosphericTemperatureK(altM, atmParam);
+		if (!(tempK > 0)) return 0;
+		return Math.sqrt(1.4 * 287.05 * tempK);
+	}
+
+	static computeMach(airSpeedMS, altM, atmParam) {
+		if (!Number.isFinite(airSpeedMS) || airSpeedMS <= 0) return 0;
+		const a = AeroUtils.getSpeedOfSound(altM, atmParam);
+		return a > 0 ? (airSpeedMS / a) : 0;
+	}
+
+	static computeVaporConeParams(mach, ambientPresRatio) {
+		if (
+			!Number.isFinite(mach) ||
+			!Number.isFinite(ambientPresRatio) ||
+			mach < AERO_DYNAMIC.TRANSONIC_MACH_MIN ||
+			mach > AERO_DYNAMIC.TRANSONIC_MACH_MAX ||
+			ambientPresRatio <= AERO_DYNAMIC.TRANSONIC_MIN_PRES_RATIO
+		) {
+			return { active: false, intensity: 0, machAngleRad: Math.PI / 2 };
+		}
+		// Asymmetric smoothstep bell: 0 at TRANSONIC_MACH_MIN / TRANSONIC_MACH_MAX, 1 at TRANSONIC_PEAK_MACH
+		const peak = AERO_DYNAMIC.TRANSONIC_PEAK_MACH;
+		const span = (mach <= peak)
+			? (peak - AERO_DYNAMIC.TRANSONIC_MACH_MIN)
+			: (AERO_DYNAMIC.TRANSONIC_MACH_MAX - peak);
+		const u = Math.max(0, 1 - Math.abs(mach - peak) / Math.max(0.01, span));
+		const machFactor = u * u * (3 - 2 * u);
+		const presFactor = Math.min(1, Math.max(0, (ambientPresRatio - AERO_DYNAMIC.TRANSONIC_MIN_PRES_RATIO) / 0.25));
+		const intensity = machFactor * presFactor;
+		const machAngleRad = Math.asin(Math.min(0.96, 1 / Math.max(1 / 0.96, mach)));
+		return {
+			active: intensity > 0.01,
+			intensity,
+			machAngleRad
+		};
+	}
 }

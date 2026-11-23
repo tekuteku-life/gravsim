@@ -541,13 +541,15 @@ test('ObjectManager - Update commands, escape pruning, and state serialization',
 	objMgr._checkEscapeAndRemove();
 	assert.equal(earth.state, OBJECT_STATE.REMOVED);
 
-	// Test getState
+	// Test getState: the removed Earth is still listed (its trail fades) but is not saved (design §4.13-31; this test
+	// expected all 4 before, the removed object included)
+	assert.equal(objMgr.objects.includes(earth), true);
 	const serialized = objMgr.getState();
-	assert.equal(serialized.length, 4);
+	assert.deepEqual(serialized.map((o) => o.id), [1, 3, 4]);
 
 	// Test loadState
 	objMgr.loadState(serialized);
-	assert.equal(objMgr.objects.length, 4);
+	assert.equal(objMgr.objects.length, 3);
 });
 
 test('Rocket - Atmospheric flame effect, effect trail, and flight drawing', () => {

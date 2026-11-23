@@ -5,7 +5,7 @@ import {
 	TRAJECTORY_PREDICTION, TELEMETRY, OBJECT_STATE
 } from './gravsim_const.js';
 import { ROCKET_FUELS } from './gravsim_preset_manager.js';
-import { UnitConvertUtils } from './gravsim_utils.js';
+import { UnitConvertUtils, normalizeMissionStatus, isLiveObject } from './gravsim_utils.js';
 import { runMultiBodySimulation } from './gravsim_calc_predictor.js';
 
 /*******************************************************************
@@ -57,9 +57,14 @@ export class TrajectoryPredictor {
 							points: data.points,
 							events: data.events,
 							isOrbital: data.isOrbital,
-							maxSimTime: data.maxSimTime || TRAJECTORY_PREDICTION.MAX_SIM_TIME_SEC,
+							maxSimTime: data.maxSimTime ?? TRAJECTORY_PREDICTION.MAX_SIM_TIME_SEC,
 							maxAltM: data.maxAltM,
-							maxQ: data.maxQ
+							maxQ: data.maxQ,
+							endReason: data.endReason,
+							steps: data.steps,
+							frameSwitchTime: data.frameSwitchTime,
+							frameSwitchHostRot: data.frameSwitchHostRot,
+							hostOmega: data.hostOmega
 						};
 						this.isStale = false;
 
@@ -184,14 +189,20 @@ export class TrajectoryPredictor {
 			stages: config.stages,
 			payload: config.payload,
 			fairing: config.fairing,
-			boosters: config.boosters
+			boosters: config.boosters,
+			disableOrbitalCutoff: Boolean(config.disableOrbitalCutoff),
+			targetApogeeKm: config.targetApogeeKm || 0,
+			targetPerigeeKm: config.targetPerigeeKm || 0,
+			targetVInfKmS: config.targetVInfKmS || 0
 		};
 
-		// Collect all celestial bodies with full inertial coordinates and velocities
+		// Collect all celestial bodies in the simulation with full inertial coordinates and velocities. A removed or
+		// destroyed body stays listed until its trail has faded; the physics no longer has it, and its gravity bent the
+		// prediction until then (design §4.13-31)
 		const celestialBodies = [];
 		if (this.universe && this.universe.objects) {
 			for (const obj of this.universe.objects) {
-				if (obj.type === OBJECT_TYPES.CELESTIAL) {
+				if (obj.type === OBJECT_TYPES.CELESTIAL && isLiveObject(obj)) {
 					const objParam = obj.param || (this.universe?.getObjectParams ? this.universe.getObjectParams(obj.name) : null);
 					celestialBodies.push({
 						id: obj.id,
@@ -334,7 +345,8 @@ export class TrajectoryPredictor {
 	static updateRocketFlightEvents(rocket, renderContext = null) {
 		if (!rocket || !rocket.predictedTrajectory || !rocket.predictedTrajectory.events) { return; }
 
-		const status = rocket.telemetry?.status;
+		// A value that is not a status code reads PRE_LAUNCH, as on the telemetry panel (design §4.13-25)
+		const status = normalizeMissionStatus(rocket.telemetry?.status);
 		const altM = rocket.telemetry?.altM || 0;
 		const vV = rocket.telemetry?.vV || 0;
 		const flightTime = rocket.telemetry?.flightTime || rocket.flightTime || 0;
@@ -375,6 +387,12 @@ export class TrajectoryPredictor {
 						if (rocket.isBoosterBurnout || rocket.telemetry?.isBoosterBurnout || (ev.time && flightTime >= ev.time)) {
 							passed = true;
 						}
+					} else if (ev.id === 'payload_cutoff') {
+						// The payload's own engine has stopped (the predictor's rule): separated, and coasting in orbit or
+						// out of burn time. Earlier it fell to the stage rule below and passed at the first MECO
+						if ((rocket.isPayloadSeparated && (rocket.stageState === 'ORBITAL_COAST' || rocket.burnTime <= 0)) || (ev.time && flightTime >= ev.time)) {
+							passed = true;
+						}
 					} else {
 						if (status >= TELEMETRY.STATUS.MECO || rocket.currentStageIndex > 0 || (ev.time && flightTime >= ev.time)) {
 							passed = true;
@@ -408,12 +426,14 @@ export class TrajectoryPredictor {
 							passed = true;
 						}
 					} else if (ev.id === 'payload_sep') {
-						if (rocket.isPayloadSeparated || rocket.stageState === 'ORBITAL_COAST' || (ev.time && flightTime >= ev.time)) {
+						// The separation itself. ORBITAL_COAST is no longer a sign of it: a deferred payload separation
+						// (a flight-plan row with action sep_payload, design §3.4-1) enters ORBITAL_COAST at SECO, long before
+						if (rocket.isPayloadSeparated || (ev.time && flightTime >= ev.time)) {
 							passed = true;
 						}
 					} else if (ev.id && ev.id.startsWith('stg_sep_')) {
 						const targetStg = parseInt(ev.id.replace('stg_sep_', ''), 10);
-						if (rocket.currentStageIndex >= targetStg || (targetStg >= rocket.totalStages && (rocket.isPayloadSeparated || rocket.stageState === 'ORBITAL_COAST')) || (ev.time && flightTime >= ev.time)) {
+						if (rocket.currentStageIndex >= targetStg || (targetStg >= rocket.totalStages && rocket.isPayloadSeparated) || (ev.time && flightTime >= ev.time)) {
 							passed = true;
 						}
 					} else {
@@ -423,11 +443,31 @@ export class TrajectoryPredictor {
 					}
 					break;
 				}
-				case 'ignition':
-					if (flightTime >= ev.time || (rocket.currentStageIndex > 0 && rocket.isIgnited)) {
+				case 'ignition': {
+					// Each ignition by its own stage (design §4.14-3). Earlier any ignition after the first stage
+					// (currentStageIndex > 0 && isIgnited) passed them all at SES-1
+					const stgIdx = Number(rocket.currentStageIndex) || 0;
+					let reached = false;
+					if (ev.id === 'payload_start') {
+						// The payload's own engine ignites after the separation
+						reached = Boolean(rocket.isPayloadSeparated && rocket.isIgnited);
+					} else if (ev.id && ev.id.startsWith('ses_')) {
+						// ses_k: stage index k ignites (the predictor names it from the stage it starts)
+						const k = parseInt(ev.id.replace('ses_', ''), 10);
+						reached = Number.isFinite(k) && (stgIdx > k || (stgIdx === k && Boolean(rocket.isIgnited)));
+					} else if (ev.id && ev.id.startsWith('reignition_')) {
+						// reignition_N: stage index N - 1 restarts after a coast. Its ignition flag is also set during its
+						// first burn, so only a later stage (or the payload) shows that the restart is behind
+						const n = parseInt(ev.id.replace('reignition_', ''), 10);
+						reached = Number.isFinite(n) && (stgIdx > n - 1 || Boolean(rocket.isPayloadSeparated));
+					} else {
+						reached = stgIdx > 0 && Boolean(rocket.isIgnited);
+					}
+					if (flightTime >= ev.time || reached) {
 						passed = true;
 					}
 					break;
+				}
 				case 'fairing':
 					if (flightTime >= ev.time || rocket.telemetry?.isFairingSeparated) {
 						passed = true;
@@ -454,9 +494,12 @@ export class TrajectoryPredictor {
 					}
 					break;
 				case 'orbit': {
-					const hostObj = (renderContext && renderContext.objectsMap && rocket.hostId !== null)
-						? renderContext.objectsMap.get(rocket.hostId)
-						: renderContext?.basis;
+					// The host in the simulation only: this sets the pass state, and a removed host stays listed in the
+					// render context (frozen where it was removed, with its last velocity) until its trail has faded, so the
+					// orbital speed would be measured against it. Without one only the time rule below applies (§4.13-31)
+					const hasMap = Boolean(renderContext && renderContext.objectsMap && rocket.hostId !== null);
+					const hostRef = hasMap ? renderContext.objectsMap.get(rocket.hostId) : renderContext?.basis;
+					const hostObj = isLiveObject(hostRef) ? hostRef : null;
 					if (hostObj) {
 						const dx_m = UnitConvertUtils.pix2m(rocket.x - hostObj.x);
 						const dy_m = UnitConvertUtils.pix2m(rocket.y - hostObj.y);
@@ -538,9 +581,9 @@ export class TrajectoryPredictor {
 		const cosR = hasRotation ? Math.cos(rotationOffset) : 1;
 		const sinR = hasRotation ? Math.sin(rotationOffset) : 0;
 
-		// Compute host screen position relative to camera basis
-		const hostScreenX = (hostObj.x - basis.x) * zoomScale;
-		const hostScreenY = (hostObj.y - basis.y) * zoomScale;
+		// Compute host delta relative to camera basis prior to local offset addition to prevent float64 precision loss
+		const hostRelX = hostObj.x - basis.x;
+		const hostRelY = hostObj.y - basis.y;
 
 		// Viewport Frustum Culling bounds
 		// In renderContext coordinates, screen center is at (cx, cy)
@@ -559,6 +602,52 @@ export class TrajectoryPredictor {
 
 		const currentHostRot = hostObj.rotationAngle || 0;
 
+		// Drawn frame (see design §4.10): points up to frameSwitchTime (leaving the host-fixed regime) are drawn host-fixed
+		// so the ascent stays attached to the pad; later points are drawn host-centred inertial, rotated by a
+		// constant so both representations coincide at the switch point. In flight the reference rotation is
+		// frozen once the vehicle passes the switch, so the orbit stays fixed in space under the spinning host.
+		const frameSwitchTime = Number.isFinite(prediction.frameSwitchTime) ? prediction.frameSwitchTime : Infinity;
+		const hasFrameSwitch = Number.isFinite(frameSwitchTime);
+		const hostOmega = Number.isFinite(prediction.hostOmega) ? prediction.hostOmega : 0;
+		const flightTimeNow = (mode === 'flight' && Number.isFinite(options.currentFlightTime)) ? options.currentFlightTime : null;
+		const frameRefRot = (hasFrameSwitch && flightTimeNow !== null)
+			? currentHostRot - hostOmega * Math.max(0, flightTimeNow - frameSwitchTime)
+			: currentHostRot;
+		const inertialOffset = hasFrameSwitch ? (frameRefRot - (prediction.frameSwitchHostRot || 0)) : 0;
+		const cosI = Math.cos(inertialOffset);
+		const sinI = Math.sin(inertialOffset);
+
+		/** Host-relative drawn offset of a predicted point or event marker. */
+		const projectPredicted = (pt) => {
+			if (pt.r !== undefined && pt.phiSurf !== undefined) {
+				if (hasFrameSwitch && pt.time > frameSwitchTime && pt.relX !== undefined && pt.relY !== undefined) {
+					return { x: pt.relX * cosI - pt.relY * sinI, y: pt.relX * sinI + pt.relY * cosI };
+				}
+				const phiScreen = pt.phiSurf + frameRefRot;
+				return { x: pt.r * Math.cos(phiScreen), y: pt.r * Math.sin(phiScreen) };
+			}
+			if (hasRotation) {
+				return { x: pt.relX * cosR - pt.relY * sinR, y: pt.relX * sinR + pt.relY * cosR };
+			}
+			return { x: pt.relX, y: pt.relY };
+		};
+
+		/** Host-relative drawn offset of a recorded actual-flight point (time = flight time when recorded). */
+		const projectActual = (pt) => {
+			if (hasFrameSwitch && Number.isFinite(pt.time) && pt.time > frameSwitchTime && pt.relX !== undefined && pt.relY !== undefined) {
+				// Recorded after the switch: its true inertial offset is already in the frozen drawn frame
+				return { x: pt.relX, y: pt.relY };
+			}
+			if (pt.r !== undefined && pt.phiSurf !== undefined) {
+				const phiScreen = pt.phiSurf + frameRefRot;
+				return { x: pt.r * Math.cos(phiScreen), y: pt.r * Math.sin(phiScreen) };
+			}
+			if (hasRotation) {
+				return { x: pt.relX * cosR - pt.relY * sinR, y: pt.relX * sinR + pt.relY * cosR };
+			}
+			return { x: pt.relX, y: pt.relY };
+		};
+
 		// Screen-space decimation helper: avoids collapsing line dashes when sample density is high
 		const MIN_SCREEN_DIST_SQ = conf.MIN_SCREEN_DIST_SQ || 4.0;
 
@@ -570,23 +659,9 @@ export class TrajectoryPredictor {
 
 			for (let i = startIndex; i <= endIndex; i++) {
 				const pt = points[i];
-				let relX, relY;
-				if (pt.r !== undefined && pt.phiSurf !== undefined) {
-					const phiScreen = pt.phiSurf + currentHostRot;
-					relX = pt.r * Math.cos(phiScreen);
-					relY = pt.r * Math.sin(phiScreen);
-				} else {
-					relX = pt.relX;
-					relY = pt.relY;
-					if (hasRotation) {
-						const rx = relX * cosR - relY * sinR;
-						const ry = relX * sinR + relY * cosR;
-						relX = rx;
-						relY = ry;
-					}
-				}
-				const sx = hostScreenX + relX * zoomScale;
-				const sy = hostScreenY + relY * zoomScale;
+				const rel = projectPredicted(pt);
+				const sx = (hostRelX + rel.x) * zoomScale;
+				const sy = (hostRelY + rel.y) * zoomScale;
 
 				const dx = sx - lastX;
 				const dy = sy - lastY;
@@ -680,23 +755,9 @@ export class TrajectoryPredictor {
 			let lastAy = -999999;
 			for (let i = 0; i < options.actualFlightPath.length; i++) {
 				const pt = options.actualFlightPath[i];
-				let relX, relY;
-				if (pt.r !== undefined && pt.phiSurf !== undefined) {
-					const phiScreen = pt.phiSurf + currentHostRot;
-					relX = pt.r * Math.cos(phiScreen);
-					relY = pt.r * Math.sin(phiScreen);
-				} else {
-					relX = pt.relX;
-					relY = pt.relY;
-					if (hasRotation) {
-						const rx = relX * cosR - relY * sinR;
-						const ry = relX * sinR + relY * cosR;
-						relX = rx;
-						relY = ry;
-					}
-				}
-				const sx = hostScreenX + relX * zoomScale;
-				const sy = hostScreenY + relY * zoomScale;
+				const rel = projectActual(pt);
+				const sx = (hostRelX + rel.x) * zoomScale;
+				const sy = (hostRelY + rel.y) * zoomScale;
 
 				const dx = sx - lastAx;
 				const dy = sy - lastAy;
@@ -745,23 +806,9 @@ export class TrajectoryPredictor {
 			ctx.textBaseline = 'middle';
 
 			events.forEach(ev => {
-				let evRelX, evRelY;
-				if (ev.r !== undefined && ev.phiSurf !== undefined) {
-					const evPhi = ev.phiSurf + currentHostRot;
-					evRelX = ev.r * Math.cos(evPhi);
-					evRelY = ev.r * Math.sin(evPhi);
-				} else {
-					evRelX = ev.relX;
-					evRelY = ev.relY;
-					if (hasRotation) {
-						const rx = evRelX * cosR - evRelY * sinR;
-						const ry = evRelX * sinR + evRelY * cosR;
-						evRelX = rx;
-						evRelY = ry;
-					}
-				}
-				const evScreenX = hostScreenX + evRelX * zoomScale;
-				const evScreenY = hostScreenY + evRelY * zoomScale;
+				const evRel = projectPredicted(ev);
+				const evScreenX = (hostRelX + evRel.x) * zoomScale;
+				const evScreenY = (hostRelY + evRel.y) * zoomScale;
 
 				// Skip drawing event markers that are completely offscreen
 				if (evScreenX < minX || evScreenX > maxX || evScreenY < minY || evScreenY > maxY) {
@@ -888,10 +935,6 @@ export class TrajectoryPredictor {
 			points: newPoints,
 			events: newEvents
 		};
-	}
-
-	render(ctx, renderContext, options = {}) {
-		TrajectoryPredictor.renderTrajectory(ctx, renderContext, this.prediction, options);
 	}
 
 	destroy() {

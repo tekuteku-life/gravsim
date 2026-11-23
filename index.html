@@ -461,16 +461,16 @@
 					</select>
 
 					<label>Fuel Mass (t): <span id="rl-fuel-mass-val">140</span></label>
-					<input type="range" id="rl-fuel-mass" min="0" max="1500" step="1" value="140" class="slider-full">
+					<input type="range" id="rl-fuel-mass" min="0" max="1500" step="0.1" value="140" class="slider-full">
 
 					<label>Oxidizer Mass (t): <span id="rl-oxid-mass-val">280</span></label>
-					<input type="range" id="rl-oxid-mass" min="0" max="3000" step="1" value="280" class="slider-full">
+					<input type="range" id="rl-oxid-mass" min="0" max="3000" step="0.1" value="280" class="slider-full">
 
 					<label>Dry Mass (t): <span id="rl-launch-mass-val">25</span></label>
-					<input type="range" id="rl-launch-mass" min="1" max="500" step="1" value="25" class="slider-full">
+					<input type="range" id="rl-launch-mass" min="0.1" max="500" step="0.1" value="25" class="slider-full">
 
 					<label>Thrust Force (kN): <span id="rl-launch-thrust-val">7600</span></label>
-					<input type="range" id="rl-launch-thrust" min="100" max="10000" step="50" value="7600" class="slider-full">
+					<input type="range" id="rl-launch-thrust" min="1" max="10000" step="1" value="7600" class="slider-full">
 
 					<div id="rl-separation-settings">
 						<label id="rl-sep-delay-label">Separation Delay (s): <span id="rl-sep-delay-val">3.0</span></label>
@@ -486,7 +486,7 @@
 					<div style="color: #00ffcc; font-weight: bold; margin: 6px 0 4px 0; font-size: 12px;">-- PAYLOAD &amp; FAIRING --</div>
 					
 					<label>Payload Mass (t): <span id="rl-payload-mass-val">8.0</span></label>
-					<input type="range" id="rl-payload-mass" min="0" max="100" step="0.5" value="8.0" class="slider-full">
+					<input type="range" id="rl-payload-mass" min="0" max="100" step="0.01" value="8.0" class="slider-full">
 
 					<label style="display:flex; align-items:center; gap:5px; margin-top:10px; color:#fff; cursor: pointer;">
 						<input type="checkbox" id="rl-fairing-enabled" checked> Enable Protective Fairing
@@ -506,9 +506,9 @@
 							Thrust: <span id="rl-payload-thrust-val">0</span> kN | Burn Time: <span id="rl-payload-burntime-val">0</span> s
 						</div>
 						<label>Propellant Fuel (t): <span id="rl-payload-fuel-val">0.0</span></label>
-						<input type="range" id="rl-payload-fuel" min="0" max="10" step="0.05" value="0" class="slider-full">
+						<input type="range" id="rl-payload-fuel" min="0" max="10" step="0.01" value="0" class="slider-full">
 						<label id="rl-payload-oxid-label">Propellant Oxidizer (t): <span id="rl-payload-oxid-val">0.0</span></label>
-						<input type="range" id="rl-payload-oxid" min="0" max="20" step="0.05" value="0" class="slider-full">
+						<input type="range" id="rl-payload-oxid" min="0" max="20" step="0.01" value="0" class="slider-full">
 					</div>
 				</div>
 
@@ -524,12 +524,21 @@
 
 				<div class="panel-section-header" style="margin-top: 15px;">[ FLIGHT PROFILE ]</div>
 				<table id="rl-flight-profile-table" class="profile-table">
+					<colgroup>
+						<col style="width: 19%">
+						<col style="width: 22%">
+						<col style="width: 14%">
+						<col style="width: 14%">
+						<col style="width: 21%">
+						<col style="width: 10%">
+					</colgroup>
 					<thead>
 						<tr>
 							<th>Trigger</th>
 							<th>Value</th>
-							<th>Thrust(%)</th>
-							<th>Angle(°)</th>
+							<th>Thr(%)</th>
+							<th>Ang(°)</th>
+							<th>Action</th>
 							<th></th>
 						</tr>
 					</thead>

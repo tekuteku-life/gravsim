@@ -41,11 +41,12 @@ describe('Integration 05: Mission Workflow, Launch Pad & State Persistence', () 
 	it('should manage celestial body selection on RocketTab open: default to Earth and fallback to last added celestial body', () => {
 		const rTab = new RocketTab(universe);
 
-		// 1. When universe has no celestial objects: hostId defaults to 0
+		// 1. When universe has no celestial objects: no host (null; it was the id 0, which may name another object,
+		// design §4.13-24)
 		universe.objects = [];
 		universe.RocketLauncher.hostId = null;
 		rTab.open();
-		assert.equal(universe.RocketLauncher.hostId, 0);
+		assert.equal(universe.RocketLauncher.hostId, null);
 
 		// 2. When celestial objects exist, but none is named Earth:
 		// Fallback to the LAST ADDED celestial body (not highest ID or random)

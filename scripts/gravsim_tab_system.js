@@ -2,13 +2,18 @@
 // gravsim_tab_system.js
 
 import { PHYSICS, RENDER, SIMULATION, UI } from './gravsim_const.js';
-import { DOMUtils } from './gravsim_utils.js';
+import { DOMUtils, isLiveObject } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 
 export class SystemTab {
 	constructor(universe) {
 		this.universe = universe;
 		this.isDebugModeEnabled = false;
+		/**
+		 * The time-scale exponent last applied by code and the slider step it showed then (getTimeScaleExp).
+		 * @type {{ exp: number, sliderValue: string } | null}
+		 */
+		this._exactTimeScale = null;
 		this._initElements();
 		this._bindEvents();
 
@@ -34,6 +39,7 @@ export class SystemTab {
 	}
 
 	_initElements() {
+		/** @type {Record<string, any>} */
 		this.ui = {
 			timeScale: document.getElementById('time-scale'),
 			timeIndicator: document.getElementById('time-scale-indicator'),
@@ -70,18 +76,20 @@ export class SystemTab {
 
 	_bindEvents() {
 		this.ui.timeScale.addEventListener('input', () => {
+			// The user moved the slider: its value is the time scale again
+			this._exactTimeScale = null;
 			const val = this.getTimeScale();
 			EventBus.emit('simulation:set-time-scale', val);
 			this.updateTimeScaleIndicator(val);
 		});
 
-		this.ui.zoomScale.addEventListener('input', (e) => {
+		this.ui.zoomScale.addEventListener('input', (/** @type {any} */ e) => {
 			const exp = parseFloat(e.target.value);
 			EventBus.emit('camera:set-target-zoom-exp', exp);
 			this.updateZoomScaleIndicator(Math.pow(10, exp));
 		});
 
-		this.ui.centerSelect.addEventListener('change', (e) => this._onCenterChanged(e));
+		this.ui.centerSelect.addEventListener('change', (/** @type {any} */ e) => this._onCenterChanged(e));
 
 		// Simulation Control
 		this.ui.pauseResumeBtn.addEventListener('click', () => {
@@ -103,24 +111,13 @@ export class SystemTab {
 		});
 
 		// Display Options
-		this.ui.trailLength.addEventListener('input', (e) => {
+		this.ui.trailLength.addEventListener('input', (/** @type {any} */ e) => {
 			const val = parseFloat(e.target.value);
 			DOMUtils.setText(this.ui.trailLengthVal, val.toFixed(1));
 			this.universe.trailLengthAU = val;
 		});
 
-		// Format sim duration helper
-		const formatSimDuration = (months) => {
-			if (months < 12) {
-				const days = Math.round(months * (365.25 / 12));
-				return `${months} mo (${days} d)`;
-			} else {
-				const yrs = (months / 12).toFixed(1);
-				return `${yrs} yr (${months} mo)`;
-			}
-		};
-
-		this.ui.predDuration.addEventListener('input', (e) => {
+		this.ui.predDuration.addEventListener('input', (/** @type {any} */ e) => {
 			const months = parseFloat(e.target.value);
 			const sec = months * (365.25 / 12) * 86400;
 			this.universe.RocketLauncher.predictionDurationMonths = months;
@@ -129,18 +126,22 @@ export class SystemTab {
 				this.universe.RocketLauncher.requestPreviewUpdate();
 			}
 
-			this.ui.predDurationVal.textContent = formatSimDuration(months);
+			this._showPredictionDurationLabel(months);
 		});
 
-		this.ui.showLabelsChk.addEventListener('change', (e) => {
+		// The prediction period changed elsewhere (a mission / vehicle / payload applied in the Rocket tab):
+		// show the launcher's value without re-applying it
+		EventBus.on('ui:sync-prediction-duration', (months) => this.syncPredictionDuration(months));
+
+		this.ui.showLabelsChk.addEventListener('change', (/** @type {any} */ e) => {
 			EventBus.emit('render:set-labels-visible', e.target.checked);
 		});
 
-		this.ui.showPredictedPathChk.addEventListener('change', (e) => {
+		this.ui.showPredictedPathChk.addEventListener('change', (/** @type {any} */ e) => {
 			EventBus.emit('render:set-show-predicted-path', e.target.checked);
 		});
 
-		this.ui.showActualPathChk.addEventListener('change', (e) => {
+		this.ui.showActualPathChk.addEventListener('change', (/** @type {any} */ e) => {
 			EventBus.emit('render:set-show-actual-path', e.target.checked);
 		});
 
@@ -157,12 +158,12 @@ export class SystemTab {
 			}
 		});
 
-		this.ui.showDebugChk.addEventListener('change', (e) => {
+		this.ui.showDebugChk.addEventListener('change', (/** @type {any} */ e) => {
 			EventBus.emit('render:set-debug-visible', e.target.checked);
 		});
 
 		// Bind Audio Selection
-		this.ui.audioVoiceSelect.addEventListener('change', (e) => {
+		this.ui.audioVoiceSelect.addEventListener('change', (/** @type {any} */ e) => {
 			const val = e.target.value;
 			if (val === 'none') {
 				EventBus.emit('audio:unload');
@@ -198,14 +199,15 @@ export class SystemTab {
 			this.ui.resetAllBtn.disabled = isLocked;
 		});
 
+		// A time-scale exponent set by code (real time for a launch, the Rocket tab's restore): applied exactly, the
+		// slider shows the nearest step (design §4.13-20). A value that is not a finite number changes nothing.
 		EventBus.on('ui:set-time-scale', (val) => {
-			this.ui.timeScale.value = val;
-			const timeScaleVal = this.getTimeScale();
-			EventBus.emit('simulation:set-time-scale', timeScaleVal);
-			this.updateTimeScaleIndicator(timeScaleVal);
+			if (!SystemTab.isFiniteNumber(val)) { return; }
+			this.applyTimeScaleExp(this._clampToSlider(this.ui.timeScale, val));
 		});
 
 		EventBus.on('ui:set-time-scale-min', () => {
+			this._exactTimeScale = null;
 			this.ui.timeScale.value = this.ui.timeScale.min;
 			const val = this.getTimeScale();
 			EventBus.emit('simulation:set-time-scale', val);
@@ -258,7 +260,7 @@ export class SystemTab {
 
 		let profilerInstance = null;
 
-		this.ui.enableMainProfilerChk.addEventListener('change', async (e) => {
+		this.ui.enableMainProfilerChk.addEventListener('change', async (/** @type {any} */ e) => {
 			const isEnabled = e.target.checked;
 			if (isEnabled) {
 				// Lazy load the profiler script only when enabled
@@ -271,15 +273,16 @@ export class SystemTab {
 				}
 			}
 		});
-		this.ui.enableWorkerProfilerChk.addEventListener('change', async (e) => {
+		this.ui.enableWorkerProfilerChk.addEventListener('change', async (/** @type {any} */ e) => {
 			const isEnabled = e.target.checked;
 			EventBus.emit('debug:toggle-profiler', isEnabled);
 		});
 	}
 
+	/** @param {any} e */
 	_onCenterChanged(e) {
 		const targetId = parseInt(e.target.value, 10);
-		const targetObj = this.universe.objects.find(obj => obj.id === targetId);
+		const targetObj = this.universe.objects.find(obj => obj.id === targetId && isLiveObject(obj));
 		if (targetObj) {
 			EventBus.emit('camera:set-tracking-target', targetObj);
 		}
@@ -291,7 +294,10 @@ export class SystemTab {
 			: this.ui.centerSelect.value;
 		this.ui.centerSelect.innerHTML = '';
 
+		// The objects in the simulation: a removed one stays listed until its trail has faded, and the camera leaves it at
+		// once (design §4.13-31)
 		for (const obj of this.universe.objects) {
+			if (!isLiveObject(obj)) { continue; }
 			const option = document.createElement('option');
 			option.value = obj.id;
 			option.textContent = `${obj.name} (ID: ${obj.id})`;
@@ -363,9 +369,36 @@ export class SystemTab {
 		EventBus.emit('camera:set-zoom-text', text);
 	}
 
+	/**
+	 * The time-scale exponent the simulation runs at (log10 of the simulated years per second, the unit of the
+	 * #time-scale slider). The slider has a 0.1 step, and a browser rounds a value written to a range input to the
+	 * nearest step, so the slider cannot hold real time (log10(1 / (365.25 x 86400)) = -7.4991..., which it shows as
+	 * -7.5, 0.998 s per s). A value applied by code (applyTimeScaleExp) is therefore kept here and is the time scale as
+	 * long as the slider still shows the step it was given; moving the slider (or writing another value to it) makes the
+	 * slider's value the time scale again (design §4.13-20).
+	 * @returns {number}
+	 */
+	getTimeScaleExp() {
+		const exact = this._exactTimeScale;
+		if (exact && exact.sliderValue === String(this.ui.timeScale.value)) { return exact.exp; }
+		return parseFloat(this.ui.timeScale.value);
+	}
+
 	getTimeScale() {
-		const exp = parseFloat(this.ui.timeScale.value);
-		return Math.pow(10, exp);
+		return Math.pow(10, this.getTimeScaleExp());
+	}
+
+	/**
+	 * Run the simulation at the time-scale exponent `exp` exactly (a finite number within the slider range): the slider
+	 * shows the nearest step, the indicator the exact value.
+	 * @param {number} exp
+	 */
+	applyTimeScaleExp(exp) {
+		this.ui.timeScale.value = String(exp);
+		this._exactTimeScale = { exp, sliderValue: String(this.ui.timeScale.value) };
+		const val = Math.pow(10, exp);
+		EventBus.emit('simulation:set-time-scale', val);
+		this.updateTimeScaleIndicator(val);
 	}
 
 	getZoomScale() {
@@ -377,27 +410,111 @@ export class SystemTab {
 		return parseFloat(this.ui.zoomScale.step) || 0.1;
 	}
 
+	/**
+	 * Label of the prediction-period slider.
+	 * @param {number} months
+	 * @returns {string}
+	 */
+	static formatSimDuration(months) {
+		if (months < 12) {
+			const days = Math.round(months * (365.25 / 12));
+			return `${months} mo (${days} d)`;
+		} else {
+			const yrs = (months / 12).toFixed(1);
+			return `${yrs} yr (${months} mo)`;
+		}
+	}
+
+	/**
+	 * Show the prediction period in use (RocketLauncher.predictionDurationMonths) on the slider and its label. Display
+	 * only: the launcher value is not changed (the slider clamps its own position to its range, the label shows the value).
+	 * @param {number} [months] defaults to the launcher's value
+	 */
+	syncPredictionDuration(months = this.universe?.RocketLauncher?.predictionDurationMonths) {
+		if (typeof months !== 'number' || !Number.isFinite(months) || months <= 0) { return; }
+		this._setSliderValue(this.ui.predDuration, months);
+		this._showPredictionDurationLabel(months);
+	}
+
+	/**
+	 * The one writer of the prediction-period label (the slider handler and syncPredictionDuration).
+	 * @param {number} months
+	 */
+	_showPredictionDurationLabel(months) {
+		this.ui.predDurationVal.textContent = SystemTab.formatSimDuration(months);
+	}
+
+	/**
+	 * `value` clamped to the min / max of a range input (a bound that is not a number is ignored).
+	 * @param {any} slider
+	 * @param {number} value
+	 * @returns {number}
+	 */
+	_clampToSlider(slider, value) {
+		const min = parseFloat(slider.min);
+		const max = parseFloat(slider.max);
+		let v = value;
+		if (Number.isFinite(min)) { v = Math.max(min, v); }
+		if (Number.isFinite(max)) { v = Math.min(max, v); }
+		return v;
+	}
+
+	/**
+	 * Set a range input to `value` clamped to its min / max and return the value it holds afterwards.
+	 * @param {any} slider
+	 * @param {number} value
+	 * @returns {number}
+	 */
+	_setSliderValue(slider, value) {
+		const v = this._clampToSlider(slider, value);
+		slider.value = String(v);
+		const applied = parseFloat(slider.value);
+		return Number.isFinite(applied) ? applied : v;
+	}
+
 	getState() {
 		return {
-			timeScaleVal: parseFloat(this.ui.timeScale.value),
+			// The exponent the simulation runs at (real time is saved as itself, not as the slider step it shows)
+			timeScaleVal: this.getTimeScaleExp(),
 			zoomScaleVal: parseFloat(this.ui.zoomScale.value),
 		};
 	}
 
-	loadState(cpState) {
-		if (!cpState) { return; }
+	/**
+	 * Validate a saved view state (getState()): only finite numbers are kept (a corrupted or missing value is null,
+	 * which keeps the current one) and they are clamped to the slider ranges.
+	 * @param {{ timeScaleVal?: any, zoomScaleVal?: any } | null | undefined} cpState
+	 * @returns {{ timeScaleVal: number | null, zoomScaleVal: number | null }}
+	 */
+	normalizeViewState(cpState) {
+		const src = (cpState && typeof cpState === 'object') ? cpState : {};
+		return {
+			timeScaleVal: SystemTab.isFiniteNumber(src.timeScaleVal) ? this._clampToSlider(this.ui.timeScale, src.timeScaleVal) : null,
+			zoomScaleVal: SystemTab.isFiniteNumber(src.zoomScaleVal) ? this._clampToSlider(this.ui.zoomScale, src.zoomScaleVal) : null
+		};
+	}
 
-		if (cpState.timeScaleVal !== undefined) {
-			this.ui.timeScale.value = cpState.timeScaleVal;
-			const val = this.getTimeScale();
-			EventBus.emit('simulation:set-time-scale', val);
-			this.updateTimeScaleIndicator(val);
+	/**
+	 * Apply a view state from normalizeViewState(): the simulation runs at the saved time scale exactly (the slider shows
+	 * the nearest step, as for real time); the camera receives the zoom the slider holds.
+	 * @param {{ timeScaleVal: number | null, zoomScaleVal: number | null }} view
+	 */
+	applyViewState(view) {
+		if (view.timeScaleVal !== null) {
+			this.applyTimeScaleExp(this._clampToSlider(this.ui.timeScale, view.timeScaleVal));
 		}
-		if (cpState.zoomScaleVal !== undefined) {
-			this.ui.zoomScale.value = cpState.zoomScaleVal;
-			EventBus.emit('camera:set-target-zoom-exp', cpState.zoomScaleVal);
-			this.updateZoomScaleIndicator(Math.pow(10, cpState.zoomScaleVal));
+		if (view.zoomScaleVal !== null) {
+			const exp = this._setSliderValue(this.ui.zoomScale, view.zoomScaleVal);
+			EventBus.emit('camera:set-target-zoom-exp', exp);
+			this.updateZoomScaleIndicator(Math.pow(10, exp));
 		}
-		this.updateCenterOptions();
+	}
+
+	/**
+	 * @param {any} v
+	 * @returns {v is number}
+	 */
+	static isFiniteNumber(v) {
+		return typeof v === 'number' && Number.isFinite(v);
 	}
 }

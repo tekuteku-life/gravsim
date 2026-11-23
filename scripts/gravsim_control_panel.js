@@ -49,7 +49,7 @@ export class ControlPanel {
 		}
 
 		EventBus.on('ui:set-tabs-locked', (isLocked) => {
-			this.ui.tabBtns.forEach(btn => {
+			this.ui.tabBtns.forEach((/** @type {any} */ btn) => {
 				btn.disabled = isLocked;
 				btn.style.pointerEvents = isLocked ? 'none' : 'auto';
 				btn.style.opacity = isLocked ? '0.5' : '1.0';
@@ -57,6 +57,7 @@ export class ControlPanel {
 		});
 	}
 
+	/** @param {any} e */
 	_tabBtnClick(e) {
 		if (e.target.disabled) { return; }
 
@@ -85,15 +86,45 @@ export class ControlPanel {
 		return this.systemTab.getTimeScale();
 	}
 
+	/** The time-scale exponent the simulation runs at (SystemTab.getTimeScaleExp). */
+	getTimeScaleExp() {
+		return this.systemTab.getTimeScaleExp();
+	}
+
 	getState() {
 		return {
 			controlPanel: this.systemTab.getState(),
 		};
 	}
 
+	/**
+	 * The System-tab state inside a saved `controlPanel` entry. getState() nests it ({ controlPanel: { timeScaleVal,
+	 * zoomScaleVal } }, written since the tabs were split into classes); saves written before that keep the two values
+	 * at the top level. Both carry `version: 2`, so the shape decides.
+	 * @param {any} cpState
+	 * @returns {{ timeScaleVal?: any, zoomScaleVal?: any } | null}
+	 */
+	static resolveSystemTabState(cpState) {
+		if (!cpState || typeof cpState !== 'object' || Array.isArray(cpState)) { return null; }
+		const nested = cpState.controlPanel;
+		if (nested && typeof nested === 'object' && !Array.isArray(nested)) { return nested; }
+		return cpState;
+	}
+
 	loadState(cpState, rlState) {
 		if (!cpState) { return; }
-		if (cpState.timeScaleVal !== undefined) { this.systemTab.loadState(cpState); }
+		const sysState = ControlPanel.resolveSystemTabState(cpState);
+		if (sysState) {
+			const view = this.systemTab.normalizeViewState(sysState);
+			if (this.rocketTab.isOpened) {
+				// The Rocket tab keeps the minimum time scale (and its own zoom) while it is open; the loaded values
+				// replace the ones it restores when it closes
+				this.rocketTab.deferViewState(view);
+			} else {
+				this.systemTab.applyViewState(view);
+			}
+			this.systemTab.updateCenterOptions();
+		}
 		if (rlState) { this.rocketTab.loadState(rlState); }
 	}
 }

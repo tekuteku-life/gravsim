@@ -1,7 +1,7 @@
 
 // gravsim_flight_computer.js
 
-import { PHYSICS, FLIGHT_COMPUTER_CONFIG, TELEMETRY } from './gravsim_const.js';
+import { PHYSICS, FLIGHT_COMPUTER_CONFIG, TELEMETRY, SIMULATION } from './gravsim_const.js';
 import { MathUtils, UnitConvertUtils } from './gravsim_utils.js';
 
 export class FlightComputer {
@@ -15,9 +15,12 @@ export class FlightComputer {
 		this.currentThrustAngle = config.thrustAngle || 0;
 		this.targetLaunchAngle = this.currentThrustAngle;
 		this.flightTime = 0;
-		this.flightProfile = config.flightProfile || [];
+		// Only object rows with finite value/thrust/angle are steps: a null/primitive row or a row whose numbers are
+		// missing or non-finite (e.g. from a corrupted save) must neither throw nor command a NaN throttle/angle in the Worker
+		this.flightProfile = Array.isArray(config.flightProfile)
+			? config.flightProfile.filter(step => step !== null && typeof step === 'object' && Number.isFinite(step.value) && Number.isFinite(step.thrust) && Number.isFinite(step.angle))
+			: [];
 		this.hostAngleRad = config.hostAngleRad || 0;
-		this.disableOrbitalCutoff = !!config.disableOrbitalCutoff;
 
 		// Optimization: Retain result output locally to prevent returning objects on hot path
 		this.currentThrottle = 1.0;
@@ -48,44 +51,183 @@ export class FlightComputer {
 			isAntiStallActive: false,
 			isQLimitNear: false,
 			isGLimitNear: false,
+			mach: 0,
+			rcsCw: false,
+			rcsCcw: false,
+			rcsUllage: false,
 		};
 		this._isAntiStallActive = false;
 		this.hasPassedApogee = false;
 		this.apogeeTime = null;
 		this._prevVv = 0;
+		this._highestStepIndex = -1;
+		this._triggeredActionIndices = new Set();
+		this._pendingActions = [];
+		this.desiredThrustAngleRad = this.currentThrustAngle || 0;
+		// Orbit targets come from the constructor config (CalcRocket passes them, design §3.4-1); update() refreshes them from the sensor
+		this.targetApogeeKm = Number(config.targetApogeeKm) || 0;
+		this.targetPerigeeKm = Number(config.targetPerigeeKm) || 0;
+		this.disableOrbitalCutoff = Boolean(config.disableOrbitalCutoff);
+	}
+
+	/**
+	 * Single source of truth for the measured quantity of each flight-profile trigger type.
+	 * @param {string} type 'time' | 'alt' | 'vel' | 'apogee'
+	 * @returns {number} current value, or NaN for unknown types / apogee not yet passed
+	 */
+	getTriggerValue(type) {
+		if (type === 'time') {
+			return this.flightTime;
+		} else if (type === 'alt') {
+			return this.telemetryCache.altM || 0;
+		} else if (type === 'vel') {
+			return Math.hypot(this.telemetryCache.vV || 0, this.telemetryCache.vH || 0);
+		} else if (type === 'apogee') {
+			return this.hasPassedApogee ? (this.flightTime - (this.apogeeTime || 0)) : NaN;
+		}
+		return NaN;
+	}
+
+	_isStepTriggered(step) {
+		if (!step) return false;
+		const cur = this.getTriggerValue(step.type);
+		return Number.isFinite(cur) && cur >= (step.value || 0);
+	}
+
+	/**
+	 * True when a profile row not yet reached by the sequential latch (_highestStepIndex) still
+	 * commands thrust, i.e. the current zero-throttle phase is a coast rather than the final cutoff.
+	 * Rows are reached strictly in order, so a later row counts as pending even if its own trigger
+	 * condition is already met while an earlier row is still blocking.
+	 */
+	hasPendingBurnStep() {
+		if (!Array.isArray(this.flightProfile)) return false;
+		for (let i = Math.max(0, this._highestStepIndex + 1); i < this.flightProfile.length; i++) {
+			const step = this.flightProfile[i];
+			if (step && step.thrust > 0) return true;
+		}
+		return false;
+	}
+
+	hasScheduledAction(actionName) {
+		if (!actionName || !Array.isArray(this.flightProfile)) return false;
+		for (let i = 0; i < this.flightProfile.length; i++) {
+			if (!this._triggeredActionIndices.has(i) && this.flightProfile[i]?.action === actionName) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Serializable runtime state (save/load). Kinematic telemetry is re-derived on the next update.
+	 */
+	getRuntimeState() {
+		return {
+			flightTime: this.flightTime,
+			targetLaunchAngle: this.targetLaunchAngle,
+			highestStepIndex: this._highestStepIndex,
+			triggeredActionIndices: Array.from(this._triggeredActionIndices),
+			pendingActions: this._pendingActions.slice(),
+			hasPassedApogee: this.hasPassedApogee,
+			apogeeTime: this.apogeeTime,
+			prevVv: this._prevVv,
+			maxRecordedQ: this.maxRecordedQ,
+			hasPassedMaxQ: this.hasPassedMaxQ,
+			maxQConfirmTimer: this.maxQConfirmTimer,
+			maxQStatusTimer: this.maxQStatusTimer,
+			// Rev 6.11 (G3-1-01): the rate-limited attitude command (the rocket's thrustAngle is re-synced to the pad during
+			// hold-down, so it is not the same value) and the anti-stall flag, which coast phases do not reset
+			currentThrustAngle: this.currentThrustAngle,
+			isAntiStallActive: this._isAntiStallActive
+		};
+	}
+
+	/** @param {any} state value previously produced by getRuntimeState() */
+	restoreRuntimeState(state) {
+		if (!state || typeof state !== 'object') return;
+		const maxT = SIMULATION.RUNTIME_RESTORE_MAX_TIME_S;
+		const num = (v, fallback) => (Number.isFinite(v) ? v : fallback);
+		const time = (v) => Math.min(maxT, Math.max(0, num(v, 0)));
+		const profile = Array.isArray(this.flightProfile) ? this.flightProfile : [];
+		const profileLen = profile.length;
+		this.flightTime = time(state.flightTime);
+		this.targetLaunchAngle = num(state.targetLaunchAngle, this.targetLaunchAngle);
+		this._highestStepIndex = Math.max(-1, Math.min(profileLen - 1, Math.trunc(num(state.highestStepIndex, -1))));
+		// Only rows of this profile that carry an action can be latched
+		this._triggeredActionIndices = new Set(
+			(Array.isArray(state.triggeredActionIndices) ? state.triggeredActionIndices : [])
+				.filter(i => Number.isInteger(i) && i >= 0 && i < profileLen && Boolean(profile[i]?.action))
+		);
+		// A pending (latched but not yet executed) action must belong to a latched row: consume one row per entry
+		const latchedActionBudget = new Map();
+		for (const i of this._triggeredActionIndices) {
+			const a = profile[i].action;
+			latchedActionBudget.set(a, (latchedActionBudget.get(a) || 0) + 1);
+		}
+		this._pendingActions = [];
+		for (const a of (Array.isArray(state.pendingActions) ? state.pendingActions : [])) {
+			const left = latchedActionBudget.get(a) || 0;
+			if (typeof a === 'string' && left > 0) {
+				this._pendingActions.push(a);
+				latchedActionBudget.set(a, left - 1);
+			}
+		}
+		this.hasPassedApogee = Boolean(state.hasPassedApogee);
+		this.apogeeTime = (this.hasPassedApogee && Number.isFinite(state.apogeeTime)) ? time(state.apogeeTime) : null;
+		this._prevVv = num(state.prevVv, 0);
+		this.maxRecordedQ = Math.max(0, num(state.maxRecordedQ, 0));
+		this.hasPassedMaxQ = Boolean(state.hasPassedMaxQ);
+		this.maxQConfirmTimer = time(state.maxQConfirmTimer);
+		this.maxQStatusTimer = time(state.maxQStatusTimer);
+		// Optional (saves before Rev 6.11 keep the constructor's value, i.e. the saved thrustAngle)
+		if (Number.isFinite(state.currentThrustAngle)) {
+			this.currentThrustAngle = state.currentThrustAngle;
+			this.currentThrustAngleRad = state.currentThrustAngle;
+		}
+		if (typeof state.isAntiStallActive === 'boolean') { this._isAntiStallActive = state.isAntiStallActive; }
+	}
+
+	consumePendingActions() {
+		if (!this._pendingActions || this._pendingActions.length === 0) return [];
+		return this._pendingActions.splice(0, this._pendingActions.length);
 	}
 
 	_evaluateProfile(sensor) {
 		let baseThrottle = 1.0;
 		let relAngleDeg = 0;
 
-		if (this.flightProfile.length === 0) {
+		if (!this.flightProfile || this.flightProfile.length === 0) {
 			this._profileState.throttle = baseThrottle;
 			this._profileState.relAngleDeg = relAngleDeg;
 			return;
 		}
 
-		let currentIndex = -1;
-		for (let i = 0; i < this.flightProfile.length; i++) {
+		let currentIndex = this._highestStepIndex;
+		for (let i = Math.max(0, this._highestStepIndex + 1); i < this.flightProfile.length; i++) {
 			const step = this.flightProfile[i];
-			let triggered = false;
-
-			if (step.type === 'time') {
-				triggered = (this.flightTime >= step.value);
-			} else if (step.type === 'alt') {
-				triggered = (this.telemetryCache.altM >= step.value);
-			} else if (step.type === 'apogee') {
-				triggered = (this.hasPassedApogee && this.flightTime >= (this.apogeeTime + (step.value || 0)));
-			}
-
-			if (triggered) {
+			if (this._isStepTriggered(step)) {
 				currentIndex = i;
+				this._highestStepIndex = i;
+				if (step.action && !this._triggeredActionIndices.has(i)) {
+					this._triggeredActionIndices.add(i);
+					this._pendingActions.push(step.action);
+				}
 			} else {
 				break;
 			}
 		}
 
-		if (currentIndex === -1) {
+		// Independent latch: also fire any later explicit action rows whose trigger is already met
+		for (let j = Math.max(0, this._highestStepIndex + 1); j < this.flightProfile.length; j++) {
+			const laterStep = this.flightProfile[j];
+			if (laterStep?.action && !this._triggeredActionIndices.has(j) && this._isStepTriggered(laterStep)) {
+				this._triggeredActionIndices.add(j);
+				this._pendingActions.push(laterStep.action);
+			}
+		}
+
+		if (currentIndex <= -1) {
 			// Before the first step
 			const firstStep = this.flightProfile[0];
 			this._profileState.throttle = firstStep.thrust / 100;
@@ -93,9 +235,9 @@ export class FlightComputer {
 			return;
 		}
 
-		if (currentIndex === this.flightProfile.length - 1) {
+		if (currentIndex >= this.flightProfile.length - 1) {
 			// After the last step
-			const lastStep = this.flightProfile[currentIndex];
+			const lastStep = this.flightProfile[this.flightProfile.length - 1];
 			this._profileState.throttle = lastStep.thrust / 100;
 			this._profileState.relAngleDeg = lastStep.angle;
 			return;
@@ -111,14 +253,8 @@ export class FlightComputer {
 			return;
 		}
 
-		let currentVal = 0;
-		if (stepA.type === 'time') {
-			currentVal = this.flightTime;
-		} else if (stepA.type === 'alt') {
-			currentVal = this.telemetryCache.altM;
-		} else if (stepA.type === 'apogee') {
-			currentVal = this.flightTime - (this.apogeeTime || 0);
-		}
+		const rawVal = this.getTriggerValue(stepA.type);
+		const currentVal = Number.isFinite(rawVal) ? rawVal : 0;
 
 		const progress = (stepB.value !== stepA.value)
 			? Math.max(0, Math.min(1, (currentVal - stepA.value) / (stepB.value - stepA.value)))
@@ -138,13 +274,17 @@ export class FlightComputer {
 	}
 
 	update(sensor) {
+		if (sensor.targetApogeeKm !== undefined) this.targetApogeeKm = Number(sensor.targetApogeeKm) || 0;
+		if (sensor.targetPerigeeKm !== undefined) this.targetPerigeeKm = Number(sensor.targetPerigeeKm) || 0;
+		if (sensor.disableOrbitalCutoff !== undefined) this.disableOrbitalCutoff = Boolean(sensor.disableOrbitalCutoff);
+
 		if (!sensor.isHoldDown || this.flightTime > 0) {
 			this.flightTime += sensor.dt;
 		}
 
 		this._updateTelemetry(sensor);
 
-		// Detect Apogee passage outside atmosphere
+		// Detect Apogee passage outside atmosphere (independent of remaining propellant)
 		if (!sensor.isHoldDown && !this.hasPassedApogee && this.telemetryCache.altM >= FLIGHT_COMPUTER_CONFIG.APOGEE_MIN_ALT_M) {
 			if (this._prevVv > 0 && this.telemetryCache.vV <= 0) {
 				this.hasPassedApogee = true;
@@ -163,7 +303,12 @@ export class FlightComputer {
 
 		const thrustAngleRad = this._computeThrustAngle(sensor);
 		this.currentThrustAngle = thrustAngleRad;
-		const throttle = this._computeThrottle(sensor, this._profileState.throttle);
+		let throttle = 0;
+		if (sensor.stageState === 'ORBITAL_COAST') {
+			this.currentThrottle = 0;
+		} else {
+			throttle = this._computeThrottle(sensor, this._profileState.throttle);
+		}
 
 		// Peak hold and confirmation check for Max-Q pass detection
 		if (!sensor.isHoldDown && !this.hasPassedMaxQ) {
@@ -366,14 +511,15 @@ export class FlightComputer {
 		const progradeAngle = this.telemetryCache.progradeAngle;
 		const zenithAngle = MathUtils.normalizeAngle(this.telemetryCache.gravityAngle + Math.PI);
 
-		// After thrust stops (coasting/orbital phase)
-		if (sensor.burnTime <= 0) {
+		// After thrust stops (coasting/interstage/orbital phase)
+		if (sensor.burnTime <= 0 || sensor.stageState === 'INTERSTAGE_COAST' || sensor.stageState === 'ORBITAL_COAST') {
 			// If payload has separated, orient attitude towards the Sun for solar panel charging
 			if (sensor.isPayloadSeparated && sensor.sunX !== undefined && sensor.sunY !== undefined) {
 				const dx = sensor.sunX - sensor.x;
 				const dy = sensor.sunY - sensor.y;
 				if (dx * dx + dy * dy > FLIGHT_COMPUTER_CONFIG.MIN_SUN_DIST_SQ) {
 					const sunAngle = Math.atan2(dy, dx);
+					this.desiredThrustAngleRad = sunAngle;
 					const turnDiff = MathUtils.normalizeAngle(sunAngle - this.currentThrustAngle);
 					const sunTurnRate = FLIGHT_COMPUTER_CONFIG.SUN_POINTING_TURN_RATE_PER_SEC;
 					const maxTurn = sunTurnRate * sensor.dt;
@@ -387,6 +533,7 @@ export class FlightComputer {
 			}
 
 			// Otherwise track prograde direction smoothly (rocket coasting)
+			this.desiredThrustAngleRad = progradeAngle;
 			const turnDiff = MathUtils.normalizeAngle(progradeAngle - this.currentThrustAngle);
 			const coastTurnRate = FLIGHT_COMPUTER_CONFIG.COAST_TURN_RATE_PER_SEC;
 			const maxTurn = coastTurnRate * sensor.dt;
@@ -400,6 +547,7 @@ export class FlightComputer {
 
 		// Lock zenith angle while holding down
 		if (sensor.isHoldDown) {
+			this.desiredThrustAngleRad = zenithAngle;
 			return zenithAngle;
 		}
 
@@ -408,6 +556,7 @@ export class FlightComputer {
 		// Tower Clearance: vertical ascent only within first 10s AND under 1000m
 		if (this.flightTime < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_TIME
 			&& this.telemetryCache.altM < FLIGHT_COMPUTER_CONFIG.TOWER_CLEARANCE_MAX_ALT) {
+			this.desiredThrustAngleRad = zenithAngle;
 			let diff = MathUtils.normalizeAngle(zenithAngle - this.currentThrustAngle);
 			const maxTurn = FLIGHT_COMPUTER_CONFIG.PITCH_KICK_TURN_RATE * sensor.dt;
 
@@ -453,7 +602,46 @@ export class FlightComputer {
 		if (angleDiff > maxAoA) { angleDiff = maxAoA; }
 		if (angleDiff < -maxAoA) { angleDiff = -maxAoA; }
 
-		const safeTargetAngle = MathUtils.normalizeAngle(progradeAngle + angleDiff);
+		let safeTargetAngle = MathUtils.normalizeAngle(progradeAngle + angleDiff);
+
+		// Inertial ORBIT_ASSIST Closed-Loop Terminal Guidance (Circular / Near-Circular Targets)
+		const isCircularTarget = Boolean(this.targetApogeeKm > 0 && this.targetPerigeeKm > 0 && (this.targetApogeeKm / this.targetPerigeeKm) <= 1.5);
+		if (isCircularTarget && !this.disableOrbitalCutoff && sensor.stageState === 'STG_BURNING' && sensor.refBody && sensor.refBody.mass > 0) {
+			const dx = sensor.x - sensor.refBody.x;
+			const dy = sensor.y - sensor.refBody.y;
+			const r = Math.hypot(dx, dy);
+			if (r > sensor.refBody.radius) {
+				const dvx = sensor.vx - sensor.refBody.vx;
+				const dvy = sensor.vy - sensor.refBody.vy;
+				const uRx = dx / r;
+				const uRy = dy / r;
+				const vr = dvx * uRx + dvy * uRy;
+				const vHx = dvx - vr * uRx;
+				const vHy = dvy - vr * uRy;
+				const vHMag = Math.hypot(vHx, vHy);
+				const altM = r - sensor.refBody.radius;
+				const GM = PHYSICS.G * sensor.refBody.mass;
+				const vSq = dvx * dvx + dvy * dvy;
+				const E = 0.5 * vSq - GM / r;
+				const h = dx * dvy - dy * dvx;
+				const ecc = Math.sqrt(Math.max(0, 1 + (2 * E * h * h) / (GM * GM)));
+				const apKm = E < 0 ? (((-GM / (2 * E)) * (1 + ecc)) - sensor.refBody.radius) / 1000 : Infinity;
+
+				if (altM >= 140000 && vHMag >= 4200 && (apKm >= this.targetApogeeKm * 0.88 || E >= 0)) {
+					const uHx = vHx / vHMag;
+					const uHy = vHy / vHMag;
+					const rTgt = sensor.refBody.radius + ((this.targetApogeeKm + this.targetPerigeeKm) * 0.5) * 1000;
+					const apOver = Number.isFinite(apKm) ? Math.max(0, (apKm - this.targetApogeeKm) * 1000) : Math.max(0, altM);
+					const vrTgt = Math.max(-85, Math.min(14, ((rTgt - r) - 1.1 * apOver) / 130));
+					const gammaCmd = Math.max(-0.30, Math.min(0.45, (vrTgt - vr) / 650));
+					const tx = Math.cos(gammaCmd) * uHx + Math.sin(gammaCmd) * uRx;
+					const ty = Math.cos(gammaCmd) * uHy + Math.sin(gammaCmd) * uRy;
+					safeTargetAngle = Math.atan2(ty, tx);
+				}
+			}
+		}
+
+		this.desiredThrustAngleRad = safeTargetAngle;
 
 		let turnDiff = MathUtils.normalizeAngle(safeTargetAngle - this.currentThrustAngle);
 
