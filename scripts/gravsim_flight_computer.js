@@ -386,7 +386,7 @@ export class FlightComputer {
 				// Calculate surface relative velocity
 				let hostVx = sensor.refBody.vx; // m/s
 				let hostVy = sensor.refBody.vy; // m/s
-				const refParam = sensor.refBody.param || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam(sensor.refBody.name) : null);
+				const refParam = sensor.refBody.param || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.peekObjectParam(sensor.refBody.name) : null);
 				if (refParam && refParam.ROTATION_PERIOD) {
 					const omega = (2 * Math.PI) / refParam.ROTATION_PERIOD;
 					hostVx += -omega * dy;

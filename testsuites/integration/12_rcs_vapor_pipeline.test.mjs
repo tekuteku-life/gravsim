@@ -7,8 +7,9 @@
  * plus a short real flight through PhysicsEngine (Falcon 9 / LEO preset) in which the
  * vehicle goes transonic and RCS / ullage flags appear around staging.
  *
- * Design:    docs/design/2026-11-20_trajectory_fx_flightplan.md §3.2, §3.3, §4.4
- * Test plan: docs/design/2026-11-20_trajectory_fx_flightplan_test_plan.md §3-C
+ * Design:    docs/design/2026-11-20_trajectory_fx_flightplan.md §3.2, §3.3, §4.4; the nozzle and cone positions and sizes
+ *            of docs/design/2026-11-23_vapor_cone_rcs_anchors.md §3.4-§3.6 (they replace the fractions of the stack length)
+ * Test plan: docs/design/2026-11-20_trajectory_fx_flightplan_test_plan.md §3-C; 2026-11-23 design §5.2
  * Expected values come from the design formulas and tables, not from implementation output.
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
@@ -69,23 +70,82 @@ const designAttitudeJets = ({ err, pres, thrusting, timer, tPulse }) => {
 	}
 	return { cw, ccw, allow };
 };
+/**
+ * The jets of the set flags: the union of the table rows of layout.rcs (2026-11-23 §3.6, the nozzles drawColdGasRcs
+ * draws). layout.rcs itself is checked against the design by assertLayoutDesign; designF9 has the same shape, so the
+ * drawn jets are also compared with the design nozzles directly.
+ */
 const designNozzles = (layout, flags) => {
-	const L = Math.max(1, layout.xMax - layout.xMin); // §3.2-3
-	const xFwd = layout.xMin + L * 0.84;
-	const xAft = layout.xMin + L * 0.14;
-	const y = layout.halfWidth;
-	const out = [];
-	if (flags.cw) out.push({ x: xFwd, y: -y, ux: 0, uy: -1 }, { x: xAft, y: +y, ux: 0, uy: +1 });
-	if (flags.ccw) out.push({ x: xFwd, y: +y, ux: 0, uy: +1 }, { x: xAft, y: -y, ux: 0, uy: -1 });
-	if (flags.ullage) {
-		out.push({ x: xAft, y: +y, ux: -Math.cos(0.28), uy: +Math.sin(0.28) });
-		out.push({ x: xAft, y: -y, ux: -Math.cos(0.28), uy: -Math.sin(0.28) });
-	}
-	return out;
+	const rcs = layout.rcs;
+	if (!rcs) return [];
+	return [...(flags.cw ? rcs.cw : []), ...(flags.ccw ? rcs.ccw : []), ...(flags.ullage ? rcs.ullage : [])];
 };
 const assertNear = (actual, expected, tol, msg) => {
 	assert.ok(Number.isFinite(actual), `${msg}: expected a finite number, got ${actual}`);
 	assert.ok(Math.abs(actual - expected) <= tol, `${msg}: expected ${expected}, got ${actual} (|diff| ${Math.abs(actual - expected)} > ${tol})`);
+};
+/**
+ * 2026-11-23 §3.2 / §3.4 / §3.6 for the 2-stage Falcon 9 stack (no SRB) at screen radius R: the nose shoulder (fairing base,
+ * else the front of the exposed payload), the interstage shoulder (forward edge of the interstage, first-stage flight only)
+ * and the lateral RCS nozzles on the wall of the current (lowest drawn) stage.
+ */
+const designF9 = (stageIndex, fairingAttached, R) => {
+	const m = VIS.MODULES;
+	const al = VIS.ALIGNMENT;
+	const c = VIS.COLD_GAS_RCS;
+	const r1 = R * m.STAGE1_RADIUS_RATIO;
+	const l1 = R * m.STAGE1_LENGTH_RATIO;
+	const r2 = R * m.STAGE2_RADIUS_RATIO;
+	const l2 = R * m.STAGE2_LENGTH_RATIO;
+	const lInter = R * m.INTERSTAGE_LENGTH_RATIO;
+	const lFairing = R * m.FAIRING_LENGTH_RATIO;
+	const stg2X = stageIndex === 0 ? R * al.BASE_X_STAGE1_RATIO : R * al.BASE_X_UPPER_RATIO;
+	const fairingX = stg2X + l2;
+	const body = stageIndex === 0 ? { x0: (stg2X - lInter) - l1, len: l1, r: r1, fins: true } : { x0: stg2X, len: l2, r: r2, fins: false };
+	const h = body.r;
+	const plumeLen = Math.max(c.MIN_PLUME_PX, h * c.PLUME_LEN_WIDTH_RATIO);
+	// Free wall: the stage minus its fins (they stand out by r * FIN_SPAN_RATIO), widened by min(e, plumeLen) tan(spread).
+	// The neighbour forward of the wall (interstage r1 on stage 1, fairing r2 on stage 2) is not wider than the wall.
+	const lo = body.fins
+		? body.x0 + body.len * m.FIN_BASE_RATIO + Math.min(body.r * m.FIN_SPAN_RATIO, plumeLen) * Math.tan(c.PLUME_SPREAD_RAD)
+		: body.x0;
+	const hi = body.x0 + body.len;
+	const xFwd = lo + (hi - lo) * c.FWD_STATION_FRACTION;
+	const xAft = lo + (hi - lo) * c.AFT_STATION_FRACTION;
+	const ull = (sign) => ({ ux: -Math.cos(c.ULLAGE_CANT_RAD), uy: sign * Math.sin(c.ULLAGE_CANT_RAD) });
+	const busW = r2 * m.SATELLITE_BUS_W_RATIO;
+	const busH = r2 * m.SATELLITE_BUS_H_RATIO;
+	return {
+		noseShoulder: fairingAttached ? { x: fairingX, halfWidth: r2 } : { x: fairingX + lFairing * al.PAYLOAD_OFFSET_RATIO + busW / 2, halfWidth: busH / 2 },
+		interstageShoulder: stageIndex === 0 ? { x: stg2X, halfWidth: r1 } : null,
+		rcs: {
+			plumeLen,
+			cw: [{ x: xFwd, y: -h, ux: 0, uy: -1 }, { x: xAft, y: h, ux: 0, uy: 1 }],
+			ccw: [{ x: xFwd, y: h, ux: 0, uy: 1 }, { x: xAft, y: -h, ux: 0, uy: -1 }],
+			ullage: [{ x: xAft, y: h, ...ull(1) }, { x: xAft, y: -h, ...ull(-1) }]
+		}
+	};
+};
+/** The drawn layout's anchors equal the design ones (to 1e-9 px). */
+const assertLayoutDesign = (layout, stageIndex, fairingAttached, R, msg) => {
+	const d = designF9(stageIndex, fairingAttached, R);
+	for (const k of ['noseShoulder', 'interstageShoulder']) {
+		if (d[k] === null) {
+			assert.equal(layout[k], null, `${msg}: ${k} is null`);
+			continue;
+		}
+		assert.ok(layout[k], `${msg}: layout.${k}`);
+		assertNear(layout[k].x, d[k].x, 1e-9, `${msg}: ${k}.x`);
+		assertNear(layout[k].halfWidth, d[k].halfWidth, 1e-9, `${msg}: ${k}.halfWidth`);
+	}
+	assert.ok(layout.rcs, `${msg}: layout.rcs`);
+	assertNear(layout.rcs.plumeLen, d.rcs.plumeLen, 1e-9, `${msg}: rcs.plumeLen`);
+	for (const k of ['cw', 'ccw', 'ullage']) {
+		assert.equal(layout.rcs[k].length, 2, `${msg}: rcs.${k}`);
+		for (const [i, n] of d.rcs[k].entries()) {
+			for (const f of ['x', 'y', 'ux', 'uy']) assertNear(layout.rcs[k][i][f], n[f], 1e-9, `${msg}: rcs.${k}[${i}].${f}`);
+		}
+	}
 };
 
 /*******************************************************************
@@ -141,19 +201,23 @@ const assertPlumesMatch = (actual, expected, msg) => {
 		pool.splice(idx, 1);
 	}
 };
+/**
+ * 2026-11-23 §3.5: the primary cone opens at layout.noseShoulder, the secondary (intensity >= 0.55) at
+ * layout.interstageShoulder when the stack has an interstage; each is sized by the radius h at its vertex.
+ */
 const assertConesMatch = (cones, layout, mach, pres, msg) => {
 	const v = designVapor(mach, pres);
 	if (!v.active) {
 		assert.equal(cones.length, 0, `${msg}: inactive vapor draws nothing`);
 		return;
 	}
-	const L = Math.max(1, layout.xMax - layout.xMin); // §3.3-1
-	const hw = layout.halfWidth;
-	const expected = [{ x: layout.xMin + 0.72 * L, scale: 1.0 }];
-	if (v.intensity >= 0.55) expected.push({ x: layout.xMin + 0.44 * L, scale: 0.78 });
+	assert.ok(layout.noseShoulder, `${msg}: layout.noseShoulder`);
+	const expected = [{ anchor: layout.noseShoulder, scale: 1.0 }];
+	if (v.intensity >= 0.55 && layout.interstageShoulder) expected.push({ anchor: layout.interstageShoulder, scale: 0.78 });
 	assert.equal(cones.length, expected.length, `${msg}: cone count (intensity ${v.intensity})`);
 	for (const [i, e] of expected.entries()) {
-		assertNear(cones[i].xVertex, e.x, 1e-9, `${msg}: cone ${i} station`);
+		const hw = e.anchor.halfWidth;
+		assertNear(cones[i].xVertex, e.anchor.x, 1e-9, `${msg}: cone ${i} station`);
 		assertNear(cones[i].coneLen, hw * 2.2 * (0.75 + 0.5 * v.intensity) * e.scale, 1e-9, `${msg}: cone ${i} length`);
 		assertNear(cones[i].halfW, Math.min(hw * 2.8, hw * (1.1 + 1.35 * v.intensity * Math.sin(v.machAngleRad))) * e.scale, 1e-9, `${msg}: cone ${i} half width`);
 	}
@@ -260,6 +324,23 @@ describe('Integration 12-1: CalcRocket -> WorkerBridge -> ObjectManager -> Rocke
 		const { earth, rocket } = makeWorkerPair(0.95, 7000);
 		assertNear(rocket.mach, 0.95, 1e-9, 'worker Mach from the design speed of sound');
 		assertNear(rocket.ambientPresRatio, Math.exp(-7000 / 8500), 1e-15, 'worker pressure ratio');
+
+		// The first-stage flight at the same Mach: the stack has an interstage, so intensity ~0.81 >= 0.55 adds the
+		// secondary cone at its forward edge (2026-11-23 §3.5, R2)
+		const { om, main } = makeMainWorld([{ id: 1, name: 'Earth', massT: 5.972e21, radius: R_E }]);
+		transfer(om, [earth, rocket]);
+		assert.equal(main.telemetry.stageIndex, 0, 'input: first-stage flight');
+		const R = 30;
+		const ctx0 = createRecordingCtx();
+		RocketRenderer.draw(ctx0, main, 0, 0, R, 1.0);
+		const cones0 = extractCones(ctx0);
+		assert.equal(cones0.length, 2, 'intensity ~0.81 >= 0.55 with an interstage -> secondary cone');
+		assertNear(cones0[0].xVertex, 1.6 * R, 1e-9, 'primary cone at the fairing base (2026-11-23 §3.4: 1.600 R)');
+		assertNear(cones0[1].xVertex, 0.4 * R, 1e-9, 'secondary cone at the interstage forward edge (0.400 R)');
+		const layout0 = RocketRenderer._computeVisualLayout(main, R, VIS);
+		assertLayoutDesign(layout0, 0, true, R, 'first-stage layout');
+		assertConesMatch(cones0, layout0, main.mach, main.ambientPresRatio, 'first-stage vapor cones');
+
 		rocket._activateStage(1);
 		rocket.stageState = 'INTERSTAGE_COAST';
 		rocket.stgTimer = 1.0;
@@ -269,7 +350,6 @@ describe('Integration 12-1: CalcRocket -> WorkerBridge -> ObjectManager -> Rocke
 		assert.deepEqual({ cw: rocket.rcsCw, ccw: rocket.rcsCcw, ullage: rocket.rcsUllage }, { cw: true, ccw: false, ullage: true },
 			'err 0.5 rad (continuous CW, zero thrust allows RCS), 2.0 - 1.0 s <= 1.5 s (ullage)');
 
-		const { om, main } = makeMainWorld([{ id: 1, name: 'Earth', massT: 5.972e21, radius: R_E }]);
 		const buffer = transfer(om, [earth, rocket]);
 		const off = slotOf(buffer, ROCKET_ID);
 		assert.ok(off >= 0);
@@ -284,14 +364,44 @@ describe('Integration 12-1: CalcRocket -> WorkerBridge -> ObjectManager -> Rocke
 		assert.equal(main.stageState, 'INTERSTAGE_COAST');
 		assert.equal(main.telemetry.stageIndex, 1);
 
-		const R = 30;
 		const ctx = createRecordingCtx();
 		RocketRenderer.draw(ctx, main, 0, 0, R, 1.0);
+		assertPlumesMatch(extractPlumes(ctx), designNozzles(designF9(1, true, R), { cw: true, ccw: false, ullage: true }), 'drawn RCS jets at the design nozzles');
 		const layout = RocketRenderer._computeVisualLayout(main, R, VIS);
+		assertLayoutDesign(layout, 1, true, R, 'interstage-coast layout (second stage, fairing on)');
 		assertPlumesMatch(extractPlumes(ctx), designNozzles(layout, { cw: true, ccw: false, ullage: true }), 'drawn RCS jets');
 		const cones = extractCones(ctx);
 		assertConesMatch(cones, layout, main.mach, main.ambientPresRatio, 'drawn vapor cones');
-		assert.equal(cones.length, 2, 'intensity ~0.81 >= 0.55 -> secondary cone');
+		assert.equal(cones.length, 1, 'the second-stage stack has no interstage: the primary cone only, even at intensity ~0.81 (2026-11-23 R2)');
+		assertNear(cones[0].xVertex, 0.6 * R, 1e-9, 'primary cone at the fairing base of the second-stage stack (0.600 R)');
+	});
+
+	it('design oracle: the Falcon 9 anchors reproduce the 2026-11-23 §3.4 table, and the main-thread layout follows it (R = 1)', () => {
+		// [stage index, fairing on, noseShoulder, interstageShoulder, RCS forward / aft / wall] (table values, 3 decimals)
+		const rows = [
+			[0, true, [1.600, 0.650], [0.400, 0.700], [-0.283, -1.738, 0.700]],
+			[0, false, [2.440, 0.5525], [0.400, 0.700], [-0.283, -1.738, 0.700]],
+			[1, true, [0.600, 0.650], null, [0.408, -0.432, 0.650]],
+			[1, false, [1.440, 0.5525], null, [0.408, -0.432, 0.650]]
+		];
+		for (const [stg, fairing, nose, inter, rcs] of rows) {
+			const d = designF9(stg, fairing, 1);
+			const label = `stage ${stg}, fairing ${fairing}`;
+			assertNear(d.noseShoulder.x, nose[0], 5e-4, `${label}: noseShoulder.x`);
+			assertNear(d.noseShoulder.halfWidth, nose[1], 5e-5, `${label}: noseShoulder.halfWidth`);
+			if (inter) {
+				assertNear(d.interstageShoulder.x, inter[0], 5e-4, `${label}: interstageShoulder.x`);
+				assertNear(d.interstageShoulder.halfWidth, inter[1], 5e-4, `${label}: interstageShoulder.halfWidth`);
+			} else {
+				assert.equal(d.interstageShoulder, null, `${label}: no interstage`);
+			}
+			assertNear(d.rcs.cw[0].x, rcs[0], 5e-4, `${label}: forward nozzle`);
+			assertNear(d.rcs.cw[1].x, rcs[1], 5e-4, `${label}: aft nozzle`);
+			assertNear(d.rcs.cw[1].y, rcs[2], 5e-4, `${label}: wall`);
+		}
+		// The main-thread rocket of the fixtures (first stage, fairing on) has exactly these anchors
+		const { main } = makeMainWorld([{ id: 1, name: 'Earth', massT: 5.972e21, radius: R_E }]);
+		assertLayoutDesign(RocketRenderer._computeVisualLayout(main, 1, VIS), 0, true, 1, 'fixture rocket at R = 1');
 	});
 
 	it('every RCS bit combination survives the round trip and is drawn as the union of the table rows', () => {
@@ -306,7 +416,10 @@ describe('Integration 12-1: CalcRocket -> WorkerBridge -> ObjectManager -> Rocke
 			assert.deepEqual(mainTmFlags(main), flags, `telemetry flags for mask ${mask}`);
 			const ctx = createRecordingCtx();
 			RocketRenderer.draw(ctx, main, 0, 0, 25, 1.0);
-			assertPlumesMatch(extractPlumes(ctx), designNozzles(RocketRenderer._computeVisualLayout(main, 25, VIS), flags), `drawn mask ${mask}`);
+			assertPlumesMatch(extractPlumes(ctx), designNozzles(designF9(0, true, 25), flags), `drawn mask ${mask} at the design nozzles`);
+			const layout = RocketRenderer._computeVisualLayout(main, 25, VIS);
+			assertLayoutDesign(layout, 0, true, 25, `layout for mask ${mask}`);
+			assertPlumesMatch(extractPlumes(ctx), designNozzles(layout, flags), `drawn mask ${mask}`);
 			assert.equal(extractCones(ctx).length, 0, 'Mach 0.5 -> no vapor');
 		}
 	});
@@ -643,6 +756,8 @@ describe('Integration 12-3: real Falcon 9 / LEO flight through PhysicsEngine', (
 		let coneSteps = 0;
 		let doubleConeSteps = 0;
 		for (const s of drawnSteps) {
+			assertPlumesMatch(s.drawn.plumes, designNozzles(designF9(s.stageIndex, !s.fairingSep, 30), s.worker), `t ${s.t}: jets at the design nozzles`);
+			assertLayoutDesign(s.drawn.layout, s.stageIndex, !s.fairingSep, 30, `t ${s.t}: layout (stage ${s.stageIndex}, fairing separated ${s.fairingSep})`);
 			assertPlumesMatch(s.drawn.plumes, designNozzles(s.drawn.layout, s.worker), `t ${s.t}: jets`);
 			assertConesMatch(s.drawn.cones, s.drawn.layout, s.mach, s.pres, `t ${s.t}: cones`);
 			if (s.drawn.plumes.length > 0) jetSteps++;
@@ -654,7 +769,13 @@ describe('Integration 12-3: real Falcon 9 / LEO flight through PhysicsEngine', (
 		assert.ok(coneSteps >= 10 && doubleConeSteps > 0, `cones drawn on ${coneSteps} steps (${doubleConeSteps} with the secondary)`);
 		const ullStep = drawnSteps.find(s => s.worker.ullage && s.state === 'INTERSTAGE_COAST');
 		assert.ok(ullStep, 'ullage drawn during the interstage coast');
-		assert.equal(ullStep.drawn.layout.halfWidth, 30 * VIS.MODULES.STAGE2_RADIUS_RATIO, 'upper-stage layout after separation');
+		// The jets leave the wall of the second stage (its radius), not the widest radius of the stack
+		const wall = 30 * VIS.MODULES.STAGE2_RADIUS_RATIO;
+		const nozzles = designNozzles(ullStep.drawn.layout, { cw: true, ccw: true, ullage: true });
+		assert.equal(nozzles.length, 6, 'every nozzle of layout.rcs');
+		for (const n of nozzles) {
+			assert.equal(Math.abs(n.y), wall, 'upper-stage layout after separation: the layout.rcs wall is the stage-2 radius');
+		}
 	});
 
 	it('the live main-thread rocket after the flight (vacuum) draws no vapor cone and reports Mach 0', () => {
@@ -665,7 +786,10 @@ describe('Integration 12-3: real Falcon 9 / LEO flight through PhysicsEngine', (
 		const ctx = createRecordingCtx();
 		RocketRenderer.draw(ctx, main, 0, 0, 30, 1.0);
 		assert.equal(extractCones(ctx).length, 0);
-		assertPlumesMatch(extractPlumes(ctx), designNozzles(RocketRenderer._computeVisualLayout(main, 30, VIS), mainFlags(main)), 'final jets');
+		assertPlumesMatch(extractPlumes(ctx), designNozzles(designF9(rocket.currentStageIndex, !rocket.fairing?.isSeparated, 30), mainFlags(main)), 'final jets at the design nozzles');
+		const layout = RocketRenderer._computeVisualLayout(main, 30, VIS);
+		assertLayoutDesign(layout, rocket.currentStageIndex, !rocket.fairing?.isSeparated, 30, 'final layout');
+		assertPlumesMatch(extractPlumes(ctx), designNozzles(layout, mainFlags(main)), 'final jets');
 	});
 
 	it('SoundEffects reads the synchronised telemetry.mach of the live rocket (TM_MACH -> telemetry -> whine)', () => {

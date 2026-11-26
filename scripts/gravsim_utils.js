@@ -337,3 +337,84 @@ export class AeroUtils {
 		};
 	}
 }
+
+/** Largest SRB count the rules accept: the most strap-ons a real vehicle has flown (Delta II, 9). */
+const MAX_BOOSTER_COUNT = 9;
+
+/**
+ * Stack state and SRB rules of a rocket. The renderer (both levels of detail), the smoke emission, the HUD (card,
+ * stage label, annunciator), the Worker's CalcRocket and the propellant sizing use these single rules
+ * (design 2026-11-23 §3.1).
+ */
+export class RocketStackUtils {
+	/**
+	 * Stack state of a rocket. The HUD passes the telemetry it shows; everything else uses the rocket's own.
+	 * The stage index is normalised by normalizeStageIndex, the rule of the save / restore paths (null / NaN read as
+	 * the first stage, as the HUD always did). Out of the payload phase the current stage is one of the vehicle's
+	 * stages: an index at or past the stage count (a disableStaging vehicle or an object without stages, whose index
+	 * never makes the payload phase) reads as the last stage, so that both levels of detail and the HUD fly the same
+	 * stage.
+	 * @param {any} rocket
+	 * @param {any} [telemetry]
+	 * @returns {{ curStgIdx: number, totalStg: number, isPayloadOnly: boolean, hasFairing: boolean }}
+	 */
+	static resolveStackState(rocket, telemetry = rocket?.telemetry) {
+		const totalStg = telemetry?.totalStages || rocket?.stages?.length || 1;
+		const stageIndex = RocketStackUtils.normalizeStageIndex(
+			telemetry?.stageIndex !== undefined ? telemetry.stageIndex : rocket?.currentStageIndex, totalStg
+		);
+		const isPayloadOnly = !rocket?.disableStaging && Boolean(
+			rocket?.isPayloadSeparated || telemetry?.isPayloadSeparated || (rocket?.stages && stageIndex >= totalStg)
+		);
+		const curStgIdx = isPayloadOnly ? stageIndex : Math.min(stageIndex, totalStg - 1);
+		const hasFairing = Boolean(
+			rocket?.disableStaging || (rocket?.fairing?.enabled && !telemetry?.isFairingSeparated && !rocket?.fairing?.isSeparated)
+		);
+		return { curStgIdx, totalStg, isPayloadOnly, hasFairing };
+	}
+
+	/**
+	 * Stage index of a rocket from a save file, a Worker restore or the telemetry: a whole number from 0 to the stage
+	 * count (the count is the payload phase, one past the last stage). A value that is not a number reads as 0, a
+	 * fraction is rounded down, and the result is clamped. A disableStaging vehicle never separates, so it never
+	 * reaches the payload phase: at most its last stage. The main-thread load (ObjectManager.loadState), the Worker
+	 * restore (CalcRocket), Rocket.mass and resolveStackState use this one rule (design 2026-11-23 §3.1).
+	 * @param {any} value
+	 * @param {number} stageCount
+	 * @param {boolean} [disableStaging]
+	 * @returns {number}
+	 */
+	static normalizeStageIndex(value, stageCount, disableStaging = false) {
+		const index = Math.floor(Number(value) || 0);
+		const last = disableStaging ? stageCount - 1 : stageCount;
+		return Math.max(0, Math.min(index, last));
+	}
+
+	/**
+	 * The SRB configuration of a main-thread rocket object: its `boosters`, the configuration ObjectManager sends to
+	 * the Worker (the launcher and the preset application merge `rendering.boosters` into it).
+	 * @param {any} rocket
+	 * @returns {any}
+	 */
+	static resolveBoosters(rocket) {
+		return rocket?.boosters || null;
+	}
+
+	/**
+	 * SRB count of a configuration, an integer from 0 to MAX_BOOSTER_COUNT: its count (rounded down, capped) when it is a
+	 * finite number of at least 1, else 2 for a configuration with a finite positive burn time (the count the Worker's
+	 * separation has always used), else 0. The cap keeps an absurd count from a preset or an edited save from hanging
+	 * the loops over the SRBs. Values that are not finite are invalid: the Worker receives the configuration as a JSON
+	 * copy, where they become null, so treating them as missing keeps the drawing, the HUD and the physics on the same
+	 * count (design 2026-11-23 §3.1, the user's decision 2026-11-24).
+	 * @param {any} boosters
+	 * @returns {number}
+	 */
+	static boosterCount(boosters) {
+		if (!boosters) return 0;
+		const count = Number(boosters.count);
+		if (Number.isFinite(count) && count >= 1) return Math.min(MAX_BOOSTER_COUNT, Math.floor(count));
+		const burnTimeSec = Number(boosters.burnTimeSec);
+		return (Number.isFinite(burnTimeSec) && burnTimeSec > 0) ? 2 : 0;
+	}
+}

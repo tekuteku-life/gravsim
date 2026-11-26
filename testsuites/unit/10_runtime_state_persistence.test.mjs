@@ -244,14 +244,23 @@ describe('Unit 10-1: CalcRocket restore-branch contract (§4.1)', () => {
 describe('Unit 10-2: CalcRocket restore procedure (§3.5-1)', () => {
 	const restore = (td, masses) => makeCalcRocket({ restoredRuntimeState: true, ...td }, masses);
 
-	it('clamps currentStageIndex = clamp(Number(x) || 0, 0, totalStages) (§3.5-1 Rev 6.10)', () => {
+	it('clamps currentStageIndex = clamp(floor(Number(x) || 0), 0, totalStages) (§3.5-1 Rev 6.10; rounded down: design 2026-11-23 §3.1)', () => {
 		const cases = [
 			[undefined, 0], [0, 0], [1, 1], [2, 2], [3, 2], [7, 2], [Infinity, 2], [-1, 0], [-100, 0], [-Infinity, 0],
-			[NaN, 0], [null, 0], ['1', 1], ['2', 2], ['', 0], ['abc', 0], [true, 1], [false, 0]
+			[NaN, 0], [null, 0], ['1', 1], ['2', 2], ['', 0], ['abc', 0], [true, 1], [false, 0],
+			// A fraction is rounded down (it stayed a fraction and stages[0.5] threw on main; Gate 3 G3-5-01)
+			[0.5, 0], [1.5, 1], [1.999, 1], ['1.5', 1], [-0.5, 0]
 		];
 		for (const [input, expected] of cases) {
 			const r = restore({ currentStageIndex: input, stageState: 'STG_BURNING', burnTime: 10 }, { dry: 4.5, fuel: 1, oxid: 1 });
 			assert.equal(r.currentStageIndex, expected, `currentStageIndex ${input}`);
+		}
+	});
+
+	it('a disableStaging vehicle is restored at most on its last stage (it never separates; design 2026-11-23 §3.1)', () => {
+		for (const [input, expected] of [[0, 0], [1, 1], [2, 1], [7, 1], [Infinity, 1], [-1, 0], [0.5, 0]]) {
+			const r = restore({ currentStageIndex: input, disableStaging: true, stageState: 'STG_BURNING', burnTime: 10 }, { dry: 4.5, fuel: 1, oxid: 1 });
+			assert.equal(r.currentStageIndex, expected, `disableStaging, currentStageIndex ${input}`);
 		}
 	});
 
@@ -2265,18 +2274,25 @@ describe('Unit 10-12: removed dead code (§3.5-2) and redundant code (§4.9)', (
 	});
 
 	it('§4.9: _computeVisualLayout returns no totalLength in any layout branch', () => {
+		// The effect anchors only (design 2026-11-23 §3.4): the hull extent keys xMin / xMax / halfWidth are gone with
+		// totalLength (§4.9), in every branch (stack of 1-3 stages, payload only, fairing on / off)
 		const layouts = [
 			{ stages: [{}, {}], currentStageIndex: 0, fairing: { enabled: true } },
 			{ stages: [{}, {}], currentStageIndex: 1 },
 			{ stages: [{}, {}], isPayloadSeparated: true },
 			{ stages: [{}], currentStageIndex: 0 },
+			{ stages: [{}], currentStageIndex: 0, fairing: { enabled: true } },
 			{ stages: [{}, {}, {}], currentStageIndex: 0 },
 			{ stages: [{}, {}, {}], currentStageIndex: 1 },
-			{ stages: [{}, {}, {}], currentStageIndex: 2 }
+			{ stages: [{}, {}, {}], currentStageIndex: 2 },
+			{ stages: [{}, {}, {}], currentStageIndex: 3 }
 		];
 		for (const rocket of layouts) {
 			const out = RocketRenderer._computeVisualLayout(rocket, 10);
-			assert.deepEqual(Object.keys(out).sort(), ['halfWidth', 'screenRadius', 'xMax', 'xMin'], JSON.stringify(rocket));
+			assert.deepEqual(Object.keys(out).sort(), ['interstageShoulder', 'noseShoulder', 'rcs', 'screenRadius'], JSON.stringify(rocket));
+			for (const removed of ['totalLength', 'xMin', 'xMax', 'halfWidth']) {
+				assert.equal(Object.prototype.hasOwnProperty.call(out, removed), false, `${removed} absent: ${JSON.stringify(rocket)}`);
+			}
 		}
 	});
 

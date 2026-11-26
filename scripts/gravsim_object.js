@@ -8,7 +8,7 @@ import {
 import { ROCKET_VISUAL } from './gravsim_preset_manager.js';
 import { Trajectory } from './gravsim_trajectory.js';
 import { EffectTrail } from './gravsim_effect_trail.js';
-import { UnitConvertUtils, isLiveObject } from './gravsim_utils.js';
+import { UnitConvertUtils, isLiveObject, RocketStackUtils } from './gravsim_utils.js';
 import { RocketRenderer } from './gravsim_rocket_renderer.js';
 import { TrajectoryPredictor } from './gravsim_trajectory_predictor.js';
 
@@ -235,7 +235,7 @@ export class CelestialBody extends GravSimObject {
 	set mass(val) { this._mass = val; }
 
 	_drawEffects(ctx, x, y, screenRadius, zoomScale) {
-		const param = this.param || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam(this.name) : null);
+		const param = this.param || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.peekObjectParam(this.name) : null);
 		
 		if (param && param.ATM_COLOR && param.ATM_LIMIT_ALT) {
 			const atmThicknessPx = (param.ATM_LIMIT_ALT / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
@@ -363,8 +363,8 @@ export class Rocket extends GravSimObject {
 				total += (this.fairing.massT || 0);
 			}
 			total += (this.dryMass + this.fuelMass + this.oxidMass);
-			// Same normalization as the CalcRocket restore (non-numbers -> 0, clamped to [0, stage count])
-			const cur = Math.max(0, Math.min(Number(this.currentStageIndex) || 0, this.stages.length));
+			// Same normalization as the CalcRocket restore (RocketStackUtils.normalizeStageIndex, design 2026-11-23 §3.1)
+			const cur = RocketStackUtils.normalizeStageIndex(this.currentStageIndex, this.stages.length, this.disableStaging);
 			for (let i = cur + 1; i < this.stages.length; i++) {
 				const stg = this.stages[i];
 				total += (stg.dryMassT + stg.fuelMassT + stg.oxidMassT);
@@ -377,12 +377,24 @@ export class Rocket extends GravSimObject {
 	set mass(val) {}
 
 	/**
+	 * The rocket's drawing scale in metres (the screen radius R corresponds to this length): its base radius, else the
+	 * Rocket parameter's radius. The drawing and the smoke emission share it (design 2026-11-23 §3.7).
+	 * @returns {number}
+	 */
+	_visualBaseRadiusM() {
+		// The fallback is only looked up when needed, from the shared read-only parameters (design 2026-11-23 §3.11-5)
+		return this.baseRadiusM
+			|| this.param?.RADIUS
+			|| (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.peekObjectParam('Rocket')?.RADIUS : 63)
+			|| 63;
+	}
+
+	/**
 	 * Override _getDrawRadius for Rocket to prevent pixel collapsing
 	 * and maintain balanced visual scale across all zoom levels.
 	 */
 	_getDrawRadius(zoomScale) {
-		const defaultRocketRadius = this.param?.RADIUS || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam('Rocket')?.RADIUS : 63) || 63;
-		const baseRadiusM = this.baseRadiusM || defaultRocketRadius;
+		const baseRadiusM = this._visualBaseRadiusM();
 		const realRadiusPx = (baseRadiusM / PHYSICS.METERS_PER_AU) * RENDER.DISTANCE_SCALE;
 		const physicalScreenRadius = realRadiusPx * zoomScale;
 		const minSize = ROCKET_VISUAL.MIN_SCREEN_RADIUS || 5.5;
@@ -444,58 +456,14 @@ export class Rocket extends GravSimObject {
 				}
 			}
 
-			// Offset to nozzle & flame tip
-			const curStgIdx = this.telemetry?.stageIndex !== undefined ? this.telemetry.stageIndex : (this.currentStageIndex || 0);
-			const totalStg = this.telemetry?.totalStages || this.stages?.length || 2;
-			const align = ROCKET_VISUAL.ALIGNMENT;
-			const offsets = align.NOZZLE_BOTTOM_OFFSET;
-			let mult = offsets.TWO_STAGE;
-			if (totalStg === 1) {
-				mult = offsets.SINGLE_STAGE;
-			} else if (totalStg >= 3) {
-				mult = offsets.THREE_STAGE;
-			}
-
-			const defaultRocketRadius = this.param?.RADIUS || (typeof globalThis !== 'undefined' && globalThis.__presetManager ? globalThis.__presetManager.getObjectParam('Rocket')?.RADIUS : 63) || 63;
-			const baseRadiusM = this.baseRadiusM || (this.bottomOffsetM ? this.bottomOffsetM / mult : defaultRocketRadius);
-
-			// Determine nozzle offset ratio and plume scale for current active stage
-			let stageNozzleRatio = mult;
-			let plumeScale = align.MAIN_PLUME_SCALE ?? 1.0;
-
-			if (totalStg === 1) {
-				stageNozzleRatio = offsets.SINGLE_STAGE;
-				plumeScale = align.MAIN_PLUME_SCALE ?? 1.0;
-			} else if (totalStg === 2) {
-				if (curStgIdx === 0) {
-					stageNozzleRatio = offsets.TWO_STAGE;
-					plumeScale = align.MAIN_PLUME_SCALE ?? 1.0;
-				} else {
-					stageNozzleRatio = Math.abs(align.BASE_X_UPPER_RATIO - ROCKET_VISUAL.MODULES.NOZZLE2_LENGTH_RATIO);
-					plumeScale = align.UPPER_PLUME_SCALE ?? 0.65;
-				}
-			} else if (totalStg >= 3) {
-				if (curStgIdx === 0) {
-					stageNozzleRatio = offsets.THREE_STAGE;
-					plumeScale = align.MAIN_PLUME_SCALE ?? 1.0;
-				} else if (curStgIdx === 1) {
-					stageNozzleRatio = Math.abs((align.BASE_X_3STG_STAGE2_RATIO ?? -1.6) - ROCKET_VISUAL.MODULES.NOZZLE2_LENGTH_RATIO);
-					plumeScale = align.UPPER_PLUME_SCALE ?? 0.65;
-				} else {
-					stageNozzleRatio = Math.abs((align.BASE_X_3STG_STAGE3_RATIO ?? -0.9) - (ROCKET_VISUAL.MODULES.NOZZLE3_LENGTH_RATIO || 0.28));
-					plumeScale = align.STAGE3_PLUME_SCALE ?? 0.50;
-				}
-			}
-
-			const nozzleDistM = baseRadiusM * stageNozzleRatio;
-			let flameLenM = 0;
-
-			if (isBurning) {
-				const curFuel = (this.stages && this.stages[curStgIdx]?.fuelType) || this.fuelType || 'liquid';
-				const cfg = ROCKET_VISUAL.PLUMES[curFuel] || ROCKET_VISUAL.PLUMES.liquid;
-				const throttle = this.thrustRatio || 1.0;
-				flameLenM = baseRadiusM * cfg.lenMult * plumeScale * throttle;
-			}
+			// Offset to the nozzle and the flame tip of the drawn (high-detail) rocket: the same geometry the renderer draws, at
+			// the drawing's scale in metres (design 2026-11-23 §3.7). The payload alone emits at its own plume.
+			const geometry = RocketRenderer._computeStackGeometry(this, 1);
+			const scaleM = this._visualBaseRadiusM();
+			const nozzleDistM = -geometry.plume.x * scaleM;
+			const flameLenM = geometry.plume.isFiring
+				? RocketRenderer.nominalPlumeLength(scaleM, geometry.plume.scale, this.thrustRatio || 1.0, geometry.plume.fuelType, RocketRenderer._resolveAmbientPresRatio(this))
+				: 0;
 
 			// Emit smoke directly at the tip of the flame (or nozzle if engine is not firing)
 			const tipDistM = nozzleDistM + flameLenM;

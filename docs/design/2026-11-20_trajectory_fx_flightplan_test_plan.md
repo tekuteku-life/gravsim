@@ -50,7 +50,7 @@
 ### C. RCS・ベイパーコーン・マッハ
 - `_updateRcsState`: 停止ガード（ホールドダウン・衝突・破砕）、不感帯 ±0.015 rad の境界、0.08 rad 以上で連続噴射・未満でパルス、作動条件（気圧比 0.35 の境界、推力 0、分離後タイマー）、分離後の交互ダンピングの位相、点火前のアレージ（残り 1.5 s の境界）、再点火後のアレージタイマー。`trackRcsVisualState: false` では更新しない。`telemetryCache` への同期。
 - `FlightComputer`: `INTERSTAGE_COAST` で順行方向に追従し、`desiredThrustAngleRad` を毎ステップ保存する。
-- `RocketRenderer._computeVisualLayout`（ペイロード単体時 `±0.70 × payloadR`・`0.85 × payloadR`）、RCS ノズルの位置と噴射方向の表（設計書 §3.2-3）、LOD しきい値の境界。
+- `RocketRenderer._computeVisualLayout`（ペイロード単体時 `±0.70 × payloadR`・`0.85 × payloadR`）、RCS ノズルの位置と噴射方向の表（設計書 §3.2-3）、LOD しきい値の境界。（注記 2026-11-23: `_computeVisualLayout` の外形と RCS・ベイパーコーンの位置の決め方は、[2026-11-23_vapor_cone_rcs_anchors.md](2026-11-23_vapor_cone_rcs_anchors.md) §3.4〜3.6 で置き換え、その試験は同書 §5 に従う。）
 - `AeroUtils`: 気温プロファイル（対流圏界面の前後、下限 180 K・上限 350 K のクランプ）、音速、マッハ数（無効入力・無大気・大気上限より上で 0）。`computeVaporConeParams` のベル関数（§4.4 の式）の 0.82・1.00・1.22 と気圧比 0.015 の境界、マッハ角の上限。`drawVaporCone` の副コーンのしきい値 0.55。
 - マッハの 0 クリア（速度 0、`clearAerodynamicParameters` の基底・サブクラス）、`TM_MACH` 経由の同期、`SoundEffects` のマッハの出典（`telemetry.mach` 優先、なければ `computeMach`）。
 

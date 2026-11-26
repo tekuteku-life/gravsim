@@ -2,10 +2,18 @@
 // gravsim_rocket_renderer.js
 
 import { PAD_EFFECT } from './gravsim_const.js';
-import { AeroUtils } from './gravsim_utils.js';
+import { AeroUtils, RocketStackUtils } from './gravsim_utils.js';
 import { ROCKET_VISUAL } from './gravsim_preset_manager.js';
 
+/** Vacuum lengthening of each fuel's plume in _drawPlume: length x (1 + (1 - p) x k). Unknown fuels draw as liquid. */
+const PLUME_VACUUM_STRETCH = Object.freeze({ hydro: 0.15, solid: 0.12, ion: 0, liquid: 0.15 });
+
 export class RocketRenderer {
+	/** The per-fuel vacuum stretch of the plume length (design 2026-11-23 §3.7). */
+	static get PLUME_VACUUM_STRETCH() {
+		return PLUME_VACUUM_STRETCH;
+	}
+
 	static _resolveAmbientPresRatio(rocket) {
 		if (rocket.ambientPresRatio !== undefined) {
 			return rocket.ambientPresRatio;
@@ -89,8 +97,11 @@ export class RocketRenderer {
 		if (screenRadius < ROCKET_VISUAL.LOD_RADIUS_THRESHOLD) {
 			this._drawLowDetail(ctx, rocket, screenRadius, theme, ambientPresRatio);
 		} else {
-			this._drawHighDetail(ctx, rocket, screenRadius, zoomScale, theme, ambientPresRatio);
-			const layout = this._computeVisualLayout(rocket, screenRadius, ROCKET_VISUAL);
+			// One geometry for the hull and the effect anchors (design 2026-11-23 §3.2-3.4); the RCS jets are drawn last so
+			// that engine plumes never hide them (§3.6, the user's choice)
+			const geometry = this._computeStackGeometry(rocket, screenRadius, ROCKET_VISUAL);
+			this._drawHighDetail(ctx, rocket, screenRadius, zoomScale, theme, ambientPresRatio, geometry);
+			const layout = this._layoutFromGeometry(geometry, screenRadius, ROCKET_VISUAL);
 			this.drawVaporCone(ctx, rocket, layout, ROCKET_VISUAL);
 			this.drawColdGasRcs(ctx, rocket, layout, ROCKET_VISUAL);
 		}
@@ -98,15 +109,20 @@ export class RocketRenderer {
 		ctx.restore();
 	}
 
-	static _computeVisualLayout(rocket, R, visualCfg = ROCKET_VISUAL) {
-		const curStgIdx = rocket.telemetry?.stageIndex !== undefined ? rocket.telemetry.stageIndex : (rocket.currentStageIndex || 0);
-		const totalStg = rocket.telemetry?.totalStages || rocket.stages?.length || 1;
-		const isPayloadOnly = !rocket.disableStaging && Boolean(
-			rocket.isPayloadSeparated ||
-			rocket.telemetry?.isPayloadSeparated ||
-			(rocket.stages && curStgIdx >= totalStg)
-		);
-
+	/**
+	 * The drawn shape of the rocket in its local frame (+x = nose), in screen pixels for the screen radius R. It is the
+	 * only place the hull positions are computed: _drawHighDetail draws it, _layoutFromGeometry derives the vapor-cone
+	 * and RCS anchors from it, the smoke emission (Rocket.updateHistory) and the pad's umbilical read it
+	 * (design 2026-11-23 §3.2). Each position uses the same operations in the same order as the former
+	 * _drawHighDetail, so the drawn hull is bit-identical.
+	 * @param {any} rocket
+	 * @param {number} R screen radius
+	 * @param {any} [visualCfg]
+	 * @returns {any}
+	 */
+	static _computeStackGeometry(rocket, R, visualCfg = ROCKET_VISUAL) {
+		const state = RocketStackUtils.resolveStackState(rocket);
+		const { curStgIdx, totalStg } = state;
 		const m = visualCfg.MODULES;
 		const align = visualCfg.ALIGNMENT;
 		const r1 = R * m.STAGE1_RADIUS_RATIO;
@@ -118,62 +134,440 @@ export class RocketRenderer {
 		const lInter = R * m.INTERSTAGE_LENGTH_RATIO;
 		const lInter2 = R * (m.INTERSTAGE2_LENGTH_RATIO || 0.25);
 		const lFairing = R * m.FAIRING_LENGTH_RATIO;
+		const lNozzle1 = R * m.NOZZLE1_LENGTH_RATIO;
+		const lNozzle2 = R * m.NOZZLE2_LENGTH_RATIO;
+		const lNozzle3 = R * (m.NOZZLE3_LENGTH_RATIO || 0.28);
 
-		if (isPayloadOnly) {
+		if (state.isPayloadOnly) {
 			const payloadR = (totalStg === 1) ? r1 : ((totalStg >= 3) ? r3 : r2);
-			const halfBusW = 0.5 * payloadR * m.SATELLITE_BUS_W_RATIO;
-			const halfBusH = 0.5 * payloadR * m.SATELLITE_BUS_H_RATIO;
+			const busW = payloadR * m.SATELLITE_BUS_W_RATIO;
 			return {
-				xMin: -halfBusW,
-				xMax: halfBusW,
-				halfWidth: halfBusH,
-				screenRadius: R
+				state,
+				payload: { cx: 0, r: payloadR, isDeployed: true },
+				fairing: null,
+				fairingConfig: null,
+				segments: [],
+				boosterLayout: null,
+				boostersAttached: false,
+				plume: {
+					x: -busW * 0.5,
+					scale: align.PAYLOAD_PLUME_SCALE ?? 0.35,
+					fuelType: this.payloadFuelType(rocket),
+					isFiring: this.isPayloadEngineFiring(rocket)
+				}
 			};
 		}
 
-		const hasFairing = Boolean(
-			rocket.disableStaging ||
-			(rocket.fairing?.enabled &&
-			!rocket.telemetry?.isFairingSeparated &&
-			!rocket.fairing?.isSeparated)
-		);
-		const getNoseEnd = (fairingX, bodyR) => {
-			if (hasFairing) return fairingX + lFairing;
-			return fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO + bodyR * m.SATELLITE_BUS_W_RATIO * 0.5;
-		};
+		/** A stage body; its own nozzle extends aft of startX (drawn exposed only for the lowest upper stage). */
+		const stage = (stageIndex, startX, radius, length, lNozzle, isExposedNozzle) => ({
+			kind: 'stage', stageIndex, startX, radius, length,
+			nozzleX: startX - lNozzle, nozzleLength: lNozzle, isExposedNozzle, hasFins: stageIndex === 0
+		});
+		const interstage = (startX, radius, length) => ({ kind: 'interstage', startX, radius, length });
 
+		let segments;
+		let fairingX;
+		let fairingR;
+		let payloadR;
+		let plumeScale;
 		if (totalStg === 1) {
+			// Single stage (SSTO): stage 1 and the fairing / payload
 			const stg1X = R * (align.BASE_X_SINGLE_STAGE_RATIO ?? -1.5);
-			const xMax = getNoseEnd(stg1X + l1, r1);
-			return { xMin: stg1X, xMax, halfWidth: r1, screenRadius: R };
-		}
-
-		if (totalStg >= 3) {
+			fairingX = stg1X + l1;
+			segments = [stage(0, stg1X, r1, l1, lNozzle1, false)];
+			fairingR = r1;
+			payloadR = r1;
+			plumeScale = align.MAIN_PLUME_SCALE;
+		} else if (totalStg >= 3) {
+			// Three stages (Epsilon): stage 3 and its fairing ride on stage 2, which rides on stage 1
+			fairingR = r2;
+			payloadR = r3;
 			if (curStgIdx === 0) {
 				const stg1X = R * (align.BASE_X_3STG_STAGE1_RATIO ?? -3.1);
-				const xMax = getNoseEnd(stg1X + l1 + lInter + l2 + lInter2 + l3, r3);
-				return { xMin: stg1X, xMax, halfWidth: r1, screenRadius: R };
-			}
-			if (curStgIdx === 1) {
+				const inter1X = stg1X + l1;
+				const stg2X = inter1X + lInter;
+				const inter2X = stg2X + l2;
+				const stg3X = inter2X + lInter2;
+				fairingX = stg3X + l3;
+				segments = [
+					stage(2, stg3X, r3, l3, lNozzle3, false),
+					interstage(inter2X, r2, lInter2),
+					stage(1, stg2X, r2, l2, lNozzle2, false),
+					interstage(inter1X, r1, lInter),
+					stage(0, stg1X, r1, l1, lNozzle1, false)
+				];
+				plumeScale = align.MAIN_PLUME_SCALE;
+			} else if (curStgIdx === 1) {
 				const stg2X = R * (align.BASE_X_3STG_STAGE2_RATIO ?? -1.6);
-				const xMax = getNoseEnd(stg2X + l2 + lInter2 + l3, r3);
-				return { xMin: stg2X, xMax, halfWidth: r2, screenRadius: R };
+				const inter2X = stg2X + l2;
+				const stg3X = inter2X + lInter2;
+				fairingX = stg3X + l3;
+				segments = [
+					stage(2, stg3X, r3, l3, lNozzle3, false),
+					interstage(inter2X, r2, lInter2),
+					stage(1, stg2X, r2, l2, lNozzle2, true)
+				];
+				plumeScale = align.UPPER_PLUME_SCALE;
+			} else {
+				const stg3X = R * (align.BASE_X_3STG_STAGE3_RATIO ?? -0.9);
+				fairingX = stg3X + l3;
+				segments = [stage(2, stg3X, r3, l3, lNozzle3, true)];
+				plumeScale = align.STAGE3_PLUME_SCALE ?? 0.5;
 			}
-			const stg3X = R * (align.BASE_X_3STG_STAGE3_RATIO ?? -0.9);
-			const xMax = getNoseEnd(stg3X + l3, r3);
-			return { xMin: stg3X, xMax, halfWidth: hasFairing ? r2 : r3, screenRadius: R };
+		} else {
+			// Two stages (Falcon 9, H3): stage 2 is the reference; stage 1 hangs below it through the interstage
+			const hasStage1 = (curStgIdx === 0);
+			const stg2X = hasStage1 ? R * align.BASE_X_STAGE1_RATIO : R * align.BASE_X_UPPER_RATIO;
+			fairingX = stg2X + l2;
+			segments = [stage(1, stg2X, r2, l2, lNozzle2, !hasStage1)];
+			if (hasStage1) {
+				const interX = stg2X - lInter;
+				const stg1X = interX - l1;
+				segments.push(interstage(interX, r1, lInter), stage(0, stg1X, r1, l1, lNozzle1, false));
+			}
+			fairingR = r2;
+			payloadR = r2;
+			plumeScale = hasStage1 ? align.MAIN_PLUME_SCALE : align.UPPER_PLUME_SCALE;
 		}
 
-		const hasStage1 = (curStgIdx === 0);
-		const stg2X = hasStage1 ? R * align.BASE_X_STAGE1_RATIO : R * align.BASE_X_UPPER_RATIO;
-		const xMin = hasStage1 ? (stg2X - lInter - l1) : stg2X;
-		const xMax = getNoseEnd(stg2X + l2, r2);
+		const isFairingConfigured = Boolean(rocket.disableStaging || rocket.fairing?.enabled);
+		const fairingConfig = isFairingConfigured ? { startX: fairingX, radius: fairingR, length: lFairing } : null;
+		const current = segments[segments.length - 1];
+		const stage1 = segments.find(seg => seg.kind === 'stage' && seg.stageIndex === 0) || null;
+		const boosterLayout = stage1 ? this._computeBoosterLayout(rocket, stage1.startX, stage1.radius, stage1.length, R) : null;
+		const isBoosterSeparated = Boolean(rocket.isBoosterSeparated || rocket.telemetry?.isBoosterSeparated);
 		return {
-			xMin,
-			xMax,
-			halfWidth: hasStage1 ? r1 : r2,
-			screenRadius: R
+			state,
+			payload: state.hasFairing ? null : { cx: fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, r: payloadR, isDeployed: false },
+			fairing: state.hasFairing ? fairingConfig : null,
+			fairingConfig,
+			segments,
+			boosterLayout,
+			boostersAttached: Boolean(boosterLayout) && !isBoosterSeparated,
+			plume: {
+				x: current.nozzleX,
+				scale: plumeScale,
+				fuelType: (rocket.stages && rocket.stages[curStgIdx]?.fuelType) || rocket.fuelType || 'liquid',
+				isFiring: this.isEngineFiring(rocket)
+			}
 		};
+	}
+
+	/**
+	 * Placement of the SRBs beside stage 1 (moved unchanged from _drawBoosters). null when the configuration has no
+	 * SRB (RocketStackUtils.boosterCount is 0, also for a missing configuration).
+	 * @param {any} rocket
+	 * @param {number} stg1X aft end of stage 1
+	 * @param {number} r1 stage-1 radius
+	 * @param {number} l1 stage-1 length
+	 * @param {number} R screen radius
+	 * @returns {any}
+	 */
+	static _computeBoosterLayout(rocket, stg1X, r1, l1, R) {
+		const boosters = RocketStackUtils.resolveBoosters(rocket);
+		const count = RocketStackUtils.boosterCount(boosters);
+		if (count <= 0) {
+			return null;
+		}
+		const rB = R * (boosters.radiusRatio || 0.26);
+		const lB = R * (boosters.lengthRatio || 1.70);
+		const yOffset = r1 + rB * (boosters.offsetYRatio || 0.95);
+		const xAttachOffset = l1 * (boosters.attachOffsetXRatio || 0.12);
+		const xBase = stg1X + xAttachOffset;
+
+		// Lateral Y positions of the boosters
+		const yPositions = [];
+		if (count === 2) {
+			// Symmetrical top and bottom side boosters (H3-22 style)
+			yPositions.push(-yOffset, yOffset);
+		} else if (count === 4) {
+			// Clustered pairs on both lateral sides (H3-24 style)
+			const pairGap = rB * (boosters.pairSpacingRatio || 0.35);
+			yPositions.push(-yOffset - pairGap, -yOffset + pairGap, yOffset - pairGap, yOffset + pairGap);
+		} else {
+			for (let i = 0; i < count; i++) {
+				const sign = (i % 2 === 0) ? -1 : 1;
+				const tier = Math.floor(i / 2);
+				yPositions.push(sign * (yOffset + tier * rB * 0.7));
+			}
+		}
+
+		return {
+			count,
+			rB,
+			lB,
+			yOffset,
+			xBase,
+			lNozzleB: R * (boosters.nozzleLengthRatio || 0.20),
+			lNoseB: R * (boosters.noseConeLengthRatio || 0.35),
+			yPositions,
+			casingColor: boosters.casingColor || '#f0f2f5',
+			noseConeColor: boosters.noseConeColor || '#22262c',
+			bandColor: boosters.bandColor || '#c85a1a',
+			nozzleColor: boosters.nozzleColor || '#1c2024',
+			plumeFuel: boosters.plumeFuel || 'solid',
+			plumeScale: boosters.plumeScale || 0.55
+		};
+	}
+
+	/**
+	 * Effect anchors of the drawn rocket (design 2026-11-23 §3.4): the vapor-cone vertices and the RCS nozzles.
+	 * @param {any} rocket
+	 * @param {number} R screen radius
+	 * @param {any} [visualCfg]
+	 * @returns {{ screenRadius: number, noseShoulder: any, interstageShoulder: any, rcs: any }}
+	 */
+	static _computeVisualLayout(rocket, R, visualCfg = ROCKET_VISUAL) {
+		return this._layoutFromGeometry(this._computeStackGeometry(rocket, R, visualCfg), R, visualCfg);
+	}
+
+	/**
+	 * Effect anchors from a geometry. noseShoulder: the fairing base, else the front of the exposed / deployed payload.
+	 * interstageShoulder: the forward edge of the uppermost interstage (the aft end of the stage above it), or null.
+	 * @param {any} geometry _computeStackGeometry
+	 * @param {number} R screen radius
+	 * @param {any} [visualCfg]
+	 * @returns {{ screenRadius: number, noseShoulder: any, interstageShoulder: any, rcs: any }}
+	 */
+	static _layoutFromGeometry(geometry, R, visualCfg = ROCKET_VISUAL) {
+		const m = visualCfg.MODULES;
+		let noseShoulder;
+		if (geometry.fairing) {
+			noseShoulder = { x: geometry.fairing.startX, halfWidth: geometry.fairing.radius };
+		} else {
+			const p = geometry.payload;
+			noseShoulder = { x: p.cx + 0.5 * p.r * m.SATELLITE_BUS_W_RATIO, halfWidth: 0.5 * p.r * m.SATELLITE_BUS_H_RATIO };
+		}
+		const segs = geometry.segments;
+		const iInter = segs.findIndex(seg => seg.kind === 'interstage');
+		const interstageShoulder = (iInter > 0) ? { x: segs[iInter - 1].startX, halfWidth: segs[iInter].radius } : null;
+		return { screenRadius: R, noseShoulder, interstageShoulder, rcs: this._rcsNozzles(geometry, visualCfg) };
+	}
+
+	/**
+	 * Cold-gas RCS nozzles (design 2026-11-23 §3.6). Stack: lateral jets from the wall of the current stage, at the
+	 * FWD / AFT fractions of the foremost / aftmost free stretch of wall, where the jet triangle (half angle
+	 * PLUME_SPREAD_RAD) clears every part standing out of the wall (fins, SRBs, a wider neighbour). The parts come from
+	 * the configuration, so separating the fairing or the SRBs never moves a nozzle. Payload only: axial jets from
+	 * the bus corners, clear of the solar panels. null when no free wall is left.
+	 * @param {any} geometry
+	 * @param {any} visualCfg
+	 * @returns {any}
+	 */
+	static _rcsNozzles(geometry, visualCfg) {
+		const cfg = visualCfg?.COLD_GAS_RCS;
+		if (!cfg) {
+			return null;
+		}
+		const m = visualCfg.MODULES;
+		const cant = cfg.ULLAGE_CANT_RAD ?? 0.28;
+		const cosC = Math.cos(cant);
+		const sinC = Math.sin(cant);
+
+		if (geometry.state.isPayloadOnly) {
+			const p = geometry.payload;
+			const a = 0.5 * p.r * m.SATELLITE_BUS_W_RATIO;
+			const b = 0.5 * p.r * m.SATELLITE_BUS_H_RATIO;
+			return {
+				plumeLen: Math.max(cfg.MIN_PLUME_PX, b * cfg.PLUME_LEN_WIDTH_RATIO),
+				cw: [{ x: -a, y: -b, ux: -1, uy: 0 }, { x: a, y: b, ux: 1, uy: 0 }],
+				ccw: [{ x: -a, y: b, ux: -1, uy: 0 }, { x: a, y: -b, ux: 1, uy: 0 }],
+				ullage: [{ x: -a, y: b, ux: -cosC, uy: sinC }, { x: -a, y: -b, ux: -cosC, uy: -sinC }]
+			};
+		}
+
+		const segs = geometry.segments;
+		const body = segs[segs.length - 1];
+		const h = body.radius;
+		const plumeLen = Math.max(cfg.MIN_PLUME_PX, h * cfg.PLUME_LEN_WIDTH_RATIO);
+		const tanSpread = Math.tan(cfg.PLUME_SPREAD_RAD ?? 0.34);
+
+		// Parts standing out of the wall: x range and how far they stand out (e)
+		const parts = [];
+		if (body.hasFins) {
+			parts.push({ a: body.startX, b: body.startX + body.length * m.FIN_BASE_RATIO, e: body.radius * m.FIN_SPAN_RATIO });
+		}
+		const boosters = geometry.boosterLayout;
+		if (body.stageIndex === 0 && boosters) {
+			const outer = Math.max(...boosters.yPositions.map(Math.abs)) + boosters.rB;
+			parts.push({ a: boosters.xBase - boosters.lNozzleB, b: boosters.xBase + boosters.lB + boosters.lNoseB, e: outer - h });
+		}
+		const above = segs.length >= 2 ? segs[segs.length - 2] : null;
+		if (above) {
+			parts.push({ a: above.startX, b: above.startX + above.length, e: above.radius - h });
+		} else if (geometry.fairingConfig) {
+			const f = geometry.fairingConfig;
+			parts.push({ a: f.startX, b: f.startX + f.length, e: f.radius - h });
+		}
+
+		// Only stretches of positive length are free wall, the body itself included (a degenerate R or stage length
+		// leaves none)
+		let free = [[body.startX, body.startX + body.length]].filter(([u, v]) => v > u);
+		for (const part of parts) {
+			if (!(part.e > 0)) {
+				continue;
+			}
+			const margin = Math.min(part.e, plumeLen) * tanSpread;
+			const lo = part.a - margin;
+			const hi = part.b + margin;
+			free = free.flatMap(([u, v]) => {
+				const out = [];
+				if (lo > u) out.push([u, Math.min(v, lo)]);
+				if (hi < v) out.push([Math.max(u, hi), v]);
+				return out.filter(([p0, p1]) => p1 > p0);
+			});
+		}
+		if (free.length === 0) {
+			return null;
+		}
+		free.sort((p0, p1) => p0[0] - p1[0]);
+		const [fwdLo, fwdHi] = free[free.length - 1];
+		const [aftLo, aftHi] = free[0];
+		const xFwd = fwdLo + (fwdHi - fwdLo) * cfg.FWD_STATION_FRACTION;
+		const xAft = aftLo + (aftHi - aftLo) * cfg.AFT_STATION_FRACTION;
+		return {
+			plumeLen,
+			cw: [{ x: xFwd, y: -h, ux: 0, uy: -1 }, { x: xAft, y: h, ux: 0, uy: 1 }],
+			ccw: [{ x: xFwd, y: h, ux: 0, uy: 1 }, { x: xAft, y: -h, ux: 0, uy: -1 }],
+			ullage: [{ x: xAft, y: h, ux: -cosC, uy: sinC }, { x: xAft, y: -h, ux: -cosC, uy: -sinC }]
+		};
+	}
+
+	/**
+	 * The drawn parts that make up the side-view silhouette: x range and radius at x (stage bodies, interstages, the
+	 * attached fairing's curve, the stowed payload bus).
+	 * @param {any} geometry
+	 * @param {any} visualCfg
+	 * @returns {Array<{ a: number, b: number, radiusAt: (x: number) => number }>}
+	 */
+	static _silhouetteParts(geometry, visualCfg = ROCKET_VISUAL) {
+		// The stack is one continuous body: each segment reaches the start of the one on its nose side, so the last-bit
+		// gap that rounding leaves at a joint (stage 1 is built downwards from stage 2) is not a hole in the outline
+		const segs = geometry.segments;
+		const parts = segs.map((seg, i) => ({
+			a: seg.startX,
+			b: (i > 0) ? Math.max(seg.startX + seg.length, segs[i - 1].startX) : seg.startX + seg.length,
+			radiusAt: () => seg.radius
+		}));
+		const f = geometry.fairing;
+		if (f) {
+			parts.push({ a: f.startX, b: f.startX + f.length, radiusAt: (x) => this._fairingRadiusAt(f, x, visualCfg) });
+		}
+		const p = geometry.payload;
+		if (p && !p.isDeployed) {
+			const m = visualCfg.MODULES;
+			const halfW = 0.5 * p.r * m.SATELLITE_BUS_W_RATIO;
+			const halfH = 0.5 * p.r * m.SATELLITE_BUS_H_RATIO;
+			parts.push({ a: p.cx - halfW, b: p.cx + halfW, radiusAt: () => halfH });
+		}
+		return parts;
+	}
+
+	/**
+	 * Half-height of the drawn silhouette at x: the largest radius of the drawn parts covering x, or null where nothing
+	 * is drawn (design 2026-11-23 §3.8).
+	 * @param {any} geometry
+	 * @param {number} x
+	 * @param {any} [visualCfg]
+	 * @returns {number|null}
+	 */
+	static bodyRadiusAt(geometry, x, visualCfg = ROCKET_VISUAL) {
+		let best = null;
+		for (const part of this._silhouetteParts(geometry, visualCfg)) {
+			if (x >= part.a && x <= part.b) {
+				const r = part.radiusAt(x);
+				if (best === null || r > best) best = r;
+			}
+		}
+		return best;
+	}
+
+	/**
+	 * Smallest silhouette half-height over [x0, x1], or null when part of the range has nothing drawn. Every part is
+	 * constant or narrows towards the nose (the fairing), so on each stretch between part boundaries the minimum is at
+	 * its forward end.
+	 * @param {any} geometry
+	 * @param {number} x0
+	 * @param {number} x1
+	 * @param {any} [visualCfg]
+	 * @returns {number|null}
+	 */
+	static minBodyRadiusOver(geometry, x0, x1, visualCfg = ROCKET_VISUAL) {
+		if (x0 > x1) {
+			[x0, x1] = [x1, x0];
+		}
+		const parts = this._silhouetteParts(geometry, visualCfg);
+		const cuts = [x0, x1];
+		for (const part of parts) {
+			for (const x of [part.a, part.b]) {
+				if (x > x0 && x < x1) cuts.push(x);
+			}
+		}
+		cuts.sort((u, v) => u - v);
+		let min = null;
+		for (let i = 0; i + 1 < cuts.length; i++) {
+			const u = cuts[i];
+			const v = cuts[i + 1];
+			if (!(v > u)) continue;
+			const mid = 0.5 * (u + v);
+			let best = null;
+			for (const part of parts) {
+				if (mid >= part.a && mid <= part.b) {
+					const r = part.radiusAt(Math.min(v, part.b));
+					if (best === null || r > best) best = r;
+				}
+			}
+			if (best === null) return null;
+			if (min === null || best < min) min = best;
+		}
+		return min === null ? this.bodyRadiusAt(geometry, x0, visualCfg) : min;
+	}
+
+	/**
+	 * Half-height of the fairing curve at x (_drawFairing: a quadratic Bézier from (startX, radius) through the control
+	 * point (startX + length * FAIRING_CURVE_X_RATIO, radius * FAIRING_CURVE_Y_RATIO) to (startX + length, 0)).
+	 * @param {{ startX: number, radius: number, length: number }} f
+	 * @param {number} x within [startX, startX + length]
+	 * @param {any} visualCfg
+	 * @returns {number}
+	 */
+	static _fairingRadiusAt(f, x, visualCfg) {
+		const m = visualCfg.MODULES;
+		const cx = f.length * m.FAIRING_CURVE_X_RATIO;
+		const cy = f.radius * m.FAIRING_CURVE_Y_RATIO;
+		// x(t) = startX + 2t(1 - t) cx + t^2 length  ->  (length - 2 cx) t^2 + 2 cx t - (x - startX) = 0
+		const qa = f.length - 2 * cx;
+		const qb = 2 * cx;
+		const qc = -(x - f.startX);
+		const root = Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc));
+		// The roots (-qb ± root) / (2 qa) as q / qa and qc / q, with q = -(qb + sign(qb) root) / 2: these forms lose no
+		// digits to cancellation, so they stay exact as qa -> 0 (the linear case FAIRING_CURVE_X_RATIO = 0.5, where the
+		// root is -qc / qb) and near x = startX
+		const q = -0.5 * (qb + Math.sign(qb || 1) * root);
+		const byQ = (q !== 0) ? qc / q : 0;
+		const byA = (qa !== 0) ? q / qa : byQ;
+		// t1 = (-qb + root) / (2 qa), the root on the curve while the control point lies inside the fairing; t2 the other
+		const t1 = (qb >= 0) ? byQ : byA;
+		const t2 = (qb >= 0) ? byA : byQ;
+		let t = (t1 >= -1e-9 && t1 <= 1 + 1e-9) ? t1 : t2;
+		t = Math.max(0, Math.min(1, t));
+		return (1 - t) * (1 - t) * f.radius + 2 * t * (1 - t) * cy;
+	}
+
+	/**
+	 * Nominal (flicker-free) length of an engine plume: the length _drawPlume draws with zero flicker.
+	 * @param {number} R scale (screen radius, or metres for the smoke emission)
+	 * @param {number} scale plume scale of the stage
+	 * @param {number} throttle
+	 * @param {string} fuelType
+	 * @param {number} [ambientPresRatio]
+	 * @returns {number}
+	 */
+	static nominalPlumeLength(R, scale, throttle, fuelType, ambientPresRatio = 1.0) {
+		const cfg = ROCKET_VISUAL.PLUMES[fuelType] || ROCKET_VISUAL.PLUMES.liquid;
+		const p = Math.max(0, Math.min(1.0, ambientPresRatio));
+		const k = PLUME_VACUUM_STRETCH[fuelType] ?? PLUME_VACUUM_STRETCH.liquid;
+		return R * cfg.lenMult * scale * throttle * (1.0 + (1.0 - p) * k);
 	}
 
 	static _drawRcsPlume(ctx, x, y, ux, uy, plumeLen, cfg) {
@@ -201,29 +595,18 @@ export class RocketRenderer {
 		const rcsCcw = Boolean(rocket.rcsCcw || rocket.telemetry?.rcsCcw);
 		const rcsUllage = Boolean(rocket.rcsUllage || rocket.telemetry?.rcsUllage);
 		if (!rcsCw && !rcsCcw && !rcsUllage) return;
+		const rcs = layout.rcs;
+		if (!rcs) return;
 
 		const cfg = visualCfg.COLD_GAS_RCS;
-		const L = Math.max(1, layout.xMax - layout.xMin);
-		const xFwd = layout.xMin + L * cfg.FWD_STATION_FRACTION;
-		const xAft = layout.xMin + L * cfg.AFT_STATION_FRACTION;
-		const yWall = layout.halfWidth;
-		const plumeLen = Math.max(cfg.MIN_PLUME_PX, layout.halfWidth * cfg.PLUME_LEN_WIDTH_RATIO);
-
-		if (rcsCw) {
-			this._drawRcsPlume(ctx, xFwd, -yWall, 0, -1, plumeLen, cfg);
-			this._drawRcsPlume(ctx, xAft, yWall, 0, 1, plumeLen, cfg);
-		}
-		if (rcsCcw) {
-			this._drawRcsPlume(ctx, xFwd, yWall, 0, 1, plumeLen, cfg);
-			this._drawRcsPlume(ctx, xAft, -yWall, 0, -1, plumeLen, cfg);
-		}
-		if (rcsUllage) {
-			const cant = cfg.ULLAGE_CANT_RAD ?? 0.28;
-			const cosC = Math.cos(cant);
-			const sinC = Math.sin(cant);
-			this._drawRcsPlume(ctx, xAft, yWall, -cosC, sinC, plumeLen, cfg);
-			this._drawRcsPlume(ctx, xAft, -yWall, -cosC, -sinC, plumeLen, cfg);
-		}
+		const drawNozzles = (nozzles) => {
+			for (const n of nozzles) {
+				this._drawRcsPlume(ctx, n.x, n.y, n.ux, n.uy, rcs.plumeLen, cfg);
+			}
+		};
+		if (rcsCw) drawNozzles(rcs.cw);
+		if (rcsCcw) drawNozzles(rcs.ccw);
+		if (rcsUllage) drawNozzles(rcs.ullage);
 	}
 
 	static drawVaporCone(ctx, rocket, layout, visualCfg = ROCKET_VISUAL) {
@@ -233,19 +616,23 @@ export class RocketRenderer {
 		const ambientPresRatio = this._resolveAmbientPresRatio(rocket);
 		const vapor = AeroUtils.computeVaporConeParams(mach, ambientPresRatio);
 		if (!vapor.active || vapor.intensity <= 0.01) return;
+		const primary = layout.noseShoulder;
+		if (!primary) return;
 
 		const cfg = visualCfg.VAPOR_CONE;
-		const L = Math.max(1, layout.xMax - layout.xMin);
-		const drawConeAt = (xVertex, scale) => {
-			const coneLen = layout.halfWidth * cfg.CONE_LENGTH_RATIO * (0.75 + 0.5 * vapor.intensity) * scale;
+		// A cone opens aft from its vertex on the axis; its size follows the body radius at the vertex (design 2026-11-23 §3.5)
+		const drawConeAt = (anchor, scale) => {
+			const xVertex = anchor.x;
+			const h = anchor.halfWidth;
+			const coneLen = h * cfg.CONE_LENGTH_RATIO * (0.75 + 0.5 * vapor.intensity) * scale;
 			const coneHalfW = Math.min(
-				layout.halfWidth * cfg.MAX_WIDTH_MULTIPLIER,
-				layout.halfWidth * (1.1 + 1.35 * vapor.intensity * Math.sin(vapor.machAngleRad))
+				h * cfg.MAX_WIDTH_MULTIPLIER,
+				h * (1.1 + 1.35 * vapor.intensity * Math.sin(vapor.machAngleRad))
 			) * scale;
 			const xBack = xVertex - coneLen;
-			const noseRimX = xVertex - layout.halfWidth * 0.25 * scale;
+			const noseRimX = xVertex - h * 0.25 * scale;
 			const grad = ctx.createRadialGradient(
-				xVertex, 0, layout.halfWidth * 0.15 * scale,
+				xVertex, 0, h * 0.15 * scale,
 				xBack + coneLen * 0.35, 0, Math.max(coneLen, coneHalfW)
 			);
 			grad.addColorStop(0, cfg.CORE_COLOR);
@@ -264,7 +651,7 @@ export class RocketRenderer {
 			ctx.save();
 			ctx.globalAlpha = Math.min(1, 0.4 + 0.6 * vapor.intensity);
 			ctx.strokeStyle = cfg.RIM_COLOR;
-			ctx.lineWidth = Math.max(1, layout.halfWidth * 0.12);
+			ctx.lineWidth = Math.max(1, h * 0.12);
 			ctx.beginPath();
 			ctx.moveTo(xBack, -coneHalfW);
 			ctx.quadraticCurveTo(noseRimX, 0, xBack, coneHalfW);
@@ -272,21 +659,16 @@ export class RocketRenderer {
 			ctx.restore();
 		};
 
-		const xPrimary = layout.xMin + L * cfg.PRIMARY_STATION_FRACTION;
-		drawConeAt(xPrimary, 1.0);
-		if (vapor.intensity >= cfg.SECONDARY_INTENSITY_MIN) {
-			const xSecondary = layout.xMin + L * cfg.SECONDARY_STATION_FRACTION;
-			drawConeAt(xSecondary, 0.78);
+		// Primary at the nose shoulder; the secondary at the uppermost interstage when the intensity is high
+		drawConeAt(primary, 1.0);
+		if (layout.interstageShoulder && vapor.intensity >= cfg.SECONDARY_INTENSITY_MIN) {
+			drawConeAt(layout.interstageShoulder, 0.78);
 		}
 	}
 
 	static _drawLowDetail(ctx, rocket, R, theme, ambientPresRatio = 1.0) {
-		const isPayloadOnly = !rocket.disableStaging && Boolean(
-			rocket.isPayloadSeparated ||
-			rocket.telemetry?.isPayloadSeparated ||
-			(rocket.stages && rocket.currentStageIndex >= rocket.totalStages)
-		);
-		const curStgIdx = rocket.telemetry?.stageIndex !== undefined ? rocket.telemetry.stageIndex : (rocket.currentStageIndex || 0);
+		// The stack state of both levels of detail (design 2026-11-23 §3.1)
+		const { isPayloadOnly, curStgIdx } = RocketStackUtils.resolveStackState(rocket);
 		const hasStage1 = !isPayloadOnly && (curStgIdx === 0);
 		const lod = ROCKET_VISUAL.LOW_DETAIL;
 
@@ -307,6 +689,7 @@ export class RocketRenderer {
 				const p = Math.max(0, Math.min(1.0, ambientPresRatio !== undefined ? ambientPresRatio : 1.0));
 				const e_vac = 1.0 - p;
 				const payloadScale = ROCKET_VISUAL.ALIGNMENT.PAYLOAD_PLUME_SCALE ?? 0.35;
+				// The low detail draws one schematic plume for every fuel, with its own vacuum stretch (not PLUME_VACUUM_STRETCH)
 				const plumeLen = R * lod.PLUME_LEN_RATIO * payloadScale * (rocket.thrustRatio || 1.0) * (1.0 + e_vac * 0.15);
 				const halfW = iconH * lod.PLUME_WIDTH_RATIO * (1.0 + e_vac * 1.3);
 				ctx.fillStyle = lod.PLUME_COLOR;
@@ -327,7 +710,7 @@ export class RocketRenderer {
 			rocket.isBoosterSeparated ||
 			rocket.telemetry?.isBoosterSeparated
 		);
-		const boosterCount = (hasStage1 && !isBoosterSeparated) ? (rocket.boosters?.count || rocket.rendering?.boosters?.count || 0) : 0;
+		const boosterCount = (hasStage1 && !isBoosterSeparated) ? RocketStackUtils.boosterCount(RocketStackUtils.resolveBoosters(rocket)) : 0;
 		if (boosterCount === 2) {
 			width *= 1.35;
 		} else if (boosterCount >= 4) {
@@ -343,6 +726,7 @@ export class RocketRenderer {
 		if (isFiring) {
 			const p = Math.max(0, Math.min(1.0, ambientPresRatio !== undefined ? ambientPresRatio : 1.0));
 			const e_vac = 1.0 - p;
+			// The low detail draws one schematic plume for every fuel, with its own vacuum stretch (not PLUME_VACUUM_STRETCH)
 			const plumeLen = R * lod.PLUME_LEN_RATIO * (rocket.thrustRatio || 1.0) * (1.0 + e_vac * 0.15);
 			// The SRBs widen the plume only while they fire (the rule of the high detail, isBoosterFiring)
 			const isBoosterFiring = this.isBoosterFiring(rocket);
@@ -358,174 +742,42 @@ export class RocketRenderer {
 		}
 	}
 
-	static _drawHighDetail(ctx, rocket, R, zoomScale, theme, ambientPresRatio = 1.0) {
-		const curStgIdx = rocket.telemetry?.stageIndex !== undefined ? rocket.telemetry.stageIndex : (rocket.currentStageIndex || 0);
-		const totalStg = rocket.telemetry?.totalStages || rocket.stages?.length || 1;
-
-		const isPayloadOnly = !rocket.disableStaging && Boolean(
-			rocket.isPayloadSeparated ||
-			rocket.telemetry?.isPayloadSeparated ||
-			(rocket.stages && curStgIdx >= totalStg)
-		);
-
-		const m = ROCKET_VISUAL.MODULES;
-		const align = ROCKET_VISUAL.ALIGNMENT;
-		const r1 = R * m.STAGE1_RADIUS_RATIO;
-		const l1 = R * m.STAGE1_LENGTH_RATIO;
-		const r2 = R * m.STAGE2_RADIUS_RATIO;
-		const l2 = R * m.STAGE2_LENGTH_RATIO;
-		const r3 = R * (m.STAGE3_RADIUS_RATIO || 0.55);
-		const l3 = R * (m.STAGE3_LENGTH_RATIO || 0.9);
-		const lInter = R * m.INTERSTAGE_LENGTH_RATIO;
-		const lInter2 = R * (m.INTERSTAGE2_LENGTH_RATIO || 0.25);
-		const lFairing = R * m.FAIRING_LENGTH_RATIO;
-		const lNozzle1 = R * m.NOZZLE1_LENGTH_RATIO;
-		const lNozzle2 = R * m.NOZZLE2_LENGTH_RATIO;
-		const lNozzle3 = R * (m.NOZZLE3_LENGTH_RATIO || 0.28);
-
-		if (isPayloadOnly) {
-			const payloadR = (totalStg === 1) ? r1 : ((totalStg >= 3) ? r3 : r2);
-			this._drawPayloadSatellite(ctx, 0, 0, payloadR, true);
-			// The payload's own burn, behind the bus (its aft face, -x), with the plume of its propulsion's fuel type
-			if (this.isPayloadEngineFiring(rocket)) {
-				const busW = payloadR * m.SATELLITE_BUS_W_RATIO;
-				this._drawPlume(ctx, -busW * 0.5, 0, align.PAYLOAD_PLUME_SCALE ?? 0.35, rocket.thrustRatio || 1.0, this.payloadFuelType(rocket), R, ambientPresRatio);
-			}
-			return;
-		}
-
-		const hasFairing = Boolean(
-			rocket.disableStaging ||
-			(rocket.fairing?.enabled &&
-			!rocket.telemetry?.isFairingSeparated &&
-			!rocket.fairing?.isSeparated)
-		);
-
-		const isFiring = this.isEngineFiring(rocket);
-		const curFuel = (rocket.stages && rocket.stages[curStgIdx]?.fuelType) || rocket.fuelType || 'liquid';
+	static _drawHighDetail(ctx, rocket, R, zoomScale, theme, ambientPresRatio = 1.0, geometry = this._computeStackGeometry(rocket, R)) {
+		const plume = geometry.plume;
 		const throttle = rocket.thrustRatio || 1.0;
 
-		// 1. Single-stage configuration (SSTO): Only Stage 1 + Fairing / Payload
-		if (totalStg === 1) {
-			const stg1X = R * (align.BASE_X_SINGLE_STAGE_RATIO ?? -1.5);
-			const nozzle1X = stg1X - lNozzle1;
-			const fairingX = stg1X + l1;
-
-			if (hasFairing) {
-				this._drawFairing(ctx, fairingX, r1, lFairing, theme);
-			} else {
-				this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r1, false);
-			}
-
-			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
-			this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R, ambientPresRatio);
-
-			if (isFiring) {
-				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
+		if (geometry.state.isPayloadOnly) {
+			this._drawPayloadSatellite(ctx, 0, 0, geometry.payload.r, true);
+			// The payload's own burn, behind the bus (its aft face, -x), with the plume of its propulsion's fuel type
+			if (plume.isFiring) {
+				this._drawPlume(ctx, plume.x, 0, plume.scale, throttle, plume.fuelType, R, ambientPresRatio);
 			}
 			return;
 		}
 
-		// 2. Three-stage configuration (e.g., Epsilon solid-propellant rocket)
-		if (totalStg >= 3) {
-			if (curStgIdx === 0) {
-				// All 3 stages attached
-				const stg1X = R * (align.BASE_X_3STG_STAGE1_RATIO ?? -3.1);
-				const nozzle1X = stg1X - lNozzle1;
-				const inter1X = stg1X + l1;
-				const stg2X = inter1X + lInter;
-				const inter2X = stg2X + l2;
-				const stg3X = inter2X + lInter2;
-				const fairingX = stg3X + l3;
-
-				if (hasFairing) {
-					this._drawFairing(ctx, fairingX, r2, lFairing, theme);
-				} else {
-					this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r3, false);
-				}
-
-				this._drawStage2(ctx, stg3X, r3, l3, false, 0, 0, theme);
-				this._drawInterstage(ctx, inter2X, r2, lInter2, theme);
-				this._drawStage2(ctx, stg2X, r2, l2, false, 0, 0, theme);
-				this._drawInterstage(ctx, inter1X, r1, lInter, theme);
-				this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
-				this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R, ambientPresRatio);
-
-				if (isFiring) {
-					this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
-				}
-			} else if (curStgIdx === 1) {
-				// Stage 1 jettisoned, Stage 2 active
-				const stg2X = R * (align.BASE_X_3STG_STAGE2_RATIO ?? -1.6);
-				const nozzle2X = stg2X - lNozzle2;
-				const inter2X = stg2X + l2;
-				const stg3X = inter2X + lInter2;
-				const fairingX = stg3X + l3;
-
-				if (hasFairing) {
-					this._drawFairing(ctx, fairingX, r2, lFairing, theme);
-				} else {
-					this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r3, false);
-				}
-
-				this._drawStage2(ctx, stg3X, r3, l3, false, 0, 0, theme);
-				this._drawInterstage(ctx, inter2X, r2, lInter2, theme);
-				this._drawStage2(ctx, stg2X, r2, l2, true, nozzle2X, lNozzle2, theme);
-
-				if (isFiring) {
-					this._drawPlume(ctx, nozzle2X, 0, align.UPPER_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
-				}
-			} else {
-				// Stage 2 jettisoned, Stage 3 active
-				const stg3X = R * (align.BASE_X_3STG_STAGE3_RATIO ?? -0.9);
-				const nozzle3X = stg3X - lNozzle3;
-				const fairingX = stg3X + l3;
-
-				if (hasFairing) {
-					this._drawFairing(ctx, fairingX, r2, lFairing, theme);
-				} else {
-					this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r3, false);
-				}
-
-				this._drawStage2(ctx, stg3X, r3, l3, true, nozzle3X, lNozzle3, theme);
-
-				if (isFiring) {
-					this._drawPlume(ctx, nozzle3X, 0, align.STAGE3_PLUME_SCALE ?? 0.5, throttle, curFuel, R, ambientPresRatio);
-				}
-			}
-			return;
-		}
-
-		// 3. Standard two-stage configuration (Falcon 9, H3)
-		const hasStage1 = (curStgIdx === 0);
-		const baseX = hasStage1 ? R * align.BASE_X_STAGE1_RATIO : R * align.BASE_X_UPPER_RATIO;
-		const stg2X = baseX;
-		const fairingX = stg2X + l2;
-		const interX = stg2X - lInter;
-		const stg1X = interX - l1;
-		const nozzle1X = stg1X - lNozzle1;
-		const nozzle2X = stg2X - lNozzle2;
-
-		if (hasFairing) {
-			this._drawFairing(ctx, fairingX, r2, lFairing, theme);
+		// Nose: the fairing, or the stowed payload when there is none
+		if (geometry.fairing) {
+			const f = geometry.fairing;
+			this._drawFairing(ctx, f.startX, f.radius, f.length, theme);
 		} else {
-			this._drawPayloadSatellite(ctx, fairingX + lFairing * align.PAYLOAD_OFFSET_RATIO, 0, r2, false);
+			const p = geometry.payload;
+			this._drawPayloadSatellite(ctx, p.cx, 0, p.r, false);
 		}
 
-		this._drawStage2(ctx, stg2X, r2, l2, !hasStage1, nozzle2X, lNozzle2, theme);
-
-		if (hasStage1) {
-			this._drawInterstage(ctx, interX, r1, lInter, theme);
-			this._drawStage1(ctx, stg1X, r1, l1, nozzle1X, lNozzle1, theme);
-			this._drawBoosters(ctx, rocket, stg1X, r1, l1, nozzle1X, lNozzle1, theme, isFiring, throttle, R, ambientPresRatio);
-		}
-
-		if (isFiring) {
-			if (hasStage1) {
-				this._drawPlume(ctx, nozzle1X, 0, align.MAIN_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
+		// Bodies from the nose to the tail (stage 1 with its SRBs)
+		for (const seg of geometry.segments) {
+			if (seg.kind === 'interstage') {
+				this._drawInterstage(ctx, seg.startX, seg.radius, seg.length, theme);
+			} else if (seg.stageIndex === 0) {
+				this._drawStage1(ctx, seg.startX, seg.radius, seg.length, seg.nozzleX, seg.nozzleLength, theme);
+				this._drawBoosters(ctx, rocket, seg.startX, seg.radius, seg.length, seg.nozzleX, seg.nozzleLength, theme, plume.isFiring, throttle, R, ambientPresRatio);
 			} else {
-				this._drawPlume(ctx, nozzle2X, 0, align.UPPER_PLUME_SCALE, throttle, curFuel, R, ambientPresRatio);
+				this._drawStage2(ctx, seg.startX, seg.radius, seg.length, seg.isExposedNozzle, seg.nozzleX, seg.nozzleLength, theme);
 			}
+		}
+
+		if (plume.isFiring) {
+			this._drawPlume(ctx, plume.x, 0, plume.scale, throttle, plume.fuelType, R, ambientPresRatio);
 		}
 	}
 
@@ -746,7 +998,7 @@ export class RocketRenderer {
 		switch (fuelType) {
 			case 'hydro': {
 				const flicker = Math.sin(timeSec * cfg.flickerFreq) * cfg.noiseAmp;
-				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * 0.15);
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * PLUME_VACUUM_STRETCH.hydro);
 				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5) * (1.0 + e_vac * 1.5);
 				const curveW = w * cfg.curveWidthRatio * (1.0 + e_vac * 0.45);
 				const curveLen = len * cfg.curveLenRatio * (1.0 - e_vac * 0.2);
@@ -791,7 +1043,7 @@ export class RocketRenderer {
 
 			case 'solid': {
 				const flicker = (Math.random() - 0.5) * cfg.noiseAmp;
-				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * 0.12);
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * PLUME_VACUUM_STRETCH.solid);
 				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + e_vac * 1.3);
 				const curveW = w * cfg.curveWidthRatio * (1.0 + e_vac * 0.4);
 				const curveLen = len * cfg.curveLenRatio * (1.0 - e_vac * 0.15);
@@ -853,7 +1105,7 @@ export class RocketRenderer {
 			case 'liquid':
 			default: {
 				const flicker = Math.sin(timeSec * cfg.flickerFreq) * cfg.noiseAmp;
-				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * 0.15);
+				const len = R * cfg.lenMult * scale * throttle * (1.0 + flicker) * (1.0 + e_vac * PLUME_VACUUM_STRETCH.liquid);
 				const w = R * cfg.widthMult * scale * Math.sqrt(throttle) * (1.0 + flicker * 0.5) * (1.0 + e_vac * 1.4);
 				const curveW = w * cfg.curveWidthRatio * (1.0 + e_vac * 0.5);
 				const curveLen = len * cfg.curveLenRatio * (1.0 - e_vac * 0.2);
@@ -898,45 +1150,12 @@ export class RocketRenderer {
 		if (isBoosterSeparated) {
 			return;
 		}
-
-		const boosters = rocket.boosters ||
-			rocket.rendering?.boosters ||
-			(rocket.stages && rocket.stages[0]?.boosters);
-		if (!boosters || !boosters.count || boosters.count <= 0) {
+		// The placement is shared with the geometry's RCS rule (design 2026-11-23 §3.3); null without any SRB
+		const layout = this._computeBoosterLayout(rocket, stg1X, r1, l1, R);
+		if (!layout) {
 			return;
 		}
-
-		const count = boosters.count;
-		const rB = R * (boosters.radiusRatio || 0.26);
-		const lB = R * (boosters.lengthRatio || 1.70);
-		const yOffset = r1 + rB * (boosters.offsetYRatio || 0.95);
-		const xAttachOffset = l1 * (boosters.attachOffsetXRatio || 0.12);
-		const xBase = stg1X + xAttachOffset;
-		const lNozzleB = R * (boosters.nozzleLengthRatio || 0.20);
-		const lNoseB = R * (boosters.noseConeLengthRatio || 0.35);
-		const casingColor = boosters.casingColor || '#f0f2f5';
-		const noseConeColor = boosters.noseConeColor || '#22262c';
-		const bandColor = boosters.bandColor || '#c85a1a';
-		const nozzleColor = boosters.nozzleColor || '#1c2024';
-		const plumeFuel = boosters.plumeFuel || 'solid';
-		const plumeScale = boosters.plumeScale || 0.55;
-
-		// Determine lateral Y positions for boosters
-		const yPositions = [];
-		if (count === 2) {
-			// Symmetrical top and bottom side boosters (H3-22 style)
-			yPositions.push(-yOffset, yOffset);
-		} else if (count === 4) {
-			// Clustered pairs on both lateral sides (H3-24 style)
-			const pairGap = rB * (boosters.pairSpacingRatio || 0.35);
-			yPositions.push(-yOffset - pairGap, -yOffset + pairGap, yOffset - pairGap, yOffset + pairGap);
-		} else {
-			for (let i = 0; i < count; i++) {
-				const sign = (i % 2 === 0) ? -1 : 1;
-				const tier = Math.floor(i / 2);
-				yPositions.push(sign * (yOffset + tier * rB * 0.7));
-			}
-		}
+		const { rB, lB, xBase, lNozzleB, lNoseB, yPositions, casingColor, noseConeColor, bandColor, nozzleColor, plumeFuel, plumeScale } = layout;
 
 		for (const yPos of yPositions) {
 			// 1. Booster Cylindrical Body (Casing)

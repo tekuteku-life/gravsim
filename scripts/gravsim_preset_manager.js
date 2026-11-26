@@ -12,6 +12,55 @@
  */
 
 import { PHYSICS, TRAJECTORY_PREDICTION } from './gravsim_const.js';
+import { RocketStackUtils } from './gravsim_utils.js';
+
+/** Largest number of names peekObjectParam keeps before it starts over (design 2026-11-23 §3.11-5). */
+const PEEK_PARAM_CACHE_LIMIT = 512;
+
+/**
+ * Map that reports every change (set / delete / clear), so derived snapshots know when to rebuild
+ * (design 2026-11-23 §3.11-1).
+ */
+class VersionedMap extends Map {
+	/** @param {() => void} onChange */
+	constructor(onChange) {
+		super();
+		this._onChange = onChange;
+	}
+
+	set(key, value) {
+		const result = super.set(key, value);
+		if (this._onChange) this._onChange();
+		return result;
+	}
+
+	delete(key) {
+		const result = super.delete(key);
+		if (this._onChange) this._onChange();
+		return result;
+	}
+
+	clear() {
+		super.clear();
+		if (this._onChange) this._onChange();
+	}
+}
+
+/**
+ * Freeze an object and everything it holds, so a shared snapshot cannot be changed by one reader.
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
+function deepFreeze(value) {
+	if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+		Object.freeze(value);
+		for (const key of Object.keys(value)) {
+			deepFreeze(value[key]);
+		}
+	}
+	return value;
+}
 
 /**
  * Validate a prediction period [months] from outside the slider (a save file, a mission preset): a finite positive
@@ -46,14 +95,22 @@ export function applyPredictionDurationMonths(launcher, months) {
 
 export class PresetManager {
 	constructor(options = {}) {
-		this.vehicles = new Map();
-		this.payloads = new Map();
-		this.missions = new Map();
-		this.celestials = new Map();
-		this.celestialKeyMap = new Map();
-		this.fuels = new Map();
-		this.themes = new Map();
-		this.visuals = new Map();
+		// Every preset table reports its changes: the derived snapshots (getRocketVisual, getFuelsMap, getPlumesMap,
+		// getThemesMap, getLegacyPresets, peekObjectParam) are rebuilt only after one (design 2026-11-23 §3.11)
+		this._derivedVersion = 0;
+		/** @type {Map<string, { version: number, value: any }>} */
+		this._derivedCache = new Map();
+		/** @type {Map<string, { version: number, value: any }>} */
+		this._peekParamCache = new Map();
+		const bump = () => { this._derivedVersion++; };
+		this.vehicles = new VersionedMap(bump);
+		this.payloads = new VersionedMap(bump);
+		this.missions = new VersionedMap(bump);
+		this.celestials = new VersionedMap(bump);
+		this.celestialKeyMap = new VersionedMap(bump);
+		this.fuels = new VersionedMap(bump);
+		this.themes = new VersionedMap(bump);
+		this.visuals = new VersionedMap(bump);
 		this.isLoaded = false;
 		this.basePath = './presets';
 
@@ -157,7 +214,6 @@ export class PresetManager {
 		}
 
 		this.isLoaded = true;
-		this._legacyPresets = null;
 	}
 
 	_seedFallbacks() {
@@ -448,8 +504,6 @@ export class PresetManager {
 				MIST_COLOR: 'rgba(195, 228, 255, 0.28)'
 			},
 			VAPOR_CONE: {
-				PRIMARY_STATION_FRACTION: 0.72,
-				SECONDARY_STATION_FRACTION: 0.44,
 				SECONDARY_INTENSITY_MIN: 0.55,
 				CONE_LENGTH_RATIO: 2.2,
 				MAX_WIDTH_MULTIPLIER: 2.8,
@@ -561,13 +615,11 @@ export class PresetManager {
 			}
 
 			this.isLoaded = true;
-			this._legacyPresets = null;
 			report(totalTasks, totalTasks, 'All presets loaded successfully.');
 			return true;
 		} catch (err) {
 			// Gracefully use fallbacks in case of network or filesystem error
 			this.isLoaded = true;
-			this._legacyPresets = null;
 			report(10, 10, 'Presets loaded using built-in definitions.');
 			return true;
 		}
@@ -708,7 +760,7 @@ export class PresetManager {
 		// 2. Sizing Rocket Stage Propellant
 		const targetDeltaV = (mission?.targetDeltaVM_S || 9300) * 1.12;
 		const isDeepSpaceMission = Boolean(mission?.disableOrbitalCutoff || (mission?.targetVInfKmS && mission.targetVInfKmS > 0));
-		const hasSrbBoosters = Boolean(boosters && ((boosters.count > 0) || (boosters.burnTimeSec > 0)));
+		const hasSrbBoosters = RocketStackUtils.boosterCount(boosters) > 0;
 
 		for (let i = 0; i < stages.length; i++) {
 			const stg = stages[i];
@@ -1088,7 +1140,35 @@ export class PresetManager {
 		};
 	}
 
+	/**
+	 * A derived snapshot, rebuilt only when a preset table changed since it was built; deep-frozen so it can be shared.
+	 * @param {Map<string, { version: number, value: any }>} cache
+	 * @param {string} key
+	 * @param {() => any} build
+	 * @returns {any}
+	 */
+	_cachedDerived(cache, key, build) {
+		const hit = cache.get(key);
+		if (hit && hit.version === this._derivedVersion) {
+			return hit.value;
+		}
+		const value = deepFreeze(build());
+		cache.set(key, { version: this._derivedVersion, value });
+		return value;
+	}
+
+	/**
+	 * Legacy presets of every vehicle, shared and frozen (design 2026-11-23 §3.11-2). The built list can refer to the
+	 * stored records (calculateMissionFlightPlan copies the SRB configuration one level deep, so its nested values are
+	 * shared), so it is cloned before freezing; structuredClone keeps undefined fields, NaN, -0 and the H3_30 === H3
+	 * alias as the list has them.
+	 * @returns {Record<string, any>}
+	 */
 	getLegacyPresets() {
+		return this._cachedDerived(this._derivedCache, 'legacyPresets', () => structuredClone(this._buildLegacyPresetList()));
+	}
+
+	_buildLegacyPresetList() {
 		const base = this._buildLegacyPresets();
 		base.H3_30 = base.H3;
 		for (const [id, vehicle] of this.vehicles.entries()) {
@@ -1137,6 +1217,22 @@ export class PresetManager {
 		return this.getCelestial(name);
 	}
 
+	/**
+	 * Read-only parameters of an object: the value getObjectParam returns, shared and frozen per name (null for an
+	 * unknown name) until a preset table changes. Per-frame and per-step readers use it; getObjectParam keeps
+	 * returning a fresh copy for callers that keep or change it (design 2026-11-23 §3.11-5).
+	 * @param {any} name
+	 * @returns {any}
+	 */
+	peekObjectParam(name) {
+		if (this._peekParamCache.size > PEEK_PARAM_CACHE_LIMIT) {
+			this._peekParamCache.clear();
+		}
+		// null has its own key: an object whose String() is 'null' is a name that getCelestial searches
+		const key = (name === null) ? 'null' : `${typeof name}:${String(name)}`;
+		return this._cachedDerived(this._peekParamCache, key, () => this.getObjectParam(name));
+	}
+
 	getObjectParamsMap() {
 		const map = {};
 		for (const c of this.celestials.values()) {
@@ -1160,6 +1256,10 @@ export class PresetManager {
 	}
 
 	getFuelsMap() {
+		return this._cachedDerived(this._derivedCache, 'fuelsMap', () => this._buildFuelsMap());
+	}
+
+	_buildFuelsMap() {
 		const map = {};
 		for (const [k, v] of this.fuels.entries()) {
 			map[k] = JSON.parse(JSON.stringify(v));
@@ -1173,6 +1273,10 @@ export class PresetManager {
 	}
 
 	getPlumesMap() {
+		return this._cachedDerived(this._derivedCache, 'plumesMap', () => this._buildPlumesMap());
+	}
+
+	_buildPlumesMap() {
 		const map = { THRUST_THRESHOLD: 0.01 };
 		for (const [k, v] of this.fuels.entries()) {
 			if (v.plume) {
@@ -1196,6 +1300,10 @@ export class PresetManager {
 	}
 
 	getThemesMap() {
+		return this._cachedDerived(this._derivedCache, 'themesMap', () => this._buildThemesMap());
+	}
+
+	_buildThemesMap() {
 		const map = {};
 		for (const [k, v] of this.themes.entries()) {
 			map[k] = JSON.parse(JSON.stringify(v));
@@ -1204,6 +1312,10 @@ export class PresetManager {
 	}
 
 	getRocketVisual() {
+		return this._cachedDerived(this._derivedCache, 'rocketVisual', () => this._buildRocketVisual());
+	}
+
+	_buildRocketVisual() {
 		const base = this.visuals.get('rocket') || {};
 		return {
 			...JSON.parse(JSON.stringify(base)),

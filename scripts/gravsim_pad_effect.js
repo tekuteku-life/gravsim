@@ -3,6 +3,7 @@
 
 import { PAD_EFFECT } from './gravsim_const.js';
 import { UnitConvertUtils } from './gravsim_utils.js';
+import { RocketRenderer } from './gravsim_rocket_renderer.js';
 
 class UmbilicalCable {
 	constructor() {
@@ -219,6 +220,8 @@ export class PadEffectRenderer {
 		this.rocketRadius = 0;
 		this.bottomOffsetM = 0;
 		this.lastContext = null;
+		/** Umbilical connector y and arm length of the held-down rocket (null until one is seen, design 2026-11-23 §3.8) */
+		this.padAnchors = null;
 	}
 
 	start(rocketId, hostId) {
@@ -241,6 +244,7 @@ export class PadEffectRenderer {
 		this.bottomOffsetM = 0;
 		this.padRefRotationAngle = null;
 		this.lastContext = null;
+		this.padAnchors = null;
 	}
 
 	stop() {
@@ -273,17 +277,55 @@ export class PadEffectRenderer {
 		}
 	}
 
+	/**
+	 * Screen radius the pad is drawn at: the rocket's own drawing radius when there is a rocket (its minimum size
+	 * included), else the physical radius with the pad's minimum. The structures, the particle positions and the
+	 * particle sizes all use it (design 2026-11-23 §3.8-3).
+	 * @param {any} context
+	 * @param {number} zoomScale
+	 * @returns {number}
+	 */
+	_visualScreenRadius(context, zoomScale) {
+		if (context.rocket && typeof context.rocket._getDrawRadius === 'function') {
+			return context.rocket._getDrawRadius(zoomScale);
+		}
+		return Math.max(PAD_EFFECT.PHYSICS.MIN_VISUAL_RADIUS_PX, context.m2pix(this.rocketRadius) * zoomScale);
+	}
+
 	_getVisualMultiplier(context) {
 		const rPx = context.m2pix(this.rocketRadius);
 		const zoomScale = context.zoomScale;
 		let visualMultiplier = 1.0;
 		if (rPx > 0 && zoomScale > 0) {
 			const physicalScreenRadius = rPx * zoomScale;
-			const minRadius = PAD_EFFECT.PHYSICS.MIN_VISUAL_RADIUS_PX;
-			const visualScreenRadius = Math.max(minRadius, physicalScreenRadius);
-			visualMultiplier = visualScreenRadius / physicalScreenRadius;
+			visualMultiplier = this._visualScreenRadius(context, zoomScale) / physicalScreenRadius;
 		}
 		return visualMultiplier;
+	}
+
+	/**
+	 * Umbilical connector y and arm length (in rocket radii) on the drawn silhouette of the held-down rocket: computed
+	 * while the rocket is held down and kept after the release (the arm and cable keep their shape while stages or the
+	 * fairing separate during the pad effect), cleared by start(). The configured values until a held-down rocket is seen
+	 * or where the silhouette has nothing drawn (design 2026-11-23 §3.8-2).
+	 * @param {any} context
+	 * @returns {{ connY: number, armLen: number }}
+	 */
+	_padAnchors(context) {
+		const conf = PAD_EFFECT.STRUCTURE;
+		const rocket = context?.rocket;
+		if (rocket && rocket.isHoldDown) {
+			const geometry = RocketRenderer._computeStackGeometry(rocket, 1);
+			const rConn = RocketRenderer.bodyRadiusAt(geometry, conf.CABLE_CONN_X_MULT);
+			const xTop = conf.UMBILICAL_TOP_X_MULT;
+			const armThick = conf.UMBILICAL_H_MULT * conf.UMBILICAL_ARM_THICK_MULT;
+			const rArm = RocketRenderer.minBodyRadiusOver(geometry, xTop - armThick, xTop);
+			this.padAnchors = {
+				connY: (rConn === null) ? conf.CABLE_CONN_Y_MULT : Math.sign(conf.CABLE_CONN_Y_MULT) * rConn,
+				armLen: (rArm === null) ? conf.UMBILICAL_ARM_LEN_MULT : Math.abs(conf.UMBILICAL_OFFSET_Y) - rArm
+			};
+		}
+		return this.padAnchors || { connY: conf.CABLE_CONN_Y_MULT, armLen: conf.UMBILICAL_ARM_LEN_MULT };
 	}
 
 	_getVectors() {
@@ -409,7 +451,9 @@ export class PadEffectRenderer {
 			? (this.bottomOffsetM / this.rocketRadius)
 			: PAD_EFFECT.PHYSICS.NOZZLE_OFFSET_MULT;
 
-		this.umbilicalCable.update(dt, PAD_EFFECT.STRUCTURE, this.umbilicalAngle, isHoldDown, nozzleMult);
+		const anchors = this._padAnchors(context);
+		const cableConf = { ...PAD_EFFECT.STRUCTURE, CABLE_CONN_Y_MULT: anchors.connY, UMBILICAL_ARM_LEN_MULT: anchors.armLen };
+		this.umbilicalCable.update(dt, cableConf, this.umbilicalAngle, isHoldDown, nozzleMult);
 
 		const localNozzleX = vec.B.x * visualRadius * nozzleMult;
 		const localNozzleY = vec.B.y * visualRadius * nozzleMult;
@@ -604,9 +648,7 @@ export class PadEffectRenderer {
 		const relX = (absPos.x - basis.x) * zoomScale;
 		const relY = (absPos.y - basis.y) * zoomScale;
 		
-		const rPx = (context.rocket && typeof context.rocket._getDrawRadius === 'function')
-			? context.rocket._getDrawRadius(zoomScale)
-			: Math.max(PAD_EFFECT.PHYSICS.MIN_VISUAL_RADIUS_PX, context.m2pix(this.rocketRadius) * zoomScale);
+		const rPx = this._visualScreenRadius(context, zoomScale);
 
 		const bottomOffsetM = context.rocket?.bottomOffsetM || this.bottomOffsetM;
 		const baseRadiusM = context.rocket?.baseRadiusM || this.rocketRadius || PAD_EFFECT.PHYSICS.DEFAULT_ROCKET_RADIUS_M;
@@ -682,7 +724,7 @@ export class PadEffectRenderer {
 		const umbTowerW = rPx * conf.UMBILICAL_H_MULT;
 		const umbTopX = rPx * conf.UMBILICAL_TOP_X_MULT;
 		const umbTowerHeightPx = umbTopX - groundXPx;
-		const umbArmLenPx = rPx * conf.UMBILICAL_ARM_LEN_MULT;
+		const umbArmLenPx = rPx * this._padAnchors(context).armLen;
 
 		ctx.fillStyle = conf.BASE_COLOR;
 		ctx.fillRect(groundXPx - pedOffsetX, umbY - umbTowerW * conf.PEDESTAL_HALF_MULT, pedW, umbTowerW * conf.PEDESTAL_H_MULT);
@@ -748,7 +790,7 @@ export class PadEffectRenderer {
 		const zoomScale = renderContext.zoomScale;
 		const basis = renderContext.basis;
 
-		const visualScreenRadius = Math.max(PAD_EFFECT.PHYSICS.MIN_VISUAL_RADIUS_PX, context.m2pix(this.rocketRadius) * zoomScale);
+		const visualScreenRadius = this._visualScreenRadius(context, zoomScale);
 		const absPos = this._getAbsPadPosition(context);
 
 		ctx.save();

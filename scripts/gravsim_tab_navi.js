@@ -116,7 +116,9 @@ export class NaviTab {
 			DOMUtils.setText(this.ui.nvVel, "--- km/s");
 		}
 
-		const param = target.param || (typeof this.universe?.getObjectParams === 'function' ? this.universe.getObjectParams(target.name) : null) || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(target.name) : null);
+		// Shared read-only parameters (a periodic reader, design 2026-11-23 §3.11-5)
+		const navPm = this.universe?.presetManager || (typeof presetManager !== 'undefined' ? presetManager : null);
+		const param = target.param || (navPm ? navPm.peekObjectParam(target.name) : null);
 		if (param && param.ATM_LIMIT_ALT) {
 			DOMUtils.setText(this.ui.nvAtmAlt, UnitConvertUtils.m2km(param.ATM_LIMIT_ALT).toLocaleString() + " km");
 			DOMUtils.setText(this.ui.nvAtmRho, param.ATM_DENSITY_0.toLocaleString() + " kg/m³");
