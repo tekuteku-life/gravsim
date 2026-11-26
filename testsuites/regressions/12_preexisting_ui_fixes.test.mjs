@@ -36,7 +36,8 @@ import { EventBus } from '../../scripts/gravsim_event_bus.js';
 import { Universe } from '../../scripts/gravsim_universe.js';
 import { ControlPanel } from '../../scripts/gravsim_control_panel.js';
 import { TelemetryPanel } from '../../scripts/gravsim_telemetry_panel.js';
-import { PropulsionCard, isPayloadPhase } from '../../scripts/gravsim_telemetry_card.js';
+import { PropulsionCard } from '../../scripts/gravsim_telemetry_card.js';
+import { RocketStackUtils } from '../../scripts/gravsim_utils.js';
 import { FlightComputer } from '../../scripts/gravsim_flight_computer.js';
 import { Rocket } from '../../scripts/gravsim_object.js';
 import { presetManager } from '../../scripts/gravsim_preset_manager.js';
@@ -511,8 +512,21 @@ describe('Regression 12: pre-existing UI / main-thread fixes (design §4.13, tes
 			// No telemetry index yet: the object's index is used
 			assert.equal(label({ currentStageIndex: 2 }, {}), 'PAYLOAD (HTV-X)');
 			assert.equal(label({ currentStageIndex: 1 }, {}), '2 / 2 (2nd Stage (Upper))');
-			assert.equal(isPayloadPhase(null, null, 0, 1), false);
-			assert.equal(isPayloadPhase(undefined, undefined, 1, 1), true);
+			// The HUD's payload-phase rule is RocketStackUtils.resolveStackState (design 2026-11-23 §3.1, which replaced
+			// isPayloadPhase): a missing rocket or telemetry does not throw and reads as the default stack state (stage 0 of
+			// 1, no fairing)
+			const defaults = { curStgIdx: 0, totalStg: 1, isPayloadOnly: false, hasFairing: false };
+			assert.deepEqual(RocketStackUtils.resolveStackState(null, null), defaults);
+			assert.deepEqual(RocketStackUtils.resolveStackState(undefined, undefined), defaults);
+			// Index = count is the payload phase for a rocket with stages; the rule adds the renderer's `stages &&` term, so
+			// the index alone (no rocket object) stays a stack (design §3.1: no production caller passes one without stages)
+			assert.equal(RocketStackUtils.resolveStackState({ stages: [{}] }, { stageIndex: 1, totalStages: 1 }).isPayloadOnly, true);
+			assert.equal(RocketStackUtils.resolveStackState({ stages: [{}] }, { stageIndex: 0, totalStages: 1 }).isPayloadOnly, false);
+			// (the index is a whole number in [0, count] and, out of the payload phase, at most the last stage: design §3.1 Rev 22)
+			assert.deepEqual(RocketStackUtils.resolveStackState(undefined, { stageIndex: 1, totalStages: 1 }),
+				{ curStgIdx: 0, totalStg: 1, isPayloadOnly: false, hasFairing: false });
+			// The separated flag of either source is the payload phase whatever the index
+			assert.equal(RocketStackUtils.resolveStackState(undefined, { stageIndex: 0, totalStages: 1, isPayloadSeparated: true }).isPayloadOnly, true);
 		});
 
 		it('boundary: last stage index -> stage label, index = count -> payload; SRB tags stay on the first stage only', () => {
@@ -700,18 +714,176 @@ describe('Regression 12: pre-existing UI / main-thread fixes (design §4.13, tes
 			assert.equal(make({ fairing: null }).mass, 5 + 320 + 34 + 6);
 			assert.equal(make({ fairing: { enabled: false, massT: 2 } }).mass, 5 + 320 + 34 + 6);
 			assert.equal(make({ payload: null }).mass, 2 + 320 + 34 + 6);
-			// Index -> Math.max(0, Math.min(Number(i) || 0, stages.length))
+			// Index -> RocketStackUtils.normalizeStageIndex (whole number in [0, stages.length]; design 2026-11-23 §3.1)
 			assert.equal(make({ currentStageIndex: NaN }).mass, 5 + 2 + 320 + 34 + 6);
 			assert.equal(make({ currentStageIndex: undefined }).mass, 5 + 2 + 320 + 34 + 6);
 			assert.equal(make({ currentStageIndex: -3 }).mass, 5 + 2 + 320 + 34 + 6);
 			assert.equal(make({ currentStageIndex: '1', dryMass: 4, fuelMass: 5, oxidMass: 10 }).mass, 5 + 2 + 19 + 6);
 			assert.equal(make({ currentStageIndex: 9, dryMass: 0, fuelMass: 0, oxidMass: 0 }).mass, 5 + 2);
+			// A fraction is rounded down (it threw a TypeError reading stages[i + 0.5] on main); a disableStaging vehicle is
+			// at most on its last stage (Gate 3 G3-5-01)
+			assert.equal(make({ currentStageIndex: 0.5 }).mass, 5 + 2 + 320 + 34 + 6);
+			assert.equal(make({ currentStageIndex: 1.5, dryMass: 4, fuelMass: 5, oxidMass: 10 }).mass, 5 + 2 + 19 + 6);
+			assert.equal(make({ currentStageIndex: 3, disableStaging: true, dryMass: 1, fuelMass: 2, oxidMass: 3 }).mass, 5 + 2 + 6);
 			// Separated payload without a stored flag (save without hasPayloadPropulsion): self-propelled when its propulsion is enabled
 			const prop = { enabled: true, dryMassT: 1.8, fuelMassT: 0.8, oxidMassT: 1.4 };
 			assert.equal(make({ isPayloadSeparated: true, payload: { massT: 4, propulsion: prop }, dryMass: 1.8, fuelMass: 0.5, oxidMass: 1 }).mass, 1.8 + 0.5 + 1);
 			assert.equal(make({ isPayloadSeparated: true, payload: { massT: 4, propulsion: { ...prop, enabled: false } }, dryMass: 0, fuelMass: 0, oxidMass: 0 }).mass, 4);
 			assert.equal(make({ isPayloadSeparated: true, payload: null, dryMass: 0, fuelMass: 0, oxidMass: 0 }).mass, 0);
 			assert.equal(make({ isPayloadSeparated: true, hasPayloadPropulsion: true, dryMass: undefined, fuelMass: NaN, oxidMass: 1 }).mass, 1);
+		});
+
+		it('abnormal (real path): an edited save with a fraction, a negative index or a disableStaging index past its stages loads, and the main thread, the Worker and the HUD fly the same stage (design 2026-11-23 §3.1, Gate 3 G3-5-01)', async () => {
+			EventBus.clearAll();
+			const A = newUniverse();
+			const rocket = rolloutAndLaunch(A.universe, A.bridge, { vehicleId: 'falcon9', payloadId: 'htv_x', missionId: 'iss_rendezvous' });
+			const reached = stepFrames(A.bridge, 1500, () => workerObj(A.bridge, rocket.id).currentStageIndex === 1 && !workerObj(A.bridge, rocket.id).isPayloadSeparated);
+			assert.equal(reached, true, 'stage 2 reached');
+			const save = await saveToJson(A.universe);
+			// [edit of the saved rocket, the index the whole session flies]: design §3.1, whole number in [0, 2] (Falcon 9 has
+			// 2 stages), a value that is not a number 0, a disableStaging vehicle at most its last stage (Gate 3 G3-5-01, G3-7-01)
+			const EDITS = [
+				[{ currentStageIndex: 0.5 }, 0],
+				[{ currentStageIndex: 1.5 }, 1],
+				[{ currentStageIndex: -1 }, 0],
+				[{ currentStageIndex: 3 }, 2],
+				[{ currentStageIndex: 5 }, 2],
+				[{ currentStageIndex: '1' }, 1],
+				[{ currentStageIndex: true }, 1],
+				[{ currentStageIndex: null }, 0],
+				[{ currentStageIndex: 2, disableStaging: true }, 1]
+			];
+			for (const [edit, expected] of EDITS) {
+				const json = JSON.parse(JSON.stringify(save));
+				Object.assign(json.universe.objectManager.find((o) => o.type === OBJECT_TYPES.ROCKET), edit);
+				EventBus.clearAll();
+				const B = newUniverse();
+				loadJson(B.universe, json);
+				const loaded = B.universe.objects.find((o) => o.type === OBJECT_TYPES.ROCKET);
+				assert.ok(loaded, `${JSON.stringify(edit)}: the rocket is loaded`);
+				const w = workerObj(B.bridge, loaded.id);
+				assert.ok(w, `${JSON.stringify(edit)}: the Worker has the rocket (the load did not stop half way)`);
+				assert.equal(loaded.currentStageIndex, expected, `${JSON.stringify(edit)}: main-thread index`);
+				assert.equal(w.currentStageIndex, expected, `${JSON.stringify(edit)}: Worker index`);
+				assert.equal(RocketStackUtils.resolveStackState(loaded).curStgIdx, expected, `${JSON.stringify(edit)}: the stage drawn and shown`);
+				assert.ok(Number.isFinite(loaded.mass) && Object.is(loaded.mass, w.mass), `${JSON.stringify(edit)}: mass ${loaded.mass} t vs Worker ${w.mass} t`);
+				stepFrames(B.bridge, 1);
+				assert.equal(loaded.currentStageIndex, expected, `${JSON.stringify(edit)}: after the first frame`);
+				assert.ok(Object.is(loaded.mass, workerObj(B.bridge, loaded.id).mass), `${JSON.stringify(edit)}: mass after the first frame`);
+			}
+			// The saved stage count is not read: the load counts the stages as the Worker does (2 for Falcon 9), whatever the
+			// save says, when it has no count, and when it has no stage index either (the count does not depend on the index),
+			// so the main thread shows the Worker's count before the first frame (design §3.1, Gate 4 Iteration 1 watchpoint 5,
+			// Iteration 2 G4-2-01). [label, keys to delete, keys to set, the stage index of the main thread and the Worker]:
+			// the saved index (1), or the Rocket default 0 when the save has none
+			const COUNT_EDITS = [
+				['totalStages 5', [], { totalStages: 5 }, 1],
+				['totalStages 0', [], { totalStages: 0 }, 1],
+				['totalStages -1', [], { totalStages: -1 }, 1],
+				['totalStages "7"', [], { totalStages: '7' }, 1],
+				['totalStages null', [], { totalStages: null }, 1],
+				['totalStages 1', [], { totalStages: 1 }, 1],
+				['no totalStages', ['totalStages'], {}, 1],
+				['no currentStageIndex', ['currentStageIndex'], {}, 0],
+				['no currentStageIndex, totalStages 7', ['currentStageIndex'], { totalStages: 7 }, 0],
+				['neither key', ['currentStageIndex', 'totalStages'], {}, 0]
+			];
+			for (const [what, removed, set, index] of COUNT_EDITS) {
+				const json = JSON.parse(JSON.stringify(save));
+				const entry = json.universe.objectManager.find((o) => o.type === OBJECT_TYPES.ROCKET);
+				for (const key of removed) delete entry[key];
+				Object.assign(entry, set);
+				EventBus.clearAll();
+				const B = newUniverse();
+				loadJson(B.universe, json);
+				const loaded = B.universe.objects.find((o) => o.type === OBJECT_TYPES.ROCKET);
+				const w = workerObj(B.bridge, loaded.id);
+				assert.ok(w, `${what}: the Worker has the rocket`);
+				assert.equal(w.totalStages, 2, `${what}: the Worker counts the stages`);
+				assert.equal(loaded.totalStages, 2, `${what}: the main thread counts them as the Worker does`);
+				assert.equal(loaded.currentStageIndex, index, `${what}: main-thread stage index`);
+				assert.equal(w.currentStageIndex, index, `${what}: Worker stage index`);
+				assert.equal(RocketStackUtils.resolveStackState(loaded).curStgIdx, index, `${what}: the stage drawn and shown`);
+			}
+		});
+
+		it('normal (real path): a rocket without stages (the stress-test swarm) saved in its payload phase loads at the same stage index (Gate 3 G3-6-01)', async () => {
+			// The swarm rocket has no stages on the main thread; the Worker flies it as one stage (normalizeRocketConfig) and
+			// separates its payload within a few frames, so its saved index is 1 = the stage count. The load counts the
+			// stages as the Worker does (1, not 0), so the index and the separation state survive the save -> load
+			EventBus.clearAll();
+			const A = newUniverse();
+			const sun = A.universe.objects.find((o) => o.name === 'Sun');
+			assert.ok(sun, 'the default world has the Sun');
+			A.universe.ObjectPlacer._deployEllipticalSwarm(sun, { template: 'Rocket', count: 1, perihelionAuMin: 1, perihelionAuMax: 1, aphelionAuMin: 2, aphelionAuMax: 2, options: { autoControl: true, isIgnited: false } });
+			const rocket = A.universe.objects.find((o) => o.type === OBJECT_TYPES.ROCKET);
+			assert.deepEqual(rocket.stages, [], 'precondition: no stages on the main thread');
+			assert.equal(workerObj(A.bridge, rocket.id).totalStages, 1, 'precondition: the Worker flies one stage');
+			const reached = stepFrames(A.bridge, 200, () => workerObj(A.bridge, rocket.id)?.isPayloadSeparated);
+			assert.equal(reached, true, 'the payload separated');
+			await new Promise((r) => setImmediate(r));
+			const save = await saveToJson(A.universe);
+			const entry = save.universe.objectManager.find((o) => o.type === OBJECT_TYPES.ROCKET);
+			assert.equal(entry.currentStageIndex, 1, 'precondition: saved at index 1 = the stage count');
+			assert.equal(entry.isPayloadSeparated, true, 'precondition: saved as separated');
+
+			EventBus.clearAll();
+			const B = newUniverse();
+			loadJson(B.universe, save);
+			const loaded = B.universe.objects.find((o) => o.type === OBJECT_TYPES.ROCKET);
+			const w = workerObj(B.bridge, loaded.id);
+			assert.ok(w, 'the Worker has the rocket');
+			assert.equal(loaded.currentStageIndex, 1, 'main-thread index kept');
+			assert.equal(w.currentStageIndex, 1, 'Worker index kept');
+			assert.equal(w.isPayloadSeparated, true, 'Worker separation state kept');
+			assert.equal(RocketStackUtils.resolveStackState(loaded).isPayloadOnly, true, 'drawn and shown as the payload alone');
+			stepFrames(B.bridge, 2);
+			await new Promise((r) => setImmediate(r));
+			assert.equal(loaded.currentStageIndex, 1, 'index after the first frames');
+			assert.equal(loaded.telemetry.stageIndex, 1, 'telemetry index after the first frames');
+		});
+
+		it('abnormal (real path): an edited save of a rocket without stages loads at the index the Worker flies, counting one stage (design §3.1, Gate 3 G3-7-01)', async () => {
+			EventBus.clearAll();
+			const A = newUniverse();
+			const sun = A.universe.objects.find((o) => o.name === 'Sun');
+			A.universe.ObjectPlacer._deployEllipticalSwarm(sun, { template: 'Rocket', count: 1, perihelionAuMin: 1, perihelionAuMax: 1, aphelionAuMin: 2, aphelionAuMax: 2, options: { autoControl: true, isIgnited: false } });
+			const rocket = A.universe.objects.find((o) => o.type === OBJECT_TYPES.ROCKET);
+			const onPad = await saveToJson(A.universe);
+			const padEntry = onPad.universe.objectManager.find((o) => o.type === OBJECT_TYPES.ROCKET);
+			assert.deepEqual([padEntry.currentStageIndex, Boolean(padEntry.isPayloadSeparated), padEntry.stages ?? []], [0, false, []], 'precondition: saved at index 0, not separated, no stages');
+			assert.equal(stepFrames(A.bridge, 200, () => workerObj(A.bridge, rocket.id)?.isPayloadSeparated), true, 'the payload separated');
+			await new Promise((r) => setImmediate(r));
+			const separated = await saveToJson(A.universe);
+			// [save, edit of the saved rocket, the index of the main thread and the Worker]: one stage, so a whole number in
+			// [0, 1] (1 = the payload phase), and a disableStaging vehicle at most its last stage, 0
+			const CASES = [
+				[onPad, { currentStageIndex: 0 }, 0],
+				[onPad, { currentStageIndex: 1 }, 1],
+				[onPad, { currentStageIndex: 2 }, 1],
+				[onPad, { currentStageIndex: 5 }, 1],
+				[onPad, { currentStageIndex: -1 }, 0],
+				[onPad, { currentStageIndex: 0.5 }, 0],
+				[onPad, { currentStageIndex: 1, disableStaging: true }, 0],
+				[onPad, { totalStages: 3 }, 0],
+				[separated, { currentStageIndex: 2 }, 1],
+				[separated, { totalStages: 4 }, 1]
+			];
+			for (const [save, edit, expected] of CASES) {
+				const what = `${save === onPad ? 'on the pad' : 'separated'}, ${JSON.stringify(edit)}`;
+				const json = JSON.parse(JSON.stringify(save));
+				Object.assign(json.universe.objectManager.find((o) => o.type === OBJECT_TYPES.ROCKET), edit);
+				EventBus.clearAll();
+				const B = newUniverse();
+				loadJson(B.universe, json);
+				const loaded = B.universe.objects.find((o) => o.type === OBJECT_TYPES.ROCKET);
+				const w = workerObj(B.bridge, loaded.id);
+				assert.ok(w, `${what}: the Worker has the rocket`);
+				assert.equal(w.totalStages, 1, `${what}: the Worker flies one stage`);
+				assert.equal(loaded.totalStages, 1, `${what}: the main thread counts one stage too`);
+				assert.equal(loaded.currentStageIndex, expected, `${what}: main-thread index`);
+				assert.equal(w.currentStageIndex, expected, `${what}: Worker index (the same before the first frame)`);
+			}
 		});
 
 		it('boundary: stage index at 0, at the last stage and at the stage count; no stages', () => {

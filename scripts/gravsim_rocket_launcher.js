@@ -213,10 +213,14 @@ export class RocketLauncher {
 		}
 	}
 
-	_getObjectParam(name) {
-		return (typeof this.universe?.getObjectParams === 'function' ? this.universe.getObjectParams(name) : null)
-			|| (this.presetManager ? this.presetManager.getObjectParam(name) : null)
-			|| (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(name) : null);
+	/**
+	 * Read-only parameters for the per-frame preview and the transform (design 2026-11-23 §3.11-5).
+	 * @param {string} name
+	 * @returns {any}
+	 */
+	_peekObjectParam(name) {
+		const pm = this.universe?.presetManager || this.presetManager || (typeof presetManager !== 'undefined' ? presetManager : null);
+		return pm ? pm.peekObjectParam(name) : null;
 	}
 
 	_getLegacyPreset(key) {
@@ -309,7 +313,7 @@ export class RocketLauncher {
 		if (this.stages && this.stages[0]?.rocketLengthM) {
 			return this.stages[0].rocketLengthM;
 		}
-		const param = this._getObjectParam('Rocket');
+		const param = this._peekObjectParam('Rocket');
 		return param?.RADIUS || 63;
 	}
 
@@ -376,7 +380,7 @@ export class RocketLauncher {
 				baseVy = host.vy;
 
 				// Add host's rotation speed to rocket initial speed (tangential velocity in px/s)
-				const hostParam = host.param || this._getObjectParam(host.name);
+				const hostParam = host.param || this._peekObjectParam(host.name);
 				if (hostParam && hostParam.ROTATION_PERIOD) {
 					const omega = (2 * Math.PI) / hostParam.ROTATION_PERIOD;
 					baseVx += -omega * dyPx;
@@ -406,7 +410,7 @@ export class RocketLauncher {
 		const relY = (t.y - cY) * zoomScale;
 		
 		const objName = 'Rocket';
-		const param = this._getObjectParam(objName) || this._getObjectParam('Rocket');
+		const param = this._peekObjectParam(objName) || this._peekObjectParam('Rocket');
 		const rocketRadiusM = param?.RADIUS || 1;
 		const screenRadiusPx = UnitConvertUtils.m2pix(rocketRadiusM) * zoomScale;
 		const conf = RENDER.MARKER;

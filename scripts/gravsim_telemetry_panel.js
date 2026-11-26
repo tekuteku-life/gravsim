@@ -2,14 +2,13 @@
 
 import { UI, OBJECT_TYPES, TELEMETRY, EVENT_PRIORITY, TANK_PRESSURE_SIM } from './gravsim_const.js';
 import { Renderer } from './gravsim_renderer.js';
-import { DOMUtils, UnitConvertUtils, FormatUtils, normalizeMissionStatus, isLiveObject } from './gravsim_utils.js';
+import { DOMUtils, UnitConvertUtils, FormatUtils, normalizeMissionStatus, isLiveObject, RocketStackUtils } from './gravsim_utils.js';
 import { EventBus } from './gravsim_event_bus.js';
 import {
 	FlightDynamicsCard,
 	AeroGuidanceCard,
 	PropulsionCard,
-	NavigationCameraCard,
-	isPayloadPhase
+	NavigationCameraCard
 } from './gravsim_telemetry_card.js';
 
 /*******************************************************************
@@ -537,16 +536,16 @@ export class TelemetryPanel {
 	 * @returns {string}
 	 */
 	static formatStageInfo(target, tm) {
-		const totalStg = tm.totalStages || target.stages?.length || 1;
-		const curStg = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
-		if (isPayloadPhase(target, tm, curStg, totalStg)) {
+		// The stack state of the renderer and the rest of the HUD (design 2026-11-23 §3.1)
+		const { curStgIdx: curStg, totalStg, isPayloadOnly } = RocketStackUtils.resolveStackState(target, tm);
+		if (isPayloadOnly) {
 			const payloadName = target.payload?.name;
 			return payloadName ? `PAYLOAD (${payloadName})` : 'PAYLOAD';
 		}
 		const stageNum = curStg + 1;
 		const curStageObj = target.stages && target.stages[curStg];
 		const stageName = curStageObj?.name ? curStageObj.name : (totalStg > 1 ? (stageNum === 1 ? 'BOOSTER' : 'UPPER') : 'CORE');
-		const hasBoosters = Boolean(target.boosters && (target.boosters.count > 0 || target.boosters.burnTimeSec > 0));
+		const hasBoosters = RocketStackUtils.boosterCount(RocketStackUtils.resolveBoosters(target)) > 0;
 		let srbTag = '';
 		if (hasBoosters && curStg === 0) {
 			// The separation state the rocket holds (and saves) first, the telemetry flag as the fallback (as the
@@ -699,8 +698,7 @@ export class TelemetryPanel {
 		this._setLamp('press', isPress, false);
 
 		// Multi-stage context
-		const curStage = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
-		const totalStages = (tm.totalStages !== undefined ? tm.totalStages : target.totalStages) || 1;
+		const { curStgIdx: curStage, totalStg: totalStages } = RocketStackUtils.resolveStackState(target, tm);
 		const isEngThrusting = Boolean(target.thrustRatio > 0.01 && target.fuelMass > 0.001 && (target.burnTime > 0 || target.isIgnited));
 
 		// 10. 1-ENG (Stage 1 Engine Burning)

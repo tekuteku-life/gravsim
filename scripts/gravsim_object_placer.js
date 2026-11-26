@@ -144,6 +144,15 @@ export class ObjectPlacer {
 			|| presetManager.getObjectParam(name);
 	}
 
+	/**
+	 * Read-only parameters for the per-frame slingshot HUD (design 2026-11-23 §3.11-5).
+	 * @param {string} name
+	 * @returns {any}
+	 */
+	_peekObjectParam(name) {
+		return (this.universe?.presetManager || presetManager).peekObjectParam(name);
+	}
+
 	placeObject(objName, x, y, vx = 0, vy = 0, options = {}) {
 		const param = this._getObjectParam(objName) || this._getObjectParam('Earth');
 
@@ -795,7 +804,7 @@ export class ObjectPlacer {
 
 	getLaunchObjectName() {
 		const massSelect = /** @type {HTMLSelectElement | null} */ (document.getElementById('mass-select'));
-		if (massSelect && this._getObjectParam(massSelect.value)) {
+		if (massSelect && this._peekObjectParam(massSelect.value)) {
 			return massSelect.value;
 		}
 		return 'Rocket'; // Default rocket object name
@@ -977,7 +986,7 @@ export class ObjectPlacer {
 
 		// Floating HUD
 		const objName = this.getLaunchObjectName();
-		const param = this._getObjectParam(objName) || this._getObjectParam('Rocket');
+		const param = this._peekObjectParam(objName) || this._peekObjectParam('Rocket');
 		const massText = (param?.MASS ? param.MASS.toExponential(2) : '1.00e+00') + " t";
 
 		// Adjust center offset natively based on screen cursor

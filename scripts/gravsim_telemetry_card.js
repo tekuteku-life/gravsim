@@ -1,20 +1,7 @@
 // gravsim_telemetry_card.js
 
 import { OBJECT_TYPES, TELEMETRY, TANK_PRESSURE_SIM } from './gravsim_const.js';
-import { MathUtils, DOMUtils, UnitConvertUtils, FormatUtils, isLiveObject } from './gravsim_utils.js';
-
-/**
- * True once the payload flies alone: separated (Worker flag or telemetry), or no stage is left at the stage index (after
- * the payload separation the Worker sets the stage index to the stage count, one past the last stage).
- * @param {any} target rocket
- * @param {any} tm its telemetry
- * @param {number} curStg stage index shown
- * @param {number} totalStg stage count shown
- * @returns {boolean}
- */
-export function isPayloadPhase(target, tm, curStg, totalStg) {
-	return Boolean(target?.isPayloadSeparated || tm?.isPayloadSeparated) || curStg >= totalStg;
-}
+import { MathUtils, DOMUtils, UnitConvertUtils, FormatUtils, isLiveObject, RocketStackUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * Base Class for Telemetry Cards
@@ -168,11 +155,10 @@ export class PropulsionCard extends TelemetryCard {
 
 	update(target, tm) {
 		// Stage transition tracking for fuel/oxidizer bar max values
-		const curStgIdx = (tm.stageIndex !== undefined ? tm.stageIndex : target.currentStageIndex) || 0;
-		const totalStg = tm.totalStages || target.stages?.length || 1;
-		// After the payload separation the stage index is the stage count (no stage left): the tanks shown are the
-		// payload's own propulsion system (none for a passive payload)
-		const payloadPhase = isPayloadPhase(target, tm, curStgIdx, totalStg);
+		// The stack state of the renderer and the rest of the HUD (design 2026-11-23 §3.1). After the payload separation the
+		// stage index is the stage count (no stage left): the tanks shown are the payload's own propulsion system (none for
+		// a passive payload)
+		const { curStgIdx, isPayloadOnly: payloadPhase } = RocketStackUtils.resolveStackState(target, tm);
 		if (this._lastStageIndex !== curStgIdx) {
 			this._lastStageIndex = curStgIdx;
 			this._skipBarTransitionOnce = true;

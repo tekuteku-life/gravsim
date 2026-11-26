@@ -11,7 +11,7 @@ import {
 } from './gravsim_const.js';
 import { presetManager, ROCKET_FUELS } from './gravsim_preset_manager.js';
 import { FlightComputer } from './gravsim_flight_computer.js';
-import { MathUtils, UnitConvertUtils, normalizeRocketConfig, AeroUtils } from './gravsim_utils.js';
+import { MathUtils, UnitConvertUtils, normalizeRocketConfig, AeroUtils, RocketStackUtils } from './gravsim_utils.js';
 
 /*******************************************************************
  * Calculation Object Class for Base
@@ -144,7 +144,7 @@ class GravSimCalcObject {
 	}
 
 	_checkAerodynamicDestruction(q) {
-		const objParam = this.param || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(this.name) : null);
+		const objParam = this.param || (typeof presetManager !== 'undefined' ? presetManager.peekObjectParam(this.name) : null);
 		const maxQ = objParam?.MAX_DYNAMIC_PRESSURE || Infinity; // Pa
 		if (q > maxQ) {
 			this.shattered = true;
@@ -327,8 +327,10 @@ export class CalcRocket extends GravSimCalcObject {
 		});
 
 		this.stages = normConfig.stages;
-		this.boosters = normConfig.boosters || thrustData?.boosters || thrustData?.rendering?.boosters || (normConfig.stages && normConfig.stages[0]?.boosters) || null;
-		this.hasBoosters = !!(this.boosters && ((this.boosters.count > 0) || (this.boosters.burnTimeSec > 0)));
+		// normConfig.boosters is the copy of thrustData.boosters, the only SRB configuration the main thread sends; the
+		// count rule is shared with the renderer and the HUD (design 2026-11-23 §3.1)
+		this.boosters = normConfig.boosters || null;
+		this.hasBoosters = RocketStackUtils.boosterCount(this.boosters) > 0;
 		this.isBoosterBurnout = false;
 		this.isBoosterSeparated = false;
 		this.isBoosterIgnited = false;
@@ -398,7 +400,9 @@ export class CalcRocket extends GravSimCalcObject {
 		const hasRestoredRuntime = thrustData?.restoredRuntimeState === true;
 
 		if (hasRestoredRuntime) {
-			this.currentStageIndex = Math.max(0, Math.min(Number(thrustData?.currentStageIndex) || 0, this.totalStages));
+			// The saved index as the main thread reads it (whole number in [0, totalStages], a disableStaging vehicle at most
+			// its last stage; design 2026-11-23 §3.1)
+			this.currentStageIndex = RocketStackUtils.normalizeStageIndex(thrustData?.currentStageIndex, this.totalStages, this.disableStaging);
 			this.isPayloadSeparated = Boolean(thrustData?.isPayloadSeparated);
 			this.isStage2Separated = Boolean(
 				thrustData?.isStage2Separated ||
@@ -442,7 +446,7 @@ export class CalcRocket extends GravSimCalcObject {
 				// separateBoosters() removed the casings' dry mass from stages[0] in the Worker only (the saved stages are the
 				// main-thread copy): repeat it so the later stage-1 debris and the upper-stage mass sum match the saved flight
 				if (this.currentStageIndex === 0 && this.hasBoosters && this.isBoosterSeparated && this.stages[0]) {
-					const boosterDryMass = this.boosters.dryMassT || (this.boosters.count === 4 ? 40.0 : 20.0);
+					const boosterDryMass = this.boosters.dryMassT || (RocketStackUtils.boosterCount(this.boosters) === 4 ? 40.0 : 20.0);
 					this.stages[0].dryMassT = Math.max(0, (this.stages[0].dryMassT || 0) - boosterDryMass);
 				}
 			}
@@ -912,7 +916,7 @@ export class CalcRocket extends GravSimCalcObject {
 
 		this.isBoosterSeparated = true;
 		this._postSepRcsTimer = RCS_CONFIG.POST_SEP_SETTLE_S;
-		const boosterDryMass = this.boosters.dryMassT || (this.boosters.count === 4 ? 40.0 : 20.0);
+		const boosterDryMass = this.boosters.dryMassT || (RocketStackUtils.boosterCount(this.boosters) === 4 ? 40.0 : 20.0);
 
 		if (this.stages && this.stages[0]) {
 			this.stages[0].dryMassT = Math.max(0, (this.stages[0].dryMassT || 0) - boosterDryMass);
@@ -920,7 +924,7 @@ export class CalcRocket extends GravSimCalcObject {
 			this.updateTotalMass();
 		}
 
-		const count = this.boosters.count || 2;
+		const count = RocketStackUtils.boosterCount(this.boosters);
 		const baseRad = this.baseRadiusM || (this.radius > 100 ? this.radius / 3.10 : this.radius);
 		const boosterRadius = baseRad;
 		const massPerBooster = boosterDryMass / count;
@@ -1145,7 +1149,7 @@ export class CalcRocket extends GravSimCalcObject {
 		let area = 0; // m^2
 		let cd = AERO_DYNAMIC.ROCKET_DEFAULT_CD;
 
-		const objParam = this.objParam || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(this.name) : null);
+		const objParam = this.objParam || (typeof presetManager !== 'undefined' ? presetManager.peekObjectParam(this.name) : null);
 		if (objParam && objParam.DRAG_COEF) {
 			cd = objParam.DRAG_COEF;
 		}
@@ -1180,7 +1184,7 @@ export class CalcRocket extends GravSimCalcObject {
 	}
 
 	_checkAerodynamicDestruction(q) {
-		const objParam = this.objParam || (typeof presetManager !== 'undefined' ? presetManager.getObjectParam(this.name) : null);
+		const objParam = this.objParam || (typeof presetManager !== 'undefined' ? presetManager.peekObjectParam(this.name) : null);
 		const maxQAxial = objParam?.MAX_Q_AXIAL || Infinity; // Pa
 		const maxQLateral = objParam?.MAX_Q_LATERAL || Infinity; // Pa
 

@@ -45,6 +45,22 @@ export class PhysicsEngine {
 		return null;
 	}
 
+	/**
+	 * Parameters a per-step reader only reads: the shared table from the Worker's initialisation, else the preset
+	 * manager's shared read-only copy (no copy and no name search per step, design 2026-11-23 §3.11-5).
+	 * @param {string} name
+	 * @returns {any}
+	 */
+	peekCelestialParam(name) {
+		if (this.celestialParams && this.celestialParams[name]) {
+			return this.celestialParams[name];
+		}
+		if (typeof presetManager !== 'undefined') {
+			return presetManager.peekObjectParam(name);
+		}
+		return null;
+	}
+
 	addObject(data) {
 		let newObj;
 		// Restore contract (§4.1): a rocket restores only with restoredRuntimeState === true; other objects when the save
@@ -212,7 +228,7 @@ export class PhysicsEngine {
 			}
 
 			// Distinguish bodies by atmosphere parameter
-			const param = obj.param || this.getCelestialParam(obj.name);
+			const param = obj.param || this.peekCelestialParam(obj.name);
 			if (obj.type === OBJECT_TYPES.CELESTIAL && param && param.ATM_LIMIT_ALT) {
 				this.atmBodies.push(obj);
 			}
@@ -227,7 +243,7 @@ export class PhysicsEngine {
 	 * finite period with |P| > 1e-6 s rotates.
 	 */
 	_getRotationOmega(body) {
-		const rotPeriod = body.param?.ROTATION_PERIOD ?? body.rotationPeriod ?? this.getCelestialParam(body.name)?.ROTATION_PERIOD ?? 0;
+		const rotPeriod = body.param?.ROTATION_PERIOD ?? body.rotationPeriod ?? this.peekCelestialParam(body.name)?.ROTATION_PERIOD ?? 0;
 		return (Number.isFinite(rotPeriod) && Math.abs(rotPeriod) > 1e-6) ? (2 * Math.PI) / rotPeriod : 0;
 	}
 
@@ -522,7 +538,7 @@ export class PhysicsEngine {
 
 		// Ignore if don't reach for the object's atmosphere
 		const distM = Math.sqrt(obj._minAtmDistSq); // m
-		const refParam = refBody.param || this.getCelestialParam(refBody.name);
+		const refParam = refBody.param || this.peekCelestialParam(refBody.name);
 		const altM = distM - refBody.radius; // m
 
 		if (altM > refParam.ATM_LIMIT_ALT) {
@@ -683,7 +699,7 @@ export class PhysicsEngine {
 		const massiveLen = this.massiveBodies.length;
 		for (let i = 0; i < massiveLen; i++) {
 			const objA = this.massiveBodies[i];
-			const paramA = objA.param || this.getCelestialParam(objA.name);
+			const paramA = objA.param || this.peekCelestialParam(objA.name);
 			const hasAtmA = paramA && paramA.ATM_LIMIT_ALT;
 
 			for (let j = i + 1; j < massiveLen; j++) {
@@ -713,7 +729,7 @@ export class PhysicsEngine {
 						objA.dominantBody = objB;
 						objA.distToDominantM = dist;
 					}
-					const paramB = objB.param || this.getCelestialParam(objB.name);
+					const paramB = objB.param || this.peekCelestialParam(objB.name);
 					if (paramB && paramB.ATM_LIMIT_ALT && distSq < objA._minAtmDistSq) {
 						objA._minAtmDistSq = distSq;
 						objA._nearestAtmBody = objB;
@@ -741,7 +757,7 @@ export class PhysicsEngine {
 	// Massive vs Tiny Gravity
 	_calculateMassiveToTinyGravity() {
 		for (const objA of this.massiveBodies) {
-			const hasAtmA = (objA.param || this.getCelestialParam(objA.name))?.ATM_LIMIT_ALT;
+			const hasAtmA = (objA.param || this.peekCelestialParam(objA.name))?.ATM_LIMIT_ALT;
 
 			for (const objB of this.tinyBodies) {
 				const dx = objB.x - objA.x; // m
@@ -862,7 +878,7 @@ export class PhysicsEngine {
 
 			// Atmosphere entry scale height limit
 			if (obj.inAtmosphere && obj._nearestAtmBody) {
-				const refParam = obj._nearestAtmBody.param || this.getCelestialParam(obj._nearestAtmBody.name);
+				const refParam = obj._nearestAtmBody.param || this.peekCelestialParam(obj._nearestAtmBody.name);
 				if (refParam) {
 					const H = refParam.ATM_SCALE_HEIGHT || AERO_DYNAMIC.DEFAULT_SCALE_HEIGHT;
 					const dtAtm = cfg.ETA_ATM * (H / (v + cfg.ATM_VEL_OFFSET));

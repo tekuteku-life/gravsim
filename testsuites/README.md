@@ -9,11 +9,12 @@ GravSim（多体万有引力・多段ロケット物理シミュレータ）の*
 
 ## 1. ディレクトリ構成とテスト階層アーキテクチャ
 
+```text
 testsuites/
 ├── README.md                      # 本説明書
 ├── run_all.mjs                    # 統合テストランナー（--unit, --regressions, --integration, --system, --coverage, --verbose 対応、1 件 300 秒のタイムアウト）
 ├── test_helpers.mjs               # ヘッドレスDOM/Canvas/WebAudioモック & 共通アサーション・モック生成
-├── regressions/                   # 【不具合検知・回帰テスト群】（全455テスト、2026-11-22）
+├── regressions/                   # 【不具合検知・回帰テスト群】（全458テスト、2026-11-25）
 │   ├── 01_tank_pressure.test.mjs          # MECO後タンク圧・安全減圧・ベント保持
 │   ├── 02_fuel_and_deltav.test.mjs         # 残燃料1/1000化バグ防止 & REM ΔV精度
 │   ├── 03_solar_system_gravity.test.mjs    # 太陽系質量スケール & 軌道安定性
@@ -22,24 +23,23 @@ testsuites/
 │   ├── 06_telemetry_annunciator.test.mjs   # 16灯アナンシエーターランプ連動
 │   ├── 07_trajectory_predictor.test.mjs    # 軌道予測の発射直後墜落防止 & 多段イベント検出
 │   └── 08a〜08c・09〜21_*.test.mjs, 08_trajectory_guarantees_helpers.mjs # 2026-11 追加分（§2-D）
-├── integration/                   # 【結合・ワークフロー検証テスト群】（全252テスト）
+├── integration/                   # 【結合・ワークフロー検証テスト群】（全278テスト）
 │   ├── 01_physics_worker_bridge.test.mjs              # 物理演算 Worker とメインスレッドの同期・デブリ生成
-│   ├── 02_rocket_guidance_staging.test.mjs            # 発射・多段燃焼・分離パイプライン連携
 │   ├── 03_trajectory_predictor_engine.test.mjs        # 軌道予測エンジンと物理エンジンの軌道一貫性
 │   ├── 04_ui_telemetry_event_pipeline.test.mjs        # テレメトリHUD・アナンシエーター・音響パイプライン連携
 │   ├── 05_mission_workflow_and_state_persistence.test.mjs # 発射台配備・地球優先天体選択・予測期間・状態保存復元
 │   ├── 06〜10_*.test.mjs                               # 外部プリセット・軌道投入・タブ遷移・天体配置・大気 Isp
-│   └── 11〜14_*.test.mjs                               # 2026-11 追加分（§2-D）
-├── unit/                          # 【全モジュール機能・単体テスト群】（全888テスト）
+│   └── 11〜15_*.test.mjs                               # 2026-11 追加分（§2-D・§2-E）
+├── unit/                          # 【全モジュール機能・単体テスト群】（全1,272テスト）
 │   ├── 01_core_physics.test.mjs            # 物理計算・空間四分木・バッファ同期・ユーティリティ
 │   ├── 02_rocket_guidance.test.mjs         # フライトコンピュータ・自動シーケンサ・発射台・軌道予測
 │   ├── 03_celestial_world.test.mjs         # 天体・ロケットオブジェクト・デブリ生成・公転配置・セーブ管理
 │   ├── 04_camera_render.test.mjs           # カメラ・座標変換・レンダラー・発射台エフェクト・衝撃波
 │   ├── 05_ui_telemetry_audio.test.mjs      # テレメトリHUDカード・操作パネル・入力・音響・シーケンサー
-│   └── 06〜11_*.test.mjs, 07b_*.test.mjs   # 2026-11 追加分（§2-D「2026-11 追加テスト」）
-├── system/                        # 【ヘッドレス Chrome による UI E2E テスト】（全41テスト、2026-11 追加）
+│   └── 06〜13_*.test.mjs, 07b_*.test.mjs   # 2026-11 追加分（§2-D・§2-E）
+├── system/                        # 【ヘッドレス Chrome による UI E2E テスト】（全46テスト、2026-11 追加）
 │   ├── cdp_helpers.mjs                     # 静的サーバー・Chromium 起動・CDP クライアント（テストとしては収集されない）
-│   └── 01〜05_*.test.mjs                   # 起動と予測線・フライトプラン表・打上げと段分離・保存と読込（2 ファイル）
+│   └── 01〜06_*.test.mjs                   # 起動と予測線・フライトプラン表・打上げと段分離・保存と読込（2 ファイル）・ベイパーコーンと RCS の位置
 └── perf/                          # 【計測スクリプト】（`npm test` には含めない）
     └── rollout_timing.mjs                  # rollout() の同期ブロック時間（設計書 §4.12 の受入基準の計測）
 ```
@@ -75,7 +75,6 @@ testsuites/
 | スイートファイル | 対象モジュール | 主な検証内容 |
 | :--- | :--- | :--- |
 | **`01_physics_worker_bridge.test.mjs`** | `gravsim_calc.js`<br>`gravsim_worker_bridge.js`<br>`gravsim_object_manager.js` | ・PhysicsEngine とメインスレッド間の46スロット共有Float64バッファ同期<br>・Worker側での段分離デブリ自動生成とメインスレッドObjectManagerインスタンス化<br>・単位変換の双方向整合性（km $\leftrightarrow$ m, t $\leftrightarrow$ kg）<br>・ゼロアロケーションバッファプールの再利用安定性 |
-| **`02_rocket_guidance_staging.test.mjs`** | `gravsim_rocket_launcher.js`<br>`gravsim_launch_sequencer.js`<br>`gravsim_flight_computer.js`<br>`gravsim_calc_object.js` | ・LaunchSequencer カウントダウン・EventBus 発火・ホールドダウン解除連携<br>・CalcRocket 1段燃焼・分離・2段点火・フェアリング投棄・ペイロード放出の多段パイプライン<br>・FlightComputer ピッチ誘導姿勢遷移と構造Max-G/Max-Qリミッター制御 |
 | **`03_trajectory_predictor_engine.test.mjs`** | `gravsim_trajectory_predictor.js`<br>`gravsim_calc_predictor.js`<br>`gravsim_calc.js` | ・メイン物理エンジン（RK4）と軌道予測エンジンの万有引力軌道一貫性<br>・runMultiBodySimulation による未来軌道点列生成と全フライトマイルストーン検出<br>・母天体の自転角速度に応じた予測軌跡の座標系回転補正 |
 | **`04_ui_telemetry_event_pipeline.test.mjs`** | `gravsim_telemetry_panel.js`<br>`gravsim_telemetry_card.js`<br>`gravsim_sound_sequencer.js`<br>`gravsim_control_panel.js` | ・Workerテレメトリフレームのデコードと4種TelemetryCardおよびDOM要素更新<br>・16灯アナンシエーターマトリクスの飛行フェーズ連動点灯・点滅遷移<br>・EventBus 経由でのSoundSequencerコールアウト音声発火<br>・ControlPanel タブ切替同期およびタイムスケールのUniverseへの即時伝播 |
 | **`05_mission_workflow_and_state_persistence.test.mjs`** | `gravsim_tab_rocket.js`<br>`gravsim_tab_system.js`<br>`gravsim_pad_effect.js`<br>`gravsim_save_manager.js`<br>`gravsim_universe.js` | ・ロケットタブ遷移時のデフォルト天体自動選定（地球優先、地球不在時は最後に追加された天体へのフォールバック、ユーザー選択保持・天体削除時リカバリ）<br>・予測期間スライダーの最低0.2カ月／初期値1.0カ月設定、RocketLauncher / プレビューへの即時伝播と日／月／年フォーマット<br>・ロールアウト〜パッドエフェクト〜内部電源/リフトオフによるストロングバック/アンビリカル退避のE2E検証<br>・SaveManager / Universe / ObjectManager / ControlPanel 状態の完全シリアライズ & デシリアライズ検証 |
@@ -91,21 +90,24 @@ testsuites/
 | `unit/06_rotation_buffer_sync.test.mjs` | 133 | バッファ 51 スロット・`ROCKET_FLAG`・段状態コード、自転角の単一源（`_getRotationOmega`）、ホールドダウン同期、`updateObjectParams` の 2 パス、実飛行経路の記録、先減算の描画式 |
 | `unit/07_trajectory_sampler.test.mjs` | 68 | 予測の終了理由 6 種、`maxSimTime`、ステップ・点数の上限と予算オプション、サンプラー、座標系の切替、`renderTrajectory`、飛行中の消去 |
 | `unit/07b_trajectory_worker_scope.test.mjs` | 9 | 予測 Worker のメッセージ処理（モジュールを 1 プロセスで 1 回だけ読み込むため別ファイル） |
-| `unit/08_rcs_vapor_cone.test.mjs` | 209 | RCS の状態判定と描画、`AeroUtils`（気温・音速・マッハ）、ベイパーコーン、マッハの 0 クリア、音響 |
+| `unit/08_rcs_vapor_cone.test.mjs` | 331 | RCS の状態判定と描画、`AeroUtils`（気温・音速・マッハ）、ベイパーコーン、マッハの 0 クリア、音響。2026-11-23 の設計書（§2-E）の形状（`_computeStackGeometry`）・演出の位置（`noseShoulder`・`interstageShoulder`・`layout.rcs`）・RCS の空きの壁と四隅の噴射・描く順 |
 | `unit/09_flight_plan_actions.test.mjs` | 175 | トリガ、アクションのラッチ、保留燃焼、`ORBIT_ASSIST`、分離の保留、7 ミッションの表、深宇宙サイジング、6 列の表、スライダ、推力クランプ、設定の専有化、無効な行の除去 |
-| `unit/10_runtime_state_persistence.test.mjs` | 113 | 復元分岐の契約、実行時状態の保存・復元と検証、スナップショットのプロトコル、保存項目、読込のガード、不要コードの削除 |
+| `unit/10_runtime_state_persistence.test.mjs` | 114 | 復元分岐の契約、実行時状態の保存・復元と検証、スナップショットのプロトコル、保存項目、読込のガード、不要コードの削除 |
 | `unit/11_perf_rollout_timing.test.mjs` | 52 | 同期ブロック時間の計測スクリプト（`perf/rollout_timing.mjs`）: 回数と先後、回数の下限、既定のワールドと方位、構成（124）と回の完全性、最小値の比（main の最小値が正でない構成は無限大）、受入基準 1・2（2 は本ブランチだけの値）とそれぞれの終了コード、負荷の条件、余裕と全回・前半・後半の変動、出力の書式、ツリーと計測コードの指紋、分割実行の状態ファイル（保存・再開・不一致と不正な内容の拒否）、計測のループ（子プロセスが自分のツリーとワールドを記録する模擬のモジュールのツリーで、記録した先後どおりの実行、回ごとの保存・先後の継続、各ツリーの計測の前の負荷の標本、回数の上限、欠けた回の拒否）、オプションの検査と終了コード。子プロセスの起動には時間制限があり、止まった子プロセスはテストの失敗になる。実際の計測時間と負荷の値は確かめない |
+| `unit/12_stack_rules_smoke_pad.test.mjs` | 172 | §2-E: スタックの状態と SRB の本数の規則（`RocketStackUtils`。上限 9・切り捨て・有限でない値）、段番号の正規化（`normalizeStageIndex`）、詳細度・HUD・Worker の規則の一致（`disableStaging`・段のない物体と、段の番号でない段番号の現在の段を含む）、排煙・火花の放出位置、射点のアンビリカル（外形・アームの長さと端面の範囲の両端・保持中の記憶）とパッドの尺度、フェアリングの曲線の半径（桁落ちしない根）、`NOZZLE_BOTTOM_OFFSET` の固定 |
+| `unit/13_preset_snapshot_cache.test.mjs` | 89 | §2-E: 設定の写しのキャッシュ（`VersionedMap`・版番号・深い凍結・5 つの写し・`peekObjectParam`・`peekCelestialParam`）、毎フレーム・毎ステップの読み手の写しと検索が 0 回、旧形式のプリセット、`init()` の経路 |
 | `integration/11_worker_sync_rotation_holddown.test.mjs` | 22 | Worker と主スレッドの自転角・ホールドダウン・2 パス・静止軌道の実飛行経路 |
-| `integration/12_rcs_vapor_pipeline.test.mjs` | 25 | `CalcRocket` → `WorkerBridge` → `ObjectManager` → 描画の RCS・マッハ、実飛行 |
+| `integration/12_rcs_vapor_pipeline.test.mjs` | 26 | `CalcRocket` → `WorkerBridge` → `ObjectManager` → 描画の RCS・マッハ、実飛行 |
 | `integration/13_flight_plan_missions.test.mjs` | 18 | 7 ミッションの実飛行（分離の保留、軌道投入、深宇宙のカットオフ） |
 | `integration/14_save_load_runtime.test.mjs` | 19 | 実エンジンでの飛行 → 保存 → 読込 → 継続（スナップショットあり・なし）。全機体・各飛行段階で保存し、中断しない飛行とビット単位で一致すること |
+| `integration/15_stack_geometry_pipeline.test.mjs` | 59 | §2-E: 実際の経路（ランチャ → 配置 → Worker → 同期）での RCS・ベイパーコーン・自走ペイロードの排煙・SRB の本数（不正な値を含む）・有限でない値の保存・設定の写しのキャッシュ |
 | `regressions/08a_trajectory_guarantees_near_host_short.test.mjs` | 4 | 設計書 §4.3 の保証 1〜3（Sun+Earth・8 方位、地球近傍の閉軌道の 0.2 ヶ月とプリセットの期間） |
 | `regressions/08b_trajectory_guarantees_near_host_long.test.mjs` | 11 | 同（1 ヶ月）、§4.3 の実測表 |
 | `regressions/08c_trajectory_guarantees_deep_and_worlds.test.mjs` | 15 | 保証 4・5（深宇宙・月遷移）、他の 4 ワールド、独立監査 2 の指摘の回帰（G2-2-01・G2-2-02・G2-3-01・G2-4-01／G2-6-01・G2-8-01）。08a〜08c は 1 ファイル 60 秒の目安に収めるため旧 `08_trajectory_prediction_guarantees`（30 件）を分けたもので、共通部分は `08_trajectory_guarantees_helpers.mjs` |
 | `regressions/09_flight_plan_findings.test.mjs` | 16 | G2-02（設定の共有参照）・G2-04（`vel` 再点火）・G2-05（推力クランプ）、工程 3 で直した不具合 |
 | `regressions/10_persistence_findings.test.mjs` | 19 | G2-01（復元分岐の契約）・G2-07（実行時状態の復元）・G3-1-01（燃焼中の保存の継続）・G3-1-02（射点・ペイロード分離後の保存）、分離直後の投棄物と自分のロケットの衝突 |
 | `regressions/11_preexisting_worker_fixes.test.mjs` | 23 | 既存の不具合（設計書 §4.13-1〜3）: ホールドダウン中のロケットとホストの衝突、予測用 Worker の物理ループ、予測の `steps` と t = 0 の `breakup` |
-| `regressions/12_preexisting_ui_fixes.test.mjs` | 26 | §4.13-4〜8: 時間倍率・ズームの読込、予測期間のスライダの同期、ペイロード分離後の段表示、射点の HUD、読込直後の質量 |
+| `regressions/12_preexisting_ui_fixes.test.mjs` | 29 | §4.13-4〜8: 時間倍率・ズームの読込、予測期間のスライダの同期、ペイロード分離後の段表示、射点の HUD、読込直後の質量 |
 | `regressions/13_preexisting_followup_fixes.test.mjs` | 17 | §4.13-9〜12: 読込直後の SRB 表示、Rocket タブを閉じたときの表示、予測期間の保存、テレメトリがないときの状態欄 |
 | `regressions/14_preexisting_final_fixes.test.mjs` | 30 | §4.13-13〜18: 状態でない値の表示、アナンシエーターの使われない入力、タブを閉じたときの打上げの表示、カメラの対象、ミッションの予測期間の検証、範囲の定数 |
 | `regressions/15_preexisting_last_fixes.test.mjs` | 22 | §4.13-19〜22: REF BODY、実時間（1.00 s/s）、状態の正規化、状態の数値リテラル |
@@ -120,6 +122,7 @@ testsuites/
 | `system/03_launch_telemetry_staging.test.mjs` | 5 | 打上げ後のテレメトリ（高度・速度・マッハ）、段分離とアナンシエーター、デブリ |
 | `system/04_save_load.test.mjs` | 4 | 保存 → 読込の往復（打上げ前・飛行中）、不正なセーブファイル |
 | `system/05_save_load_period_hud_view.test.mjs` | 8 | 予測期間の保存、SRB の読込、HUD の状態欄・アナンシエーター、タブを開いたままの読込とカメラの対象、範囲の定数、Clear Selected の直後の保存（`system/04` から 1 ファイル 60 秒の目安のために分けた） |
+| `system/06_vapor_cone_rcs_anchors.test.mjs` | 5 | §2-E: Falcon 9 を打ち上げて遷音速で止め、実際の Canvas に描いたベイパーコーンの頂点（フェアリングの基部・段間の前端）と機体の外の雲の画素、第 1 段分離の後の RCS の噴射の起点（第 2 段の壁、フェアリングの外）と役割（設計書の表の位置と向き）、凍結による例外がないこと |
 
 #### ヘッドレス Chrome の E2E（`system/`）
 - 依存なし。Node の `http` で `127.0.0.1` の空きポートに配信し、Chromium（既定 `/usr/bin/chromium`、環境変数 `CHROME_PATH` で変更可）を一時プロファイルで起動して、Node 標準の `WebSocket` で CDP を操作する。音声は Chromium の偽の出力（`--disable-audio-output`）に送り、実際の音声デバイスは開かない（Web Audio のグラフと時計はそのまま動く。音声デバイスのエラーで最初のクリックが止まった実行があったため）。終了時にブラウザ・サーバー・一時ディレクトリを必ず片付ける。
@@ -132,6 +135,10 @@ testsuites/
 
 ---
 
+### E. 2026-11-23 追加テスト（ベイパーコーン・RCS・排煙の位置、設定の写しのキャッシュ）
+
+設計書 [`docs/design/2026-11-23_vapor_cone_rcs_anchors.md`](../docs/design/2026-11-23_vapor_cone_rcs_anchors.md) の §5 のテスト計画に従うテスト群。D の表の `unit/12`・`unit/13`・`integration/15`・`system/06` を新設し、`unit/08`・`integration/12` を書き直した。`unit/10`（`_computeVisualLayout` の戻り値のキー、Worker の復元の段番号の正規化と `disableStaging`）と `regressions/12`（削除した `isPayloadPhase` の代わりに `RocketStackUtils.resolveStackState`、`Rocket.mass` の段番号、段番号・段数（`totalStages`）を書き換えた保存ファイルと段のない機体の保存→読込）も新しい規則に合わせた。主な回帰のテストは、修正前のツリー（`main`）で失敗することを確かめてある（監査記録 [`docs/review/2026-11-23_vapor_cone_rcs_anchors.md`](../docs/review/2026-11-23_vapor_cone_rcs_anchors.md)）。
+
 ## 3. WSL 上での実行方法
 
 WSL（Ubuntu等）のターミナルを開き、リポジトリルートに移動して実行します。
@@ -143,7 +150,7 @@ WSL（Ubuntu等）のターミナルを開き、リポジトリルートに移�
 
 ### 実行コマンド一覧
 
-#### A. 全テストの実行（回帰テスト + 単体テスト + 結合テスト + システムテスト：計 1,636 テスト、2026-11-23 時点）
+#### A. 全テストの実行（回帰テスト + 単体テスト + 結合テスト + システムテスト：計 2,054 テスト、2026-11-26 時点）
 ```bash
 npm test
 # または
@@ -190,16 +197,16 @@ node testsuites/run_all.mjs --system
 ## 4. テスト結果の見方
 
 ### 正常終了時（PASS）
-全 1,636 テストが成功すると、緑色のチェックマーク（`✔`）とともに以下のような集計サマリーが表示されます（2026-11-23 の実行例）：
+全 2,054 テストが成功すると、緑色のチェックマーク（`✔`）とともに以下のような集計サマリーが表示されます（2026-11-26 の実行例）：
 ```text
-ℹ tests 1636
-ℹ suites 285
-ℹ pass 1636
+ℹ tests 2054
+ℹ suites 339
+ℹ pass 2054
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 64777.304513
+ℹ duration_ms 78809.973836
 
 ---------------------------------------------------------------
  [SUCCESS] All GravSim automated test suites passed successfully! 
@@ -214,22 +221,22 @@ node testsuites/run_all.mjs --system
 ## 5. コードカバレッジ実績（品質保証基準の達成）
 
 `npm run test:coverage` を実行すると、全テスト実行後に標準出力にカバレッジレポートテーブルが出力されます（`testsuites/` 配下は集計から除外。起動用の `gravsim.js` はブラウザでだけ動くため Node のカバレッジには現れず、E2E（`system/`）で実行される）。  
-基準は [`docs/development_process.md`](../docs/development_process.md) §3.4 の「最低 90% 以上、目標 97% 以上」です。2026-11-23 の実績（`scripts/` 全体）：
-- **行カバレッジ**: **99.36%**
-- **分岐カバレッジ**: **93.06%**
-- **関数カバレッジ**: **97.34%**
+基準は [`docs/development_process.md`](../docs/development_process.md) §3.4 の「最低 90% 以上、目標 97% 以上」です。2026-11-26 の実績（`scripts/` 全体）：
+- **行カバレッジ**: **99.52%**
+- **分岐カバレッジ**: **93.88%**
+- **関数カバレッジ**: **97.82%**
 
-### モジュール別カバレッジ実績テーブル（2026-11-23）
+### モジュール別カバレッジ実績テーブル（2026-11-26）
 
-下表は工程 4 の実行（[テスト計画](../docs/design/2026-11-20_trajectory_fx_flightplan_test_plan.md) §5）の値です。ファイルごとの分岐の値は、乱数と並列実行の順序により実行ごとに最大 1 ポイントほど揺れます（全体の分岐の値の揺れは 0.1 ポイント程度。2026-11-22〜23 の実行で 92.97〜93.06%）。
+下表は工程 4 の実行（[設計書](../docs/design/2026-11-23_vapor_cone_rcs_anchors.md) §5.5。2026-11-26 の `npm run test:coverage`）の値です。ファイルごとの分岐の値は、乱数と、並列実行の順序・タイマーで動く更新により、実行ごとに揺れます。多くのファイルは 1 ポイント以内ですが、タイマーで動くファイルは数ポイント揺れることがあります（2026-11-25〜26 の 3 回の実行で、`gravsim_tab_navi.js` は 100.00%・95.12%・100.00%。ファイルもテストも同じで、テストを 1 本ずつ実行すると 100%）。全体の分岐の値の揺れは 0.1 ポイント程度です（同じ 3 回で 93.87〜93.88%）。
 
 | モジュール名 | 行 | 分岐 | 関数 |
 | :--- | ---: | ---: | ---: |
 | `gravsim_audio_manager.js` | 100.00% | 95.00% | 100.00% |
-| `gravsim_calc_object.js` | 99.89% | 94.49% | 100.00% |
+| `gravsim_calc_object.js` | 99.89% | 94.75% | 100.00% |
 | `gravsim_calc_predictor.js` | 98.77% | 90.21% | 100.00% |
 | `gravsim_calc_quadtree.js` | 100.00% | 100.00% | 100.00% |
-| `gravsim_calc.js` | 99.46% | 96.00% | 97.96% |
+| `gravsim_calc.js` | 99.38% | 95.85% | 98.00% |
 | `gravsim_camera.js` | 100.00% | 97.87% | 100.00% |
 | `gravsim_const.js` | 100.00% | 100.00% | 100.00% |
 | `gravsim_control_panel.js` | 100.00% | 97.56% | 93.75% |
@@ -237,37 +244,37 @@ node testsuites/run_all.mjs --system
 | `gravsim_destruction_manager.js` | 100.00% | 100.00% | 100.00% |
 | `gravsim_effect_trail.js` | 100.00% | 94.74% | 100.00% |
 | `gravsim_event_bus.js` | 100.00% | 100.00% | 100.00% |
-| `gravsim_flight_computer.js` | 98.66% | 97.44% | 94.74% |
+| `gravsim_flight_computer.js` | 98.66% | 97.80% | 94.74% |
 | `gravsim_info_panel.js` | 100.00% | 96.55% | 100.00% |
 | `gravsim_input_manager.js` | 98.89% | 92.50% | 92.31% |
 | `gravsim_launch_sequencer.js` | 100.00% | 100.00% | 100.00% |
-| `gravsim_object_manager.js` | 100.00% | 97.93% | 100.00% |
-| `gravsim_object_placer.js` | 99.21% | 90.67% | 97.67% |
-| `gravsim_object.js` | 98.36% | 92.50% | 97.62% |
+| `gravsim_object_manager.js` | 100.00% | 97.94% | 100.00% |
+| `gravsim_object_placer.js` | 99.22% | 90.51% | 97.73% |
+| `gravsim_object.js` | 100.00% | 93.78% | 97.67% |
 | `gravsim_overlay_renderer.js` | 100.00% | 100.00% | 100.00% |
-| `gravsim_pad_effect.js` | 100.00% | 98.51% | 100.00% |
-| `gravsim_preset_manager.js` | 98.16% | 80.54% | 93.10% |
+| `gravsim_pad_effect.js` | 100.00% | 98.58% | 100.00% |
+| `gravsim_preset_manager.js` | 99.43% | 87.50% | 100.00% |
 | `gravsim_profiler.js` | 100.00% | 100.00% | 100.00% |
 | `gravsim_renderer.js` | 100.00% | 100.00% | 100.00% |
-| `gravsim_rocket_launcher.js` | 99.54% | 82.55% | 97.62% |
-| `gravsim_rocket_renderer.js` | 100.00% | 95.71% | 100.00% |
+| `gravsim_rocket_launcher.js` | 99.54% | 83.69% | 97.62% |
+| `gravsim_rocket_renderer.js` | 100.00% | 99.16% | 100.00% |
 | `gravsim_save_manager.js` | 100.00% | 100.00% | 92.31% |
 | `gravsim_sound_effects.js` | 100.00% | 99.31% | 100.00% |
 | `gravsim_sound_sequencer.js` | 99.56% | 94.05% | 100.00% |
 | `gravsim_tab_deploy.js` | 100.00% | 87.88% | 100.00% |
-| `gravsim_tab_navi.js` | 100.00% | 97.37% | 100.00% |
-| `gravsim_tab_rocket.js` | 100.00% | 88.19% | 96.04% |
+| `gravsim_tab_navi.js` | 100.00% | 100.00% | 100.00% |
+| `gravsim_tab_rocket.js` | 100.00% | 87.99% | 96.04% |
 | `gravsim_tab_system.js` | 99.42% | 94.53% | 98.11% |
-| `gravsim_telemetry_card.js` | 100.00% | 98.31% | 96.77% |
-| `gravsim_telemetry_panel.js` | 100.00% | 93.41% | 100.00% |
+| `gravsim_telemetry_card.js` | 100.00% | 98.13% | 96.67% |
+| `gravsim_telemetry_panel.js` | 100.00% | 93.06% | 100.00% |
 | `gravsim_trail_renderer.js` | 88.21% | 89.13% | 85.71% |
 | `gravsim_trajectory_predictor.js` | 99.79% | 94.46% | 100.00% |
 | `gravsim_trajectory.js` | 100.00% | 89.19% | 100.00% |
 | `gravsim_universe.js` | 100.00% | 97.50% | 93.10% |
-| `gravsim_utils.js` | 100.00% | 95.78% | 87.80% |
+| `gravsim_utils.js` | 100.00% | 96.73% | 88.89% |
 | `gravsim_visual_effect_manager.js` | 100.00% | 97.92% | 100.00% |
 | `gravsim_worker_bridge.js` | 100.00% | 100.00% | 100.00% |
-| **全体** | **99.36%** | **93.06%** | **97.34%** |
+| **全体** | **99.52%** | **93.88%** | **97.82%** |
 
 ---
 

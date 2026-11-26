@@ -7,7 +7,7 @@ import {
 } from './gravsim_const.js';
 import { ROCKET_VISUAL } from './gravsim_preset_manager.js';
 import { GravSimObject, CelestialBody, Rocket, Debris } from './gravsim_object.js';
-import { UnitConvertUtils, normalizeMissionStatus, isLiveObject } from './gravsim_utils.js';
+import { UnitConvertUtils, normalizeMissionStatus, isLiveObject, RocketStackUtils } from './gravsim_utils.js';
 import { WorkerBridge } from './gravsim_worker_bridge.js';
 import { EventBus } from './gravsim_event_bus.js';
 
@@ -700,8 +700,19 @@ export class ObjectManager {
 					if (o.targetVInfKmS !== undefined) obj.targetVInfKmS = o.targetVInfKmS;
 					if (o.isHoldDown !== undefined) obj.isHoldDown = Boolean(o.isHoldDown);
 					if (o.isIgnited !== undefined) obj.isIgnited = Boolean(o.isIgnited);
-					if (o.currentStageIndex !== undefined) obj.currentStageIndex = o.currentStageIndex;
-					if (o.totalStages !== undefined) obj.totalStages = o.totalStages;
+					// The stage count and index the Worker restores (design 2026-11-23 §3.1). The count is the Worker's, the stages
+					// of the configuration: a rocket without stages (the stress-test swarm) flies one stage (normalizeRocketConfig),
+					// as resolveStackState counts it. The saved totalStages is not read: a save made after the first Worker frame
+					// holds the same count, but one made before it (rolled out while paused) holds the constructor's 1, and an edited
+					// one any value; either put that count on the main thread until the first Worker frame (and into a save then).
+					// The count is set whether or not the save has a stage index. The index is normalised
+					// as the Worker restore does it: an edited save with a fraction or a negative index loads, and the main thread
+					// and the Worker fly the same stage
+					const stageCount = (Array.isArray(obj.stages) && obj.stages.length > 0) ? obj.stages.length : 1;
+					obj.totalStages = stageCount;
+					if (o.currentStageIndex !== undefined) {
+						obj.currentStageIndex = RocketStackUtils.normalizeStageIndex(o.currentStageIndex, stageCount, obj.disableStaging);
+					}
 					if (o.isPayloadSeparated !== undefined) obj.isPayloadSeparated = Boolean(o.isPayloadSeparated);
 					if (o.isStage2Separated !== undefined) obj.isStage2Separated = Boolean(o.isStage2Separated);
 					if (o.isBoosterBurnout !== undefined) obj.isBoosterBurnout = Boolean(o.isBoosterBurnout);

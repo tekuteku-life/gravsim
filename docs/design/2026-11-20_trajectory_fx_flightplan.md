@@ -129,6 +129,7 @@ presets/missions/*.json + vehicles/*.json + payloads/*.json + visuals/rocket.jso
      if (objData.rcsUllage !== undefined) { target.rcsUllage = Boolean(objData.rcsUllage); if (target.telemetry) target.telemetry.rcsUllage = target.rcsUllage; }
      ```
 3. **JSON スキーマ・`RocketRenderer` 確定座標・ノズル幾何表 (`presets/visuals/rocket.json`, `PresetManager._seedFallbacks()`, `scripts/gravsim_rocket_renderer.js`)**:
+   > **注記（2026-11-23）**: RCS のノズルの位置・壁・噴射の長さの決め方（下の `xMin + 0.84 L`・`xMin + 0.14 L`・`yWall = layout.halfWidth` と `_computeVisualLayout` の外形）は、[2026-11-23_vapor_cone_rcs_anchors.md](2026-11-23_vapor_cone_rcs_anchors.md) §3.4・§3.6 で置き換えた。噴射の向きの表と偶力の向きは変わらない。
    - **`COLD_GAS_RCS` 完全スキーマ**（`rocket.json` & `_seedFallbacks()` 共通）：
      ```json
      "COLD_GAS_RCS": {
@@ -154,6 +155,8 @@ presets/missions/*.json + vehicles/*.json + payloads/*.json + visuals/rocket.jso
 ---
 
 ### 3.3 [要件3] 遷音速域の衝撃波ベイパーコーンアニメーション再現
+
+> **注記（2026-11-23）**: ベイパーコーンの頂点の位置と大きさの決め方（下の `PRIMARY_STATION_FRACTION`・`SECONDARY_STATION_FRACTION`、`L = max(1, xMax - xMin)`、`layout.halfWidth`）は、[2026-11-23_vapor_cone_rcs_anchors.md](2026-11-23_vapor_cone_rcs_anchors.md) §3.4・§3.5 で置き換えた。主コーンは機首の肩、副コーンは最上段の段間の前端を頂点とし、大きさはその位置の半径から決める。2 つの割合のキーは `VAPOR_CONE` から削除した。強度・マッハ角・色・形の式は変わらない。
 
 1. **`AeroUtils` 完全数式 (`scripts/gravsim_utils.js`, `AERO_DYNAMIC` in `gravsim_const.js`)**:
    - 大気定数読取: `density0 = Number(atmParam?.ATM_DENSITY_0 ?? atmParam?.atmDensity0 ?? 0)`, `scaleH = Number(atmParam?.ATM_SCALE_HEIGHT ?? atmParam?.atmScaleHeight ?? 0)`, `limitAlt = Number(atmParam?.ATM_LIMIT_ALT ?? atmParam?.atmLimitAlt ?? 0)`。
@@ -239,6 +242,7 @@ presets/missions/*.json + vehicles/*.json + payloads/*.json + visuals/rocket.jso
        $$\vec{t} = \cos\gamma_{\text{cmd}}\hat{u}_H + \sin\gamma_{\text{cmd}}\hat{u}_R,\quad \phi_{\text{cmd}} = \text{atan2}(t_y, t_x)$$
    - **`targetVInfKmS` 双曲線カットオフ明確化（F5-03 #4）**: `gravsim_calc_object.js:1038` の `!this.isPayloadSeparated` 分岐内において、**`!this.isPayloadSeparated`** を明示条件として **`else if (!this.isPayloadSeparated && (this.disableOrbitalCutoff || this.targetVInfKmS > 0) && E >= 0 && this.targetVInfKmS > 0)`** にて `curAltM >= MULTISTAGE_ROCKET.ORBITAL_CUTOFF_MIN_ALT_M && Math.sqrt(2 * E) / 1000 >= this.targetVInfKmS` 到達時にカットオフ（ペイロード分離後の `mmx` 再点火には絶対に干渉しない）。
    - **`gravsim_calc_predictor.js`**: `for (let s = prevStageIndex + 1; s <= Math.min(rocket.currentStageIndex, rocket.totalStages); s++)` で全通過段の `stg_sep_${s}` と `payload_sep` を記録。`TelemetryPanel` L681 は `rocket.isPayloadSeparated` のみで `P-SEP` 点灯。`payload_cutoff` は、ステップの開始時にペイロードが分離済みで、前のステップが STG_BURNING、このステップで ORBITAL_COAST か燃焼時間 0 になったときだけ記録する（Rev 6.13、§4.14-1）。ステップの開始時に燃焼中だった段のカットオフは分離の前に記録し、分離と同じステップで点火したペイロードは PAYLOAD START とする。段番号が段数以上の状態は段のカットオフとしない（§4.14-8）。2-STG-SEP は段数が 2 以上の機体だけ（§4.14-10）。
+   - > **注記（2026-11-23）**: 下の `isPayloadPhase` は削除し、ペイロード段階の判定は `RocketStackUtils.resolveStackState`（[2026-11-23_vapor_cone_rcs_anchors.md](2026-11-23_vapor_cone_rcs_anchors.md) §3.1）に統一した。表示の意味は変わらない。
    - **ペイロード分離後の HUD**（Rev 6.12、§4.13-6）: 分離後の段番号は段数（最後の段の次）になるため、`isPayloadSeparated`（オブジェクトまたはテレメトリ）または段番号 ≥ 段数のとき（`isPayloadPhase`）、STAGE 行は `N / M (段名)` の代わりに `PAYLOAD (<payload.name>)`（名前がなければ `PAYLOAD`）、推進カードの見出しは `[ PROPULSION: PAYLOAD ]`（2 段以上の機体）、推進剤バーの満量は `payload.propulsion` の `fuelMassT`／`oxidMassT`（推進系がなければ 0）とする。段名の規則（段の名前、なければ BOOSTER／UPPER／CORE）と SRB タグ（第 1 段のみ）は変えない。
 2. **全 7 ミッション確定 `flightProfile`・目標値表（すべて `0°` 天頂→`90°` 水平、`action: ""` 既定）**:
    | Mission ID | `targetApKm` / `PeKm` / `VInfKmS` / `disableCutoff` / `targetDv` | `flightProfile` 全行 `(type, value, thrust, angle)` |
@@ -295,6 +299,7 @@ presets/missions/*.json + vehicles/*.json + payloads/*.json + visuals/rocket.jso
      - 世界の中心と自動のホスト（Rev 6.12、§4.13-27）: `CELESTIAL` に `isWorldCenter`（真偽値）、`rocketLauncher` に `hostAutoSelected`（真偽値）を加える。真偽値でない値は、ないものとして扱う。どの天体にも `isWorldCenter` がない旧形式のファイルは id 0 の天体を中心とし、`hostAutoSelected` がないファイルは中心のホストを自動で選んだものとする（どちらも、旧いコードがそのファイルで行ったことと同じ）。
      - プロファイルの世界の中心（Rev 6.16、§4.14-14）: `CELESTIAL` に `isProfileWorldCenter`（真偽値。プロファイルが `worldCenter: true` の静的な物体として置いた世界の中心（銀河中心の Sgr A*）だけが真）を加える。主スレッドだけの項目で、Worker には送らない。読込は天体ごとに、`isWorldCenter` の有無によらず、厳密に `true` のときだけ真とし、`false`・ない・真偽値でない値は偽とする。印のない旧形式のファイル（main と Rev 6.15 までの保存）の中心はプロファイルの中心でなく、Deploy のボタンと太陽系はその中心を置き換えない。`isWorldCenter` の旧形式の規則（id 0 の天体を中心とする）は変えず、その中心の印もファイルの値（ないときは偽）のままとする（Rev 6.17、G3-5-01）。
    - **`CalcRocket` `restoredRuntimeState` 復元手順（`_activateStage(0)` 抑止時）**:
+     > **注記（2026-11-24）**: 下の段番号の式は、`RocketStackUtils.normalizeStageIndex(data.currentStageIndex, this.totalStages, this.disableStaging)`（[2026-11-23_vapor_cone_rcs_anchors.md](2026-11-23_vapor_cone_rcs_anchors.md) §3.1）に置き換えた。小数は切り捨て（小数のままでは `stages[i]` が `undefined` になり、読込が途中で失敗した）、`disableStaging` の機体は最後の段までとする。主スレッドの読込（`ObjectManager.loadState`）と `Rocket.mass` も同じ関数を使う。読込は、保存ファイルの `totalStages` を読まず、段の配列から Worker と同じ数え方（段の配列がないか空なら 1）で段数を決める（同書 Rev 27。保存は `totalStages` を書き続ける）。
      ```js
      // Rev 6.10 で実装に合わせて訂正: 段番号は数値化して範囲に収め（NaN は 0）、分離フラグは段番号とも整合させる
      this.currentStageIndex = Math.max(0, Math.min(Number(data.currentStageIndex) || 0, this.totalStages));
